@@ -14,10 +14,18 @@
 ASCII Art from asciiart.eu/vehicles/boats
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-## To update the folder
+## Update folder
+
+### To update the folder
 Run updatePythonProject.ps1
+(It updates requirements.txt)
 
-## Update only requirements
-Run update requirements.
+### Update only requirements
+Run updateRequirements.ps1
 
-## Update stock database
+## Run scripts
+# On a terminal you need to active venv first:
+run active_venv.ps1
+
+# On 
+runUpdateDatabase.py
