@@ -1,18 +1,18 @@
 # Random Odyssey
 
-                  ~.
-           Ya...___|__..aab     .   .
-            Y$$a  Y$$o  Y$$a   (     )
-             Y$$b  Y$$b  Y$$b   `.oo'
-             :$$$  :$$$  :$$$  ( (`-'
-    .---.    d$$P  d$$P  d$$P   `.`.
-   / .-._)  d$P'"""|"""'-Y$P      `.`.
-  ( (`._) .-.  .-. |.-.  .-.  .-.   ) )
-   \ `---( $ )( $ )( $ )( $ )( $ )-' /
-    `.    `-'  `-'  `-'  `-'  `-'  .' CJ
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-ASCII Art from asciiart.eu/vehicles/boats
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+\*                  ~.				*\
+\*           Ya...___|__..aab     .   .		*\
+\*            Y$$a  Y$$o  Y$$a   (     )	*\
+\*             Y$$b  Y$$b  Y$$b   `.oo'		*\
+\*             :$$$  :$$$  :$$$  ( (`-'		*\
+\*    .---.    d$$P  d$$P  d$$P   `.`.		*\
+\*   / .-._)  d$P'"""|"""'-Y$P      `.`.	*\
+\*  ( (`._) .-.  .-. |.-.  .-.  .-.   ) )	*\
+\*   \ `---( $ )( $ )( $ )( $ )( $ )-' /	*\
+\*    `.    `-'  `-'  `-'  `-'  `-'  .' CJ	*\
+\*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	*\
+\*ASCII Art from asciiart.eu/vehicles/boats	*\
+\*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	*\
 
 ## Update folder
 
@@ -24,8 +24,8 @@ Run updatePythonProject.ps1
 Run updateRequirements.ps1
 
 ## Run scripts
-# On a terminal you need to active venv first:
+On a terminal you need to active venv first:
 run active_venv.ps1
 
 # On 
-runUpdateDatabase.py
+python runUpdateDatabase.py
