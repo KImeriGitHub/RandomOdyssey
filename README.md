@@ -1,5 +1,6 @@
 # Random Odyssey
 
+```bash
 \*                  ~.				        \*
 \*           Ya...___|__..aab     .   .		\*
 \*            Y$$a  Y$$o  Y$$a   (     )	\*
@@ -13,7 +14,7 @@
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	\*
 \*ASCII Art from asciiart.eu/vehicles/boats	\*
 \*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	\*
-
+```
 ## Update folder
 
 ### To update the folder
