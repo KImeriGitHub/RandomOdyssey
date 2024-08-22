@@ -1,7 +1,0 @@
-"MMM","AXP","AAPL","BA","CAT","CVX","CSCO","KO","DIS",
-"XOM","GE","GS","HD","IBM","INTC","JNJ","JPM","MCD","MRK",
-"MSFT","NKE","PFE","PG","TRV","UNH","VZ","V","WMT"
-
-https://en.m.wikipedia.org/wiki/Companies_listed_on_the_New_York_Stock_Exchange
-
-https://www.six-group.com/en/market-data/shares/companies.html

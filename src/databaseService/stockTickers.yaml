@@ -1,0 +1,350 @@
+- stockExchange: NYSE
+  stocks:
+    - MMM
+    - DDD
+    - AOS
+    - ATEN
+    - AAC
+    - AIR
+    - AAN
+    - ABB
+    - ABT
+    - ABBV
+    - ANF
+    - GCH
+    - JEQ
+    - SGF
+    - ABM
+    - AKR
+    - ACN
+    - ACCO
+    - ATV
+    - ATU
+    - GOLF
+    - AYI
+    - ADX
+    - AGRO
+    - ADPT
+    - ADNT
+    - AAP
+    - ADSW
+    - WMS
+    - ASX
+    - APFH
+    - ASIX
+    - AAV
+    - AVK
+    - AGC
+    - LCM
+    - ACM
+    - ANW
+    - AEG
+    - AEB
+    - AED
+    - AEH
+    - AEK
+    - AER
+    - HIVE
+    - AJRD
+    - AES
+    - AES.PRC
+    - AET
+    - AMG
+    - MGR
+    - AFL
+    - AFSD
+    - MITT
+    - MITT.PRA
+    - MITT.PRB
+    - AGCO
+    - A
+    - AEM
+    - ADC
+    - AGU
+    - AHC
+    - AL
+    - APD
+    - AYR
+    - AKS
+    - ALP.PRO
+    - ALG
+    - AGI
+    - ALK
+    - AIN
+    - ALB
+    - AA
+    - ALR
+    - ALR.PRB
+    - ALEX
+    - ALX
+    - ARE
+    - ARE.PRD
+    - ARE.PRE
+    - AQN
+    - BABA
+    - Y
+    - ATI
+    - ALLE
+    - AGN
+    - AGN.PRA
+    - ALE
+    - AKP
+    - ADS
+    - AOI
+    - AWF
+    - AB
+    - AFB
+    - LNT
+    - NCV
+    - NCZ
+    - NIE
+    - NFJ
+    - AFC
+    - AWH
+    - ALSN
+    - ALL
+    - ALL.PRA
+    - ALL.PRB
+    - ALL.PRC
+    - ALL.PRD
+    - ALL.PRE
+    - ALL.PRF
+    - ALLY
+    - ALJ
+    - ALDW
+    - AGD
+    - AWP
+    - AOD
+    - RESI
+    - MO
+    - ACH
+    - AMBR
+    - ABEV
+    - AMC
+    - AMFW
+    - AEE
+    - AMRC
+    - AAT
+    - AXL
+    - ACC
+    - AEO
+    - AEP
+    - AEL
+    - AXP
+    - AFG
+    - AFA
+    - AFW
+    - AMH
+    - AMH.PRA
+    - AMH.PRB
+    - AMH.PRC
+    - AMH.PRD
+    - AMH.PRE
+    - AIG
+    - AIG.WS
+    - AMID
+    - ARL
+    - ARA
+    - AWR
+    - AMT
+    - AMT.PRA
+    - AMT.PRB
+    - AVD
+    - AWK
+    - APU
+    - AMP
+    - ABC
+    - AME
+    - ANFI
+    - AMN
+    - AP
+    - APH
+    - BETR
+    - AXR
+    - AFSI.PRA
+    - AFSI.PRB
+    - AFSI.PRC
+    - AFSI.PRD
+    - AFSI.PRE
+    - AFSI.PRF
+    - AMX
+    - AMOV
+    - AU
+    - BUD
+    - AXE
+    - NLY
+    - NLY.PRA
+    - NLY.PRC
+    - NLY.PRD
+    - NLY.PRE
+    - AR
+    - AM
+    - ANTM
+    - ANTX
+    - ANH
+    - ANH.PRA
+    - ANH.PRB
+    - ANH.PRC
+    - AON
+    - APA
+    - AIV
+    - AIV.PRA
+    - ARI
+    - ARI.PRA
+    - ARI.PRC
+    - APO
+    - AIB
+    - AIY
+    - AFT
+    - AIF
+    - APLE
+    - AIT
+    - ATR
+    - WTR
+    - AQB
+    - WAAS
+    - ARMK
+    - ABR
+    - ABRN
+    - ABR.PRA
+    - ABR.PRB
+    - ABR.PRC
+    - ARC
+    - ARCX
+    - MT
+    - ARH.PRC
+    - ARCH
+    - ADM
+    - AROC
+    - ARNC
+    - ARNC.PR
+    - ARNC.PRB
+    - ARCO
+    - ASC
+    - ARU
+    - ACRE
+    - ARDC
+    - ARES
+    - ARES.PRA
+    - ARMF
+    - AGX
+    - ANET
+    - AI
+    - AIW
+    - AHH
+    - ARR
+    - ARR.PRA
+    - ARR.PRB
+    - AFI
+    - AWI
+    - ARW
+    - AJG
+    - APAM
+    - ASA
+    - ABG
+    - AHP
+    - AHT
+    - AHT.PRA
+    - AHT.PRB
+    - AHT.PRD
+    - AHT.PRF
+    - AHT.PRG
+    - ASH
+    - APB
+    - GRR
+    - ASPN
+    - AHL
+    - AHL.PRB
+    - AHL.PRC
+    - AHL.PRD
+    - ASB
+    - ASB.PRC
+    - ASB.PRD
+    - AC
+    - AIZ
+    - AGO
+    - AGO.PRB
+    - AGO.PRE
+    - AGO.PRF
+    - AF
+    - AF.PRC
+    - AZN
+    - T
+    - HOME
+    - ATTO
+    - ATH
+    - ATKR
+    - AT
+    - ATO
+    - AUO
+    - AUD
+    - ATHM
+    - ALV
+    - AN
+    - AZO
+    - AVB
+    - AGR
+    - ACP
+    - AVY
+    - AVH
+    - AVA
+    - AVT
+    - AVP
+    - AVX
+    - AXTA
+    - AXS
+    - AXS.PRC
+    - AXS.PRD
+    - AXS.PRE
+    - AXON
+    - AZRE
+    - AZZ
+
+
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
+  
+- stockExchange: NASDAQ
+  stocks:
+    - AAPL
+    - BA
+  
+  
+  "CAT","CVX","CSCO","KO","DIS",
+"XOM","GE","GS","HD","IBM","INTC","JNJ","JPM","MCD","MRK",
+"MSFT","NKE","PFE","PG","TRV","UNH","VZ","V","WMT"
+
+https://en.m.wikipedia.org/wiki/Companies_listed_on_the_New_York_Stock_Exchange
+
+https://www.six-group.com/en/market-data/shares/companies.html
