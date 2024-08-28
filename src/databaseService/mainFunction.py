@@ -1,10 +1,10 @@
-import yaml
+import pyyaml
 import yfinance as yf
 
 # Step 1: Load the YAML file
 def load_yaml(file_path):
     with open(file_path, 'r') as file:
-        data = yaml.safe_load(file)
+        data = pyyaml.safe_load(file)
     return data
 
 # Step 2: Download stock information
