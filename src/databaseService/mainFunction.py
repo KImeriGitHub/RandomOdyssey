@@ -18,7 +18,7 @@ def download_stock_data(stocks):
 # Main function
 def mainFunction():
     print("Hello, World!")
-    yaml_file = 'path_to_your_yaml_file.yaml'  # Replace with your actual file path
+    yaml_file = 'stockTickers.yaml'
     data = load_yaml(yaml_file)
     
     stock_exchange = data.get('stockExchange')
