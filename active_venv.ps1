@@ -12,7 +12,7 @@ if (Test-Path $venvPath) {
 Write-Host "Updating requirements..."
 pip install -r requirements.txt
 
-Write-Host "All tasks completed successfully."
+Write-Host "All tasks completed successfully, hopefully."
 
 $userInput = Read-Host "Press Enter to continue or type something to exit"
 

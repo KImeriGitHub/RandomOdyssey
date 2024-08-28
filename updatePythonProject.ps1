@@ -8,7 +8,5 @@ pipreqs --force
 Write-Host "Updating requirements..."
 pip install -r requirements.txt
 
-Write-Host "All tasks completed successfully."
-
 $userInput = Read-Host "Press Enter to continue or type something to exit"
 
