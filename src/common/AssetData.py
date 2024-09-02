@@ -4,6 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class AssetData:
     ticker: str
+    isin: str
     shareprice: pd.DataFrame
     volume: pd.DataFrame
     dividends: pd.DataFrame
