@@ -8,5 +8,9 @@ class AssetData:
     shareprice: pd.DataFrame
     volume: pd.DataFrame
     dividends: pd.DataFrame
-    genInfo: dict               #todo: stock_info.info
-    financials: pd.DataFrame    #todo: try getting quarterly ones. And drop most columns
+    about: dict               #todo: stock_info.info
+
+    #financials
+    revenue: pd.DataFrame
+    EBITDA: pd.DataFrame
+    basicEPS: pd.DataFrame

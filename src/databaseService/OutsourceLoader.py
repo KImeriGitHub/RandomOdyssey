@@ -1,18 +1,34 @@
 import yfinance as yf
 import pandas as pd
 
+from src.common import AssetData
+
 class OutsourceLoader:
-    def __init__(self, source):
-        self.source = source.lower()
-        self.stocks = {}
+    outsourceOperator: str  # only yfinance supported
+
+    def __init__(self, outsourceOperator: str):
+        self.outsourceOperator = outsourceOperator
+        
+        if self.outsourceOperator != "yfinance":
+            raise NotImplementedError("Only yfinance supported as of now.")
     
-    def load_stock(self, ticker):
-        if self.source == 'yfinance':
-            self._load_from_yfinance(ticker)
-        else:
-            raise ValueError(f"Data source '{self.source}' is not supported yet.")
-    
-    def _load_from_yfinance(self, ticker):
+    def load(self, assetData:AssetData, ticker: str):
+        if self.outsourceOperator == "yfinance":
+            self._load_from_yfinance(self, assetData, ticker)
+
+    def _load_from_yfinance(self, assetData:AssetData, ticker: str):
+        stock = yf.Ticker(ticker)
+
+        try:
+            assetData.isin = stock.isin
+        except:
+            assetData.isin = None
+            return
+
+        assetData.about = stock.info
+        
+
+
         stock = yf.Ticker(ticker)
         self.stocks[ticker] = {
             "info": stock.info,
