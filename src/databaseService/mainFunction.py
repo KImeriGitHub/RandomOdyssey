@@ -1,8 +1,9 @@
 import yaml # the library is pyyaml not yaml
-import yfinance as yf
-import pandas as pd
-import datetime as dt
 import os
+
+from common.AssetData import AssetData
+from databaseService.FileInOut import FileInOut 
+from databaseService.OutsourceLoader import OutsourceLoader
 
 # Step 1: Load the YAML file
 def load_yaml(file_path):
@@ -10,28 +11,26 @@ def load_yaml(file_path):
         data = yaml.safe_load(file)
     return data
 
-# Step 2: Download stock information
-def download_stock_data(stocks):
-    stock_data = {}
-    for ticker in [stocks[0], stocks[1]]:
-        stock_info = yf.Ticker(ticker)
-        print(stock_info.financials)
-        stock_data[ticker] = yf.download(ticker, dt.date.today()-dt.timedelta(36500),dt.date.today(),interval='1d')
-    return stock_data
-
 # Main function
 def mainFunction():
-    yaml_file = 'src/databaseService/stockTickers.yaml'
-    file_path = os.path.join(os.getcwd(), yaml_file)
-    data = load_yaml(file_path)
+    ## Load tickers
+    yamlFile = 'src/databaseService/stockTickers.yaml'
+    filePath = os.path.join(os.getcwd(), yamlFile)
+    with open(filePath, 'r') as file:
+        tickersDict = yaml.safe_load(file)
     
-    stock_exchange = data[0]['stockExchange']
-    stock_list = data[0]['stocks']
-    print(stock_exchange)
-    if stock_list:
-        stock_data = download_stock_data(stock_list)
-        for ticker, info in stock_data.items():
-            print(f"Stock data for {ticker}:")
-            print(info)
-    else:
+    stockList: list = tickersDict[0]['stocks']
+    if not stockList:
         print("No stocks found in the YAML file.")
+        return
+
+    ## Save stock data
+    fileOut = FileInOut("src/database")
+    outsourceLoader = OutsourceLoader(outsourceOperator="yfinance")
+    for ticker in stockList[0:1000]:
+        try:
+            asset: AssetData = outsourceLoader.load(ticker=ticker)
+            fileOut.saveToFile(asset)
+            print(f"Stock data for {ticker}:")
+        except:
+            pass

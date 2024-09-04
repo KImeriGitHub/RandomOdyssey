@@ -1,53 +1,35 @@
-import pandas as pd
+import os
 import msgpack
-from dataclasses import asdict, is_dataclass, dataclass
+import json
+from dataclasses import asdict, dataclass
 
-from src.common import AssetData
+from src.common.AssetData import AssetData
 
 class FileInOut:
-    def __init__(self, filepath: str):
+    def __init__(self, directoryPath: str):
         """Initialize the class with a file path."""
-        self.filepath = filepath
+        self.directoryPath = directoryPath
 
     def saveToFile(self, ad: AssetData):
         """Save a dataclass instance to a file using msgpack."""
 
         # Convert dataclass to a dictionary for msgpack compatibility
-        ad_dict = asdict(ad)
+        ad_dict = ad.to_dict()
         
         # Write the serialized object to a file
-        with open(self.filepath, 'wb') as f:
-            packed_data = msgpack.packb(ad_dict)
-            f.write(packed_data)
+        with open(os.path.join(self.directoryPath, ad.ticker +".bin"), 'w') as f:
+            #packed_data = msgpack.packb(ad_dict)
+            f.write(str(ad_dict))
+            #json.dump(ad_dict, f)
+
 
     def loadFromFile(self, ad: AssetData):
         """Load and deserialize an instance of a dataclass from a file using msgpack."""
         
         # Read from the file and unpack
-        with open(self.filepath, 'rb') as f:
+        with open(os.path.join(self.directoryPath, ad.ticker +".bin"), 'rb') as f:
             packed_data = f.read()
             ad_dict = msgpack.unpackb(packed_data)
         
         # Create an instance of the dataclass using the unpacked dictionary
         return ad(**ad_dict)
-
-# Example usage:
-@dataclass
-class ExampleData:
-    name: str
-    age: int
-    active: bool
-
-# Usage Example
-file_io = FileInOut('example_data.msgpack')
-
-# Create a dataclass instance
-example_instance = ExampleData(name="Alice", age=30, active=True)
-
-# Save the dataclass instance to a file
-file_io.save_to_file(example_instance)
-
-# Load the dataclass instance from the file
-loaded_instance = file_io.load_from_file(ExampleData)
-
-print(loaded_instance)
