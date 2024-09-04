@@ -5,12 +5,17 @@ from dataclasses import dataclass
 class AssetData:
     ticker: str
     isin: str
+
+    # [Open, High, Low, Close]
     shareprice: pd.DataFrame
-    volume: pd.DataFrame
-    dividends: pd.DataFrame
-    about: dict               #todo: stock_info.info
+    volume: pd.Series
+    dividends: pd.Series
+    splits: pd.Series
+
+    #General Information about the asset in dict format
+    about: dict
 
     #financials
-    revenue: pd.DataFrame
-    EBITDA: pd.DataFrame
-    basicEPS: pd.DataFrame
+    revenue: pd.Series
+    EBITDA: pd.Series
+    basicEPS: pd.Series

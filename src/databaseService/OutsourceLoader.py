@@ -26,17 +26,19 @@ class OutsourceLoader:
             return
 
         assetData.about = stock.info
-        
+        fullSharePrice = stock.history(period="max")
+        assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close"]]
+        assetData.dividends = fullSharePrice["Dividends"]
+        assetData.splits = fullSharePrice["Stock Splits"]
 
+        fullFinancials = stock.quarterly_financials
+        fullFinancials = fullFinancials.T
+        fullFinancials.index.name = 'Date'
+        fullFinancials.index = pd.to_datetime(fullFinancials.index)
 
-        stock = yf.Ticker(ticker)
-        self.stocks[ticker] = {
-            "info": stock.info,
-            "history": stock.history(period="max"),
-            "actions": stock.actions,
-            "dividends": stock.dividends,
-            "splits": stock.splits,
-        }
+        assetData.revenue = fullFinancials["Total Revenue"]
+        assetData.EBITDA = fullFinancials["EBITDA"]
+        assetData.basicEPS = fullFinancials["Basic EPS"]
     
     def get_stock_info(self, ticker):
         return self.stocks.get(ticker, {}).get("info", {})
@@ -65,13 +67,3 @@ class OutsourceLoader:
             stock_data['dividends'].to_frame().to_excel(writer, sheet_name='Dividends')
             stock_data['splits'].to_frame().to_excel(writer, sheet_name='Splits')
             pd.DataFrame([stock_data['info']]).to_excel(writer, sheet_name='Info')
-    
-    def load_all(self, tickers):
-        for ticker in tickers:
-            self.load_stock(ticker)
-
-# Example usage:
-# loader = Loader(source="yfinance")
-# loader.load_all(["AAPL", "MSFT", "GOOGL"])
-# print(loader.get_stock_info("AAPL"))
-# loader.save_stock_data("AAPL", "AAPL_stock_data.xlsx")
