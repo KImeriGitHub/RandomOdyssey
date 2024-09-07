@@ -1,4 +1,6 @@
 ## Install pipreqs through pips
 # pip install pipreqs
 
-pipreqs --force
+pipreqs .\src --force --ignore database
+
+Move-Item .\src\requirements.txt .\ -Force

@@ -2,6 +2,7 @@ import yaml # the library is pyyaml not yaml
 import os
 
 from common.AssetData import AssetData
+from common.AssetDataService import AssetDataService
 from databaseService.FileInOut import FileInOut 
 from databaseService.OutsourceLoader import OutsourceLoader
 
@@ -27,7 +28,7 @@ def mainFunction():
     ## Save stock data
     fileOut = FileInOut("src/database")
     outsourceLoader = OutsourceLoader(outsourceOperator="yfinance")
-    for ticker in stockList[0:1000]:
+    for ticker in stockList[0:10]:
         try:
             asset: AssetData = outsourceLoader.load(ticker=ticker)
             fileOut.saveToFile(asset)

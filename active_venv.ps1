@@ -1,6 +1,6 @@
 # Activate the virtual environment
 Write-Host "Activating the virtual environment..."
-$venvPath = "venv\Scripts\Activate.ps1"
+$venvPath = ".venv\Scripts\Activate.ps1"
 
 if (Test-Path $venvPath) {
     & $venvPath
