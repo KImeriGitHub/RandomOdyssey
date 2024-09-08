@@ -1,5 +1,5 @@
 import pandas as pd
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Dict
 
 from src.common.AssetData import AssetData
@@ -24,27 +24,20 @@ class AssetDataService:
 
     @staticmethod
     def to_dict(asset: AssetData) -> Dict:
-    # Dictionary of basic fields with default values
+        # Dictionary of basic fields with default values
         data = {
             "ticker": asset.ticker,
             "isin": asset.isin or "",
             "about": asset.about or {},
         }
-        
-        if isinstance(asset.shareprice, pd.DataFrame):
-            data['shareprice'] = asset.shareprice.to_dict()
-        if isinstance(asset.volume, pd.Series):
-            data['volume'] = asset.volume.to_dict()
-        if isinstance(asset.dividends, pd.Series):
-            data['dividends'] = asset.dividends.to_dict()
-        if isinstance(asset.splits, pd.Series):
-            data['splits'] = asset.splits.to_dict()
-        if isinstance(asset.revenue, pd.Series):
-            data['revenue'] = asset.revenue.to_dict()
-        if isinstance(asset.EBITDA, pd.Series):
-            data['EBITDA'] = asset.EBITDA.to_dict()
-        if isinstance(asset.basicEPS, pd.Series):
-            data['basicEPS'] = asset.basicEPS.to_dict()
+
+        data['shareprice'] = asset.shareprice.to_dict() if isinstance(asset.shareprice, pd.DataFrame) else pd.DataFrame(None).to_dict()
+        data['volume'] = asset.volume.to_dict() if isinstance(asset.volume, pd.Series) else pd.Series(None).to_dict()
+        data['dividends'] = asset.dividends.to_dict() if isinstance(asset.dividends, pd.Series) else pd.Series(None).to_dict()
+        data['splits'] = asset.splits.to_dict() if isinstance(asset.splits, pd.Series) else pd.Series(None).to_dict()
+        data['revenue'] = asset.revenue.to_dict() if isinstance(asset.revenue, pd.Series) else pd.Series(None).to_dict()
+        data['EBITDA'] = asset.EBITDA.to_dict() if isinstance(asset.EBITDA, pd.Series) else pd.Series(None).to_dict()
+        data['basicEPS'] = asset.basicEPS.to_dict() if isinstance(asset.basicEPS, pd.Series) else pd.Series(None).to_dict()
 
         return data
     
