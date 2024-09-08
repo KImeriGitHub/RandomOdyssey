@@ -13,14 +13,14 @@ class AssetDataService:
     def defaultInstance() -> AssetData:
         return AssetData(ticker = "", 
             isin = "", 
-            shareprice = None,
-            volume = None,
-            dividends = None,
-            splits = None,
-            about = None,
-            revenue = None,
-            EBITDA = None,
-            basicEPS = None)
+            shareprice = pd.DataFrame(None),
+            volume = pd.Series(None),
+            dividends = pd.Series(None),
+            splits = pd.Series(None),
+            about = {},
+            revenue = pd.Series(None),
+            EBITDA = pd.Series(None),
+            basicEPS = pd.Series(None))
 
     @staticmethod
     def to_dict(asset: AssetData) -> Dict:
@@ -52,24 +52,24 @@ class AssetDataService:
     def from_dict(assetdict: dict) -> AssetData:
         defaultAD: AssetData = AssetDataService.defaultInstance()
 
-        sharepriceDict = assetdict["shareprice"]
-        volumeDict = assetdict["volume"]
-        dividendsDict = assetdict["dividends"]
-        splitsDict = assetdict["splits"]
-        revenueDict = assetdict["revenue"]
-        EBITDADict = assetdict["EBITDA"]
-        basicEPSDict = assetdict["basicEPS"]
-
-        if assetdict["ticker"] is None:
+        if assetdict.get("ticker") is None:
             raise ValueError("Ticker symbol could not be loaded. (From from_dict in AssetDataService)")
         
+        sharepriceDict = assetdict.get("shareprice")
+        volumeDict = assetdict.get("volume")
+        dividendsDict = assetdict.get("dividends")
+        splitsDict = assetdict.get("splits")
+        revenueDict = assetdict.get("revenue")
+        EBITDADict = assetdict.get("EBITDA")
+        basicEPSDict = assetdict.get("basicEPS")
+
         defaultAD.ticker = assetdict["ticker"]
         defaultAD.isin = assetdict.get("isin") or ""
         defaultAD.shareprice = pd.DataFrame(sharepriceDict)
         defaultAD.volume = pd.Series(volumeDict)
         defaultAD.dividends = pd.Series(dividendsDict)
         defaultAD.splits = pd.Series(splitsDict)
-        defaultAD.about = assetdict.get("about") or ""
+        defaultAD.about = assetdict.get("about") or {}
         defaultAD.revenue = pd.Series(revenueDict)
         defaultAD.EBITDA = pd.Series(EBITDADict)
         defaultAD.basicEPS = pd.Series(basicEPSDict)

@@ -21,11 +21,11 @@ class FileInOut:
             pickle.dump(assetdict, f)
 
 
-    def loadFromFile(self, ad: AssetData):
+    def loadFromFile(self, tickername: str) -> AssetData:
         """Load and deserialize an instance of a dataclass from a file using pickle."""
-        
+
         # Read from the file and unpack
-        with open(os.path.join(self.directoryPath, ad.ticker +".pkl"), 'rb') as f:
+        with open(os.path.join(self.directoryPath, tickername +".pkl"), 'rb') as f:
             assetdictread = pickle.load(f)
         
         # Create an instance of the dataclass using the unpacked dictionary
