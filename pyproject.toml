@@ -3,16 +3,16 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "your_project_name"
+name = "RandomOdyssey"
 version = "0.1.0"
-description = "A short description of your project"
+description = "A short description."
 readme = "README.md"
 requires-python = ">=3.6"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "KI", email = "KI@example.com"}
 ]
 dependencies = [
-    # List your dependencies here, e.g., "numpy", "requests"
+    # TBD
 ]
 
 [tool.setuptools.packages.find]

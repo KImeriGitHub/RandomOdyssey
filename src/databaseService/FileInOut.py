@@ -4,8 +4,8 @@ import json
 import pickle
 from dataclasses import asdict, dataclass
 
-from common.AssetData import AssetData
-from common.AssetDataService import AssetDataService
+from src.common.AssetData import AssetData
+from src.common.AssetDataService import AssetDataService
 
 class FileInOut:
     def __init__(self, directoryPath: str):

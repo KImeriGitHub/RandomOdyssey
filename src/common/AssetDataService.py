@@ -2,7 +2,7 @@ import pandas as pd
 from dataclasses import dataclass, asdict
 from typing import Dict
 
-from common.AssetData import AssetData
+from src.common.AssetData import AssetData
 
 @dataclass
 class AssetDataService:

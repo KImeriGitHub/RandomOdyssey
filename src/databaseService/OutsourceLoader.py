@@ -2,8 +2,8 @@ import yfinance as yf
 import pandas as pd
 import warnings
 
-from common.AssetData import AssetData
-from common.AssetDataService import AssetDataService
+from src.common.AssetData import AssetData
+from src.common.AssetDataService import AssetDataService
 
 
 class OutsourceLoader:
@@ -24,6 +24,8 @@ class OutsourceLoader:
 
     def _load_from_yfinance(self, assetData: AssetData, ticker: str):
         stock = yf.Ticker(ticker)
+
+        assetData.ticker = ticker
 
         try:
             assetData.isin = stock.isin
