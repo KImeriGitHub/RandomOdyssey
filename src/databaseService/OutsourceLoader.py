@@ -18,27 +18,28 @@ class OutsourceLoader:
     def load(self, ticker: str) -> AssetData:
         assetData: AssetData = AssetDataService.defaultInstance()
         if self.outsourceOperator == "yfinance":
-            self._load_from_yfinance(assetData, ticker)
+            self._load_from_yfinance(assetData, ticker, raise_errors=True)
         
         return assetData
 
-    def _load_from_yfinance(self, assetData: AssetData, ticker: str):
-        stock = yf.Ticker(ticker)
+    def _load_from_yfinance(self, assetData: AssetData, tickerHandle: str, raise_errors=False):
+        stock = yf.Ticker(tickerHandle)
 
-        assetData.ticker = ticker
+        # The saved ticker symbol is not the tickerHandle.
+        assetData.ticker = stock.ticker
 
         try:
             assetData.isin = stock.isin
         except:
-            warnings.warn("Failed to retrieve ISIN for ticker: " + ticker)
+            warnings.warn("Failed to retrieve ISIN for ticker: " + tickerHandle)
 
         try:
             assetData.about = stock.info
         except:
-            warnings.warn("Failed to retrieve INFO for ticker: " + ticker)
+            warnings.warn("Failed to retrieve INFO for ticker: " + tickerHandle)
 
+        fullSharePrice = stock.history(period="max", raise_errors = raise_errors)
         try:
-            fullSharePrice = stock.history(period="max")
             assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close"]]
 
             assetData.volume = fullSharePrice["Volume"]  #think on how to deal with nan results
@@ -49,7 +50,7 @@ class OutsourceLoader:
             assetData.splits = fullSharePrice["Stock Splits"].dropna()
             assetData.splits = assetData.splits[(assetData.splits > 0.000001) | (assetData.splits < -0.000001)]
         except:
-            warnings.warn("Failed to retrieve Price History for ticker: " + ticker)
+            warnings.warn("Failed to retrieve Price History for ticker: " + tickerHandle)
 
         try:
             fullFinancials = stock.quarterly_financials
@@ -61,4 +62,4 @@ class OutsourceLoader:
             assetData.EBITDA = fullFinancials["EBITDA"]
             assetData.basicEPS = fullFinancials["Basic EPS"]
         except:
-            warnings.warn("Failed to retrieve Financial Data for ticker: " + ticker)
+            warnings.warn("Failed to retrieve Financial Data for ticker: " + tickerHandle)

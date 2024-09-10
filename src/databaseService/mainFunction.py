@@ -21,6 +21,8 @@ def mainFunction():
         tickersDict = yaml.safe_load(file)
 
     stockList: list = tickersDict[0]['stocks']
+    stockList.extend(tickersDict[1]['stocks'])
+    [stockList.append(a+".SW") for a in tickersDict[2]['stocks']]
     if not stockList:
         print("No stocks found in the YAML file.")
         return
@@ -28,7 +30,7 @@ def mainFunction():
     ## Save stock data
     fileOut = FileInOut("src/database")
     outsourceLoader = OutsourceLoader(outsourceOperator="yfinance")
-    for ticker in stockList[0:10]:
+    for ticker in stockList:
         try:
             asset: AssetData = outsourceLoader.load(ticker=ticker)
             fileOut.saveToFile(asset)
