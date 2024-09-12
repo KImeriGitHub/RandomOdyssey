@@ -1,12 +1,10 @@
 import os
 import pandas as pd
-from src.databaseService.FileInOut import FileInOut
+from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetDataService import AssetDataService
-from src.common.AssetData import AssetData
-from src.databaseService.OutsourceLoader import OutsourceLoader
 
 def test_FileInOut_FileExists_true():
-    fileOut = FileInOut("unittests/database")
+    fileOut = AssetFileInOut("unittests/database")
 
     asset = AssetDataService.defaultInstance()
     asset.ticker="test"
@@ -21,7 +19,7 @@ def test_FileInOut_FileExists_true():
         pass
 
 def test_FileInOut_FileLoadedSameMOCKED_true():
-    fileOut = FileInOut("unittests/database")
+    fileOut = AssetFileInOut("unittests/database")
 
     asset = AssetDataService.defaultInstance()
     asset.ticker="test"

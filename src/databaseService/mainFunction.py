@@ -1,9 +1,10 @@
 import yaml # the library is pyyaml not yaml
 import os
+import time
 
 from src.common.AssetData import AssetData
 from src.common.AssetDataService import AssetDataService
-from src.databaseService.FileInOut import FileInOut 
+from src.common.AssetFileInOut import AssetFileInOut 
 from src.databaseService.OutsourceLoader import OutsourceLoader
 
 # Step 1: Load the YAML file
@@ -28,12 +29,13 @@ def mainFunction():
         return
 
     ## Save stock data
-    fileOut = FileInOut("src/database")
+    fileOut = AssetFileInOut("src/database")
     outsourceLoader = OutsourceLoader(outsourceOperator="yfinance")
     for ticker in stockList:
         try:
             asset: AssetData = outsourceLoader.load(ticker=ticker)
             fileOut.saveToFile(asset)
-            print(f"Stock data for {ticker}:")
+            print(f"Got Stock data for {ticker}.")
+            time.sleep(1)
         except:
             pass

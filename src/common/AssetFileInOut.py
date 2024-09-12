@@ -1,11 +1,10 @@
 import os
 import pickle
-from dataclasses import asdict, dataclass
 
 from src.common.AssetData import AssetData
 from src.common.AssetDataService import AssetDataService
 
-class FileInOut:
+class AssetFileInOut:
     def __init__(self, directoryPath: str):
         """Initialize the class with a file path."""
         self.directoryPath = directoryPath
