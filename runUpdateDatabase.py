@@ -1,4 +1,7 @@
-from src.databaseService.mainFunction import mainFunction
+from databaseService.LoadStocks import LoadStocks
 
 if __name__ == "__main__":
-    mainFunction()
+    LoadStocks(dirPathManualTicker = "src/tickerSelection",
+               dirPathLoadedTicker = "src/stockGroups",
+               manualYamlName = "stockTickers",
+               loadedYamlName = "group_all").loadSaveAssets()
