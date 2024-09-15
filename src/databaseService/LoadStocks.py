@@ -24,7 +24,7 @@ class LoadStocks:
                 continue
             if isinstance(ticker, str) and ticker.lower()[0:1] == 'us':
                 continue # discard
-            if isinstance(ticker, str) and not ticker.lower().endswith('.sw'):
+            if isinstance(ticker, str) and ticker.lower().endswith('.sw'):
                 stockList.append(ticker)
                 continue # discard
             stockList.append(ticker+'.SW')
@@ -39,10 +39,10 @@ class LoadStocks:
         fileOut = AssetFileInOut("src/database")
         outsourceLoader = OutsourceLoader(outsourceOperator="yfinance")
         allTickersYamlList = []
-        for ticker in stockList[0:10]:
+        for ticker in stockList:
             try:
                 asset: AssetData = outsourceLoader.load(ticker=ticker)
-                #fileOut.saveToFile(asset)
+                fileOut.saveToFile(asset)
                 print(f"Got Stock data for {ticker}.")
                 allTickersYamlList.append(asset.ticker)
                 time.sleep(0.5)
