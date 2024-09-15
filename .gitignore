@@ -9,4 +9,3 @@ src/database/*
 
 src/stockGroups/*
 !src/stockGroups/
-

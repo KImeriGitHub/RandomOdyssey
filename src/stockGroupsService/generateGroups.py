@@ -1,10 +1,16 @@
-from src.stockGroupsService.Group_Over20Years import Group_Over20Years
-from src.stockGroupsService.Group_Swiss import Group_Swiss
+from stockGroupsService.GroupOver20Years import GroupOver20Years
+from stockGroupsService.GroupSwiss import GroupSwiss
+from stockGroupsService.GroupManager import GroupManager
 
-# Main function
 def generateGroups():
-        dbpath = "src/database"
-        grpath = "src/stockGroups"
+    dbPath = "src/database"
+    groupPath = "src/stockGroups"
 
-        Group_Over20Years(dbpath, grpath).generateYaml()
-        Group_Swiss(dbpath, grpath).generateYaml()
+    group_criteria = [
+        GroupOver20Years(),
+        GroupSwiss(),
+        # Add other group criteria here
+    ]
+
+    manager = GroupManager(databasePath=dbPath, stockGroupPath=groupPath, groupCriteria=group_criteria)
+    manager.generateGroups()
