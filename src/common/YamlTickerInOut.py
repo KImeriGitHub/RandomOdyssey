@@ -18,11 +18,11 @@ class YamlTickerInOut:
             yaml.dump(var, file, default_flow_style=False)
 
     def loadFromFile(self, filename: str) -> any:
-        # Check if the filename ends with '.yaml', and if not, add it
         if not filename.lower().endswith('.yaml'):
             filename += '.yaml'
-
-        with open(os.path.join(self.directoryPath, filename), 'r') as file:
-            tickersDict = yaml.safe_load(file)
-
+        file_path = os.path.join(self.directoryPath, filename)
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"The file {filename} does not exist.")
+        with open(file_path, 'r') as file:
+            tickersDict = yaml.safe_load(file) or {}
         return tickersDict

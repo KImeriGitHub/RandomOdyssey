@@ -1,10 +1,8 @@
 import pandas as pd
-from dataclasses import dataclass
 from typing import Dict
 
 from src.common.AssetData import AssetData
 
-@dataclass
 class AssetDataService:
     def __init__(self):
         pass

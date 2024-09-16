@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import List
 from src.common.Portfolio import Portfolio
 from src.strategy.IStrategy import IStrategy
 from src.common.AssetData import AssetData
@@ -22,10 +21,13 @@ class SimulatePortfolio(ISimulation):
             asset_prices = {}
             for ticker, asset in self.assets.items():
                 # Get the price for the date
-                price_data = asset.shareprice.loc[asset.shareprice.index == date]
-                if not price_data.empty:
-                    price = price_data['Close'].values[0]
-                    asset_prices[ticker] = price
+                try:
+                    price_data = asset.shareprice.loc[asset.shareprice.index == date]
+                    if not price_data.empty:
+                        price = price_data['Close'].values[0]
+                        asset_prices[ticker] = price
+                except KeyError:
+                    continue  # No data for this date
             # Apply the strategy
             self.strategy.apply(self.assets, self.portfolio, date)
             # Update portfolio value

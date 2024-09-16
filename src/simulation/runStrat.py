@@ -1,12 +1,13 @@
 from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
 from src.simulation.ResultAnalyzer import ResultAnalyzer
-from src.common.AssetDataService import AssetDataService
+from src.common.AssetFileInOut import AssetFileInOut
 
 import datetime
 
 # Load asset data
-asset = AssetDataService().load_asset('AAPL')  # Example ticker
+fileInOut = AssetFileInOut("src/database")
+asset = fileInOut.loadFromFile('AAPL')  # Example ticker
 
 # Define strategy
 strategy = StratBuyAndHold(target_ticker='AAPL')
