@@ -7,10 +7,10 @@ import pandas as pd
 
 def runStrategy():
     # Load asset data
-    asset = AssetFileInOut("src/database").loadFromFile('goog')  # Example ticker
+    asset = AssetFileInOut("src/database").loadFromFile('GOOG')  # Example ticker
 
     # Define strategy
-    strategy = StratBuyAndHold(target_ticker='goog')
+    strategy = StratBuyAndHold(target_ticker='GOOG')
 
     # Set up simulation
     simulation = SimulatePortfolio(
