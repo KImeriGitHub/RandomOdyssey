@@ -8,7 +8,3 @@ src/database/*
 !src/database/
 
 src/stockGroups/*
-!src/stockGroups/
-/src/stockGroups/*
-/src/stockGroups/group_all.yaml
-/src/stockGroups/group_over20years.yaml

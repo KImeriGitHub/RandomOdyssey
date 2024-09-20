@@ -1,10 +1,9 @@
 from src.simulation.ISimulation import ISimulation
 from src.common.AssetData import AssetData
 import pandas as pd
-import datetime
 
 class SimulateAssetAnalysis(ISimulation):
-    def __init__(self, asset: AssetData, analysis_function, start_date: datetime.datetime, end_date: datetime.datetime):
+    def __init__(self, asset: AssetData, analysis_function, start_date: pd.Timestamp, end_date: pd.Timestamp):
         self.asset = asset
         self.analysis_function = analysis_function
         self.start_date = start_date
