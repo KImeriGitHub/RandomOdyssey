@@ -3,8 +3,8 @@
 from src.strategy.IStrategy import IStrategy
 from src.common.AssetData import AssetData
 from src.common.Portfolio import Portfolio
+from src.common.ActionCost import ActionCost
 from typing import Dict, List
-import datetime
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
@@ -13,21 +13,19 @@ class StratLinearAscend(IStrategy):
     def __init__(self, num_months: int = 2, num_choices: int = 1):
         self.num_months = num_months
         self.num_choices = num_choices
-        self.has_bought = False
 
-    def apply(self, assets: Dict[str, AssetData], portfolio: Portfolio, current_time: datetime.datetime):
-        if self.has_bought:
-            return
-
+    def apply(self, assets: Dict[str, AssetData], portfolio: Portfolio, current_time: pd.Timestamp):
         # Calculate the start date based on num_months
         start_date = current_time - pd.DateOffset(months=self.num_months)
-        
+
         # List to store analysis results
         analysis_results = []
 
         for ticker, asset in assets.items():
             # Get price data for the specified period
-            price_data = asset.shareprice[(asset.shareprice.index >= start_date) & (asset.shareprice.index <= current_time)]
+            timeintervalIdx = (asset.shareprice.index >= start_date-pd.Timedelta(hours=18)) & \
+                              (asset.shareprice.index < current_time+pd.Timedelta(hours=18))
+            price_data: pd.DataFrame = asset.shareprice[timeintervalIdx]
             if price_data.empty:
                 continue
 
@@ -71,13 +69,31 @@ class StratLinearAscend(IStrategy):
         for _, row in top_choices.iterrows():
             ticker = row['Ticker']
             asset = assets[ticker]
-            price_data = asset.shareprice.loc[asset.shareprice.index == current_time]
+            timeintervalIdx = (asset.shareprice.index >= current_time-pd.Timedelta(hours=18)) & \
+                              (asset.shareprice.index < current_time+pd.Timedelta(hours=18))
+            price_data = asset.shareprice[timeintervalIdx]
             if not price_data.empty:
-                price = price_data['Close'].values[0]
-                quantity = cash_per_stock / price
-                portfolio.buy(ticker, quantity, price)
-                print(f"Bought {quantity} shares of {ticker} at {price}")
+                price: float = float(price_data['Close'].iloc[0])
+                quantity = np.floor((cash_per_stock - ActionCost.buy(cash_per_stock)) / price)
+                if abs(quantity)>0.0001:
+                    portfolio.buy(ticker, quantity, price)
+                    print(f"Bought {quantity} shares of {ticker} at {price}")
             else:
                 print(f"No price data for {ticker} on {current_time}")
 
-        self.has_bought = True
+        sellOrders = {}
+        for boughtTicker in portfolio.positions.keys():
+            if top_choices["Ticker"].isin([boughtTicker]).any():
+                continue
+
+            asset = assets[boughtTicker]
+            timeintervalIdx = (asset.shareprice.index >= current_time-pd.Timedelta(hours=18)) & \
+                              (asset.shareprice.index < current_time+pd.Timedelta(hours=18))
+            price_data = asset.shareprice[timeintervalIdx]
+            if not price_data.empty:
+                price: float = float(price_data['Close'].iloc[0])
+                sellOrders[boughtTicker] = [portfolio.positions[boughtTicker], price]
+
+        for ticker in sellOrders.keys():
+            portfolio.sell(ticker, sellOrders[ticker][0], sellOrders[ticker][1])
+            print(f"Sold {sellOrders[ticker][0]} shares of {ticker} at {sellOrders[ticker][1]}.")

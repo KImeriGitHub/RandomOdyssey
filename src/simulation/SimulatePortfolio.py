@@ -30,7 +30,6 @@ class SimulatePortfolio(ISimulation):
         dates = pd.date_range(self.startDate, self.endDate, freq='B') # 'B' for business days
         for date in dates:
             asset_prices = {}
-
             # Gather asset_prices
             for ticker, asset in self.assets.items():
                 price_data = pd.DataFrame(None)

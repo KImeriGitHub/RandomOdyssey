@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from common.ActionCost import ActionCost
 import pandas as pd
 import numpy as np
 from typing import Dict
@@ -20,18 +21,21 @@ class Portfolio:
         self.history = pd.concat([self.history, pd.DataFrame({'Date': [date], 'Value': [total_value]})], ignore_index=True)
 
     def buy(self, ticker: str, quantity: float, price: float):
-        total_cost = quantity * price
-        if self.cash >= total_cost:
-            self.cash -= total_cost
+        total_value = quantity * price
+        if self.cash >= total_value + ActionCost.buy(total_value):
+            self.cash -= total_value + ActionCost.buy(total_value)
             self.positions[ticker] = self.positions.get(ticker, 0) + quantity
         else:
             raise ValueError("Not enough cash to buy")
 
     def sell(self, ticker: str, quantity: float, price: float):
-        if self.positions.get(ticker, 0) >= quantity:
+        if self.positions.get(ticker, 0) == 0:
+            return
+        if self.positions[ticker] >= quantity:
             self.positions[ticker] -= quantity
-            if self.positions[ticker] == 0:
+            if self.positions[ticker] < 0.00001:
                 del self.positions[ticker]
-            self.cash += quantity * price
+            total_value = quantity * price
+            self.cash += total_value - ActionCost.sell(total_value)
         else:
             raise ValueError("Not enough shares to sell")
