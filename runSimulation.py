@@ -1,4 +1,4 @@
-from simulation.runStrategy import runStrategy
+from simulation.CollectionSimulations import CollectionSimulations
 
 if __name__ == "__main__":
-    runStrategy()
+    CollectionSimulations.BuyAndHold()
