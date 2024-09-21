@@ -27,23 +27,22 @@ class SimulatePortfolio(ISimulation):
                 raise ValueError("Asset history not old enough or startDate too far back.")
             assetdateIdx[ticker] = np.argmax(asset.shareprice.index > self.startDate)
 
-        dates = pd.date_range(self.startDate, self.endDate, freq='B')  # 'B' for business days
+        dates = pd.date_range(self.startDate, self.endDate, freq='B') # 'B' for business days
         for date in dates:
-            date = date
             asset_prices = {}
+
+            # Gather asset_prices
             for ticker, asset in self.assets.items():
                 price_data = pd.DataFrame(None)
                 assetDate: pd.Timestamp = asset.shareprice.index[assetdateIdx[ticker]]
-                if (assetDate > date - pd.Timedelta(days=1)) & (assetDate < date + pd.Timedelta(days=1)):
+                if (assetDate >= date - pd.Timedelta(days=1)) & (assetDate < date + pd.Timedelta(days=1)):
                     price_data = asset.shareprice.iloc[assetdateIdx[ticker]]
+                    asset_prices[ticker] = price_data['Close']
                     assetdateIdx[ticker] += 1
-                if not price_data.empty:
-                    price = price_data['Close']
-                    asset_prices[ticker] = price
+                else:
+                    asset_prices[ticker] = np.nan
+
             # Apply the strategy
             self.strategy.apply(self.assets, self.portfolio, date)
             # Update portfolio value
             self.portfolio.update_value(date, asset_prices)
-
-            if date> pd.Timestamp("2019-02-01", tz="UTC"):
-                pass

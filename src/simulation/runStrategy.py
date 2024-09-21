@@ -7,16 +7,19 @@ import pandas as pd
 
 def runStrategy():
     # Load asset data
-    asset = AssetFileInOut("src/database").loadFromFile('goog')  # Example ticker
+    assetG = AssetFileInOut("src/database").loadFromFile('GOOGL')
+    assetA = AssetFileInOut("src/database").loadFromFile('AAPL')
+    assetM = AssetFileInOut("src/database").loadFromFile('MSFT')
+
 
     # Define strategy
-    strategy = StratBuyAndHold(target_ticker='goog')
+    strategy = StratBuyAndHold(targetTickers=['AAPL'])
 
     # Set up simulation
     simulation = SimulatePortfolio(
         initialCash=10000,
         strategy=strategy,
-        assets=[asset],
+        assets=[assetG, assetA, assetM],
         startDate=pd.Timestamp('2010-01-01'),
         endDate=pd.Timestamp('2020-01-01'),
     )

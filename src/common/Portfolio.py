@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import pandas as pd
+import numpy as np
 from typing import Dict
 import datetime
 
@@ -13,6 +14,8 @@ class Portfolio:
         total_value = self.cash
         for ticker, quantity in self.positions.items():
             price = asset_prices.get(ticker.lower(), asset_prices.get(ticker.upper(),0))
+            if price == np.nan:
+                continue
             total_value += quantity * price
         self.history = pd.concat([self.history, pd.DataFrame({'Date': [date], 'Value': [total_value]})], ignore_index=True)
 
