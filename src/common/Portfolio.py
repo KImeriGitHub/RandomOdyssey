@@ -3,7 +3,6 @@ from common.ActionCost import ActionCost
 import pandas as pd
 import numpy as np
 from typing import Dict
-import datetime
 
 @dataclass
 class Portfolio:
@@ -22,8 +21,8 @@ class Portfolio:
 
     def buy(self, ticker: str, quantity: float, price: float):
         total_value = quantity * price
-        if self.cash >= total_value + ActionCost.buy(total_value):
-            self.cash -= total_value + ActionCost.buy(total_value)
+        if self.cash >= total_value + ActionCost().buy(total_value):
+            self.cash -= total_value + ActionCost().buy(total_value)
             self.positions[ticker] = self.positions.get(ticker, 0) + quantity
         else:
             raise ValueError("Not enough cash to buy")
@@ -36,6 +35,6 @@ class Portfolio:
             if self.positions[ticker] < 0.00001:
                 del self.positions[ticker]
             total_value = quantity * price
-            self.cash += total_value - ActionCost.sell(total_value)
+            self.cash += total_value - ActionCost().sell(total_value)
         else:
             raise ValueError("Not enough shares to sell")

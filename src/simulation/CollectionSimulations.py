@@ -3,6 +3,7 @@ from src.strategy.StratBuyAndHold import StratBuyAndHold
 from src.strategy.StratLinearAscend import StratLinearAscend
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
+from src.common.YamlTickerInOut import YamlTickerInOut
 
 import pandas as pd
 
@@ -39,7 +40,8 @@ class CollectionSimulations():
     @staticmethod
     def LinearAscend():
         # Load asset data
-        tickers = ['GOOGL', 'AAPL', 'MSFT', 'IRM', 'T', 'KO', 'AMZN', 'NVO', 'NVDA', 'HRB']
+        #tickers = ['GOOGL', 'AAPL', 'MSFT', 'IRM', 'T', 'KO', 'AMZN', 'NVO', 'NVDA', 'HRB']
+        tickers=YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
         assets = [AssetFileInOut("src/database").loadFromFile(ticker) for ticker in tickers]
 
         # Define strategy

@@ -42,6 +42,6 @@ class SimulatePortfolio(ISimulation):
                     asset_prices[ticker] = np.nan
 
             # Apply the strategy
-            self.strategy.apply(self.assets, self.portfolio, date)
+            self.strategy.apply(self.assets, self.portfolio, date, assetdateIdx)
             # Update portfolio value
             self.portfolio.update_value(date, asset_prices)

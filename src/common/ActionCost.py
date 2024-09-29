@@ -1,21 +1,16 @@
 class ActionCost:
-    def __init__():
-        pass
+    def __init__(self):
+        self.isNoCost = True
 
-    @staticmethod
-    def buy(price:float):
-        stempelGebuehr = 0.15 * 0.01
-        commission = 0.8 * 0.01
-        total_portion = stempelGebuehr + commission
-
-        #return price * total_portion
-        return 0 
-    
-    @staticmethod
-    def sell(price:float):
-        stempelGebuehr = 0.15 * 0.01
-        commission = 0.8 * 0.01
-        total_portion = stempelGebuehr + commission
+    def buy(self, price:float):
+        if self.isNoCost:
+            return 0
         
-        #return price * total_portion
-        return 0
+        stempelGebuehr = 0.15 * 0.01
+        commission = 0.3 * 0.01
+        total_portion = stempelGebuehr + commission
+
+        return price * total_portion 
+    
+    def sell(self, price:float):
+        return self.buy(price)
