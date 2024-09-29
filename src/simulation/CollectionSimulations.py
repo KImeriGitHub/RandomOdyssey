@@ -19,7 +19,8 @@ class CollectionSimulations():
         assetM = AssetFileInOut("src/database").loadFromFile('MSFT')
 
         # Define strategy
-        strategy = StratBuyAndHold(targetTickers=['AAPL', 'GOOGL', 'MSFT'])
+        #strategy = StratBuyAndHold(targetTickers=['AAPL', 'GOOGL', 'MSFT'])
+        strategy = StratBuyAndHold(targetTickers=['AAPL'])
 
         # Set up simulation
         simulation = SimulatePortfolio(
@@ -41,7 +42,8 @@ class CollectionSimulations():
     def LinearAscend():
         # Load asset data
         #tickers = ['GOOGL', 'AAPL', 'MSFT', 'IRM', 'T', 'KO', 'AMZN', 'NVO', 'NVDA', 'HRB']
-        tickers=YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
+        tickers = ['GOOGL', 'AAPL', 'MSFT']
+        #tickers=YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
         assets = [AssetFileInOut("src/database").loadFromFile(ticker) for ticker in tickers]
 
         # Define strategy

@@ -8,6 +8,7 @@ from typing import Dict
 class Portfolio:
     cash: float
     positions: Dict[str, float] = field(default_factory=dict)  # Ticker symbol to quantity
+    stoplossLimit: Dict[str, float] = field(default_factory=dict)  # Ticker symbol to limit
     history: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=['Date', 'Value']))
 
     def update_value(self, date: pd.Timestamp, asset_prices: Dict[str, float]):

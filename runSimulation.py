@@ -1,4 +1,5 @@
 from simulation.CollectionSimulations import CollectionSimulations
 
 if __name__ == "__main__":
-    CollectionSimulations.LinearAscend()
+    CollectionSimulations.BuyAndHold()
+    #CollectionSimulations.LinearAscend()

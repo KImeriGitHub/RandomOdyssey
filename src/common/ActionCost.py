@@ -1,6 +1,6 @@
 class ActionCost:
     def __init__(self):
-        self.isNoCost = True
+        self.isNoCost = False
 
     def buy(self, price:float):
         if self.isNoCost:
