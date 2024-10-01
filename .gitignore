@@ -8,3 +8,5 @@ src/database/*
 !src/database/
 
 src/stockGroups/*
+
+src/tickerSelection/*

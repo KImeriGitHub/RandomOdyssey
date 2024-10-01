@@ -27,8 +27,8 @@ class CollectionSimulations():
             initialCash=10000,
             strategy=strategy,
             assets=[assetG, assetA, assetM],
-            startDate=pd.Timestamp('2010-01-01'),
-            endDate=pd.Timestamp('2020-01-01'),
+            startDate=pd.Timestamp(2010,1,1),
+            endDate=pd.Timestamp(2020,1,1),
         )
 
         # Run simulation
@@ -42,12 +42,12 @@ class CollectionSimulations():
     def LinearAscend():
         # Load asset data
         #tickers = ['GOOGL', 'AAPL', 'MSFT', 'IRM', 'T', 'KO', 'AMZN', 'NVO', 'NVDA', 'HRB']
-        tickers = ['GOOGL', 'AAPL', 'MSFT']
-        #tickers=YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
+        #tickers = ['GOOGL', 'AAPL', 'MSFT']
+        tickers = YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
         assets = [AssetFileInOut("src/database").loadFromFile(ticker) for ticker in tickers]
 
         # Define strategy
-        strategy = StratLinearAscend()
+        strategy = StratLinearAscend(num_months = 6, num_choices= 1)
 
         # Set up simulation
         simulation = SimulatePortfolio(
