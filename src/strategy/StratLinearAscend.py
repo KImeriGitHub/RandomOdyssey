@@ -9,91 +9,101 @@ import numpy as np
 from dataclasses import dataclass, field
 
 class StratLinearAscend(IStrategy):
-    def __init__(self, num_months: int = 2, num_choices: int = 1):
-        self.num_months = num_months
-        self.num_choices = num_choices
+    __stoplossRatio = 0.95
 
-        self.stoplossLimit: Dict[str, float] = {}  # Ticker symbol to limit
-        self.blacklist: Dict[str, pd.Timestamp]
+    def __init__(self,
+                 num_months: int = 2, 
+                 num_choices: int = 1,
+                 ):
+        self.num_months: int = num_months
+        self.num_choices: int = num_choices
 
-    def apply(self, assets: Dict[str, AssetData], portfolio: Portfolio, currentDate: pd.Timestamp, assetdateIdx: Dict[str, int] = None):
-        # CHECK SELL
+        self.__assets: Dict[str, AssetData] = {}
+        self.__portfolio: Portfolio = None
+
+        self.__stoplossLimit: Dict[str, float] = {}
+        self.__blacklist: Dict[str, pd.Timestamp] = {}
+
+        self.__currentDate: pd.Timestamp = pd.Timestamp(None)
+        self.__assetdateIdx: Dict[str, int] = {}
+
+    def sellOrders(self) -> Dict:
         sellOrders = {}
-        for boughtTicker in portfolio.positions.keys():
-            asset = assets[boughtTicker]
-            timeOps = DFTO(asset.shareprice)
-            price_data = asset.shareprice.iloc[assetdateIdx[boughtTicker]]
+        for boughtTicker in self.__portfolio.positions.keys():
+            asset: AssetData = self.__assets[boughtTicker]
+            price_data = asset.shareprice.iloc[self.__assetdateIdx[boughtTicker]]
 
             if not price_data.empty:
                 price: float = float(price_data['Close'])
-
                 if price < 0.00001:
                     continue
 
-                if price <= self.stoplossLimit[boughtTicker]:
-                    sellOrders[boughtTicker] = [portfolio.positions[boughtTicker], price]
+                if price <= self.__stoplossLimit[boughtTicker]:
+                    sellOrders[boughtTicker] = {
+                        "quantity": self.__portfolio.positions[boughtTicker],
+                        "price": price
+                    }
+        return sellOrders
 
+    def sell(self, sellOrders: Dict):
+        if not sellOrders:
+            return
         # Sell
         for ticker in sellOrders.keys():
-            portfolio.sell(ticker, sellOrders[ticker][0], sellOrders[ticker][1], currentDate)
-            self.stoplossLimit.pop(ticker)
-            print(f"Sold {sellOrders[ticker][0]} shares of {ticker} at {sellOrders[ticker][1]}.")
+            quantity = sellOrders[ticker]['quantity']
+            price = sellOrders[ticker]['price']
+            self.__portfolio.sell(ticker, quantity, price, self.__currentDate)
+            self.__stoplossLimit.pop(ticker)
+            print(f"Sold {quantity} shares of {ticker} at {price} on date: {self.__currentDate}.")
 
-        # UPDATE STOPLOSS LIMIT
+    def updateStoplossLimit(self):
         # Calculate the start date based on num_months
-        start_date = currentDate - pd.DateOffset(months=self.num_months)
-        for portticker in portfolio.positions.keys():
-            asset = assets[portticker]
-            timeOps = DFTO(asset.shareprice)
-            # timeintervalIdx = (asset.shareprice.index >= start_date - pd.Timedelta(hours=12)) & \
-            #                   (asset.shareprice.index < current_time + pd.Timedelta(hours=12))
-            # price_data: pd.DataFrame = asset.shareprice[timeintervalIdx]
-            price_data = timeOps.inbetween(start_date,currentDate,pd.Timedelta(hours=12))
-            price_data = price_data.resample('B').mean().dropna() # Resample to business days
-            price_data = price_data['Close'].values
-            self.stoplossLimit[portticker] =  price_data[-1]*0.95 \
-                    if price_data[-1]*0.95 > self.stoplossLimit[portticker] \
-                    else self.stoplossLimit[portticker]
+        for portticker in self.__portfolio.positions.keys():
+            asset: AssetData = self.__assets[portticker]
+            price_data = asset.shareprice.iloc[self.__assetdateIdx[portticker]]
+            price_data = price_data['Close']
+            self.__stoplossLimit[portticker] =  price_data * StratLinearAscend.__stoplossRatio \
+                    if price_data * StratLinearAscend.__stoplossRatio > self.__stoplossLimit[portticker] \
+                    else self.__stoplossLimit[portticker]
 
-        if len(portfolio.positions.keys())>0 and not sellOrders:
-            return # Do not buy if empty
+    def preAnalyze(self) -> pd.DataFrame:
+        modAssetList: List[str] = []
+        priceData: int = 0
+        for ticker in self.__assets.keys():
+            asset: AssetData = self.__assets[ticker]
+            priceData = asset.shareprice.iloc[self.__assetdateIdx[ticker]]['Close']
+            if priceData > 10.0:
+                modAssetList.append(ticker)
 
-        # BUYING
-        # List to store analysis results
         analysis_results = []
-
-        for ticker, asset in assets.items():
-            # Get price data for the specified period
-            timeOps = DFTO(asset.shareprice)
-            #timeintervalIdx = (asset.shareprice.index >= start_date-pd.Timedelta(hours=12)) & \
-            #                  (asset.shareprice.index < current_time+pd.Timedelta(hours=12))
-            #price_data: pd.DataFrame = asset.shareprice[timeintervalIdx]
-            price_data = timeOps.inbetween(start_date, currentDate,pd.Timedelta(hours=12))
-            if price_data.empty:
+        startDate = self.__currentDate - pd.DateOffset(months=self.num_months)
+        for ticker in modAssetList:
+            asset: AssetData = self.__assets[ticker]
+            priceData = DFTO(asset.shareprice).inbetween(startDate, self.__currentDate, pd.Timedelta(hours=18))
+            if priceData.empty:
                 continue
 
             # Prepare data for linear regression
-            price_data = price_data.resample('B').mean().dropna()  # Resample to business days
+            priceData = priceData.resample('B').mean().dropna()  # Resample to business days
 
             # Store results
-            analysis_results.append(self.curveAnalysis(price_data['Close'].values, ticker))
+            analysis_results.append(self.curveAnalysis(priceData['Close'].values, ticker))
 
         if not analysis_results:
             print("No assets available for analysis.")
             return
+        
+        return pd.DataFrame(analysis_results)
 
-        # Convert results to DataFrame
-        results_df = pd.DataFrame(analysis_results)
+    def rankAssets(self) -> pd.DataFrame:
+        results_df: pd.DataFrame = self.preAnalyze()
 
         # Calculate the 75% quantile of the 'Slope' column
         quant = results_df['Slope'].quantile(0.60)
-
         # Initialize 'Rankslope' by assigning rank 1 to values above the  quantile
         results_df['Rankslope'] = np.where(results_df['Slope'] > quant, 1, np.nan)
-
         # Create a mask for values at or below the quantile
         mask = results_df['Slope'] <= quant
-
         # Rank the remaining values in descending order, starting from rank 2
         results_df.loc[mask, 'Rankslope'] = (
             results_df.loc[mask, 'Slope'].rank(ascending=False, method='dense') + 1
@@ -103,32 +113,71 @@ class StratLinearAscend(IStrategy):
         results_df.sort_values(by='Score', ascending=True, inplace=True)
 
         # Select top choices
-        top_choices = results_df.head(self.num_choices)
+        return results_df.head(self.num_choices)
+    
+    def buyOrders(self) -> Dict:
+        buyOrders = {}
+
+        # Select top choices
+        top_choices: pd.DataFrame = self.rankAssets()
 
         # Divide cash equally among selected stocks
-        cash_per_stock = portfolio.cash / len(top_choices)
+        cashPerStock = self.__portfolio.cash / len(top_choices)
 
         for _, row in top_choices.iterrows():
-            ticker = row['Ticker']
-            asset = assets[ticker]
-            timeOps = DFTO(asset.shareprice)
-            #timeintervalIdx = (asset.shareprice.index >= current_time-pd.Timedelta(hours=12)) & \
-            #                  (asset.shareprice.index < current_time+pd.Timedelta(hours=12))
-            #price_data = asset.shareprice[timeintervalIdx]
-            price_data = asset.shareprice.iloc[assetdateIdx[ticker]]
+            ticker: str = row['Ticker']
+            asset: AssetData = self.__assets[ticker]
+            price_data: pd.DataFrame = asset.shareprice.iloc[self.__assetdateIdx[ticker]]
             if not price_data.empty:
                 price: float = float(price_data['Close'])
                 if price < 0.00001:
                     continue
-                quantity = np.floor((cash_per_stock - ActionCost().buy(cash_per_stock)) / price)
-                if abs(quantity) > 0.0001:
-                    portfolio.buy(ticker, quantity, price, currentDate)
-                    self.stoplossLimit[ticker] = price*0.95
-                    print(f"Bought {quantity} shares of {ticker} at {price}")
+                quantity = np.floor((cashPerStock - ActionCost().buy(cashPerStock)) / price)
+                if abs(quantity) > 0.00001:
+                    buyOrders[ticker] = {
+                        "quantity": quantity,
+                        "price": price
+                    }
             else:
-                print(f"No price data for {ticker} on {currentDate}")
+                print(f"No price data for {ticker} on {self.__currentDate}")
 
-    def curveAnalysis(self, priceArray, ticker: str):
+        return buyOrders
+
+    def buy(self, buyOrders: Dict):
+        if not buyOrders:
+            return
+        for ticker in buyOrders.keys():
+            quantity = buyOrders[ticker]['quantity']
+            price = buyOrders[ticker]['price']
+            self.__portfolio.buy(ticker, quantity, price, self.__currentDate)
+            self.__stoplossLimit[ticker] = price * StratLinearAscend.__stoplossRatio
+            print(f"Bought {quantity} shares of {ticker} at {price} on Date: {self.__currentDate}.")
+
+    def apply(self,
+              assets: Dict[str, AssetData], 
+              portfolio: Portfolio, 
+              currentDate: pd.Timestamp, 
+              assetdateIdx: Dict[str, int] = {}):
+        
+        self.__assets = assets
+        self.__portfolio = portfolio
+        self.__currentDate = currentDate
+        self.__assetdateIdx = assetdateIdx
+
+        sellOrders = self.sellOrders()
+        self.sell(sellOrders)
+
+        self.updateStoplossLimit()
+
+        if len(self.__portfolio.positions.keys()) > 0 and not sellOrders:
+            return # Do not buy if empty
+
+        buyOrders = self.buyOrders()
+        self.buy(buyOrders)
+
+        self.updateStoplossLimit()
+
+    def curveAnalysis(self, priceArray, ticker: str) -> Dict:
         x = np.arange(len(priceArray))
 
         # Dependent variable: 'Close' prices

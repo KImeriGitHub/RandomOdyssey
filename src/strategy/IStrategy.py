@@ -6,6 +6,12 @@ import pandas as pd
 
 class IStrategy(ABC):
     @abstractmethod
-    def apply(self, assets: Dict[str, AssetData], portfolio: Portfolio, current_time: pd.Timestamp, assetdateIdx: Dict[str, int] = None):
-        """Apply the strategy to the given assets and update the portfolio accordingly."""
+    def apply(self,
+              assets: Dict[str, AssetData], 
+              portfolio: Portfolio, 
+              currentDate: pd.Timestamp, 
+              assetdateIdx: Dict[str, int] = {}):
+        """Apply the strategy to the given assets and update the portfolio accordingly.
+        
+        assetdateIdx: Index of assets at the closest trading day to currentDate."""
         pass

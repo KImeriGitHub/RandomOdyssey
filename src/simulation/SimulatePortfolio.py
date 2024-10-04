@@ -1,16 +1,18 @@
-from typing import List
+from typing import List, Dict
 from src.common.Portfolio import Portfolio
 from src.strategy.IStrategy import IStrategy
 from src.common.AssetData import AssetData
 from src.simulation.ISimulation import ISimulation
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DFTO
 import pandas as pd
 import numpy as np
+import warnings
 
 class SimulatePortfolio(ISimulation):
-    def __init__(self, initialCash: float, strategy: IStrategy, assets: List[AssetData], startDate: pd.Timestamp, endDate: pd.Timestamp):
-        self.portfolio = Portfolio(cash=initialCash)
+    def __init__(self, strategy: IStrategy, assets: Dict[str, AssetData], portfolio: Portfolio, startDate: pd.Timestamp, endDate: pd.Timestamp):
+        self.portfolio = portfolio
         self.strategy = strategy
-        self.assets = {asset.ticker: asset for asset in assets}
+        self.assets = assets
 
         if startDate.tzinfo is None:
             startDate = startDate.tz_localize('UTC')
@@ -20,28 +22,69 @@ class SimulatePortfolio(ISimulation):
         self.startDate = startDate
         self.endDate = endDate
 
-    def run(self):
+    def __checkAssetSetupIdx(self) -> Dict:
+        # FOR FASTER RUN: Establish index in dataframe to start date
         assetdateIdx = {}
+        discardedAsset = []
         for ticker, asset in self.assets.items():
             if asset.shareprice.index[-1] < self.startDate:
-                raise ValueError("Asset history not old enough or startDate too far back.")
-            assetdateIdx[ticker] = np.argmax(asset.shareprice.index > self.startDate)
+                warnings.warn(f"Asset {ticker} history not old enough or startDate ({self.startDate}) too far back. It is discarded.")
+                discardedAsset.append(ticker)
+                continue
 
+            maxDays=5
+            if self.startDate + pd.Timedelta(days=maxDays) > self.endDate:
+                raise ValueError(f"End Date ({self.endDate}) must be {maxDays} after Start Date {self.startDate}.")
+            for i in range(maxDays+1):
+                dateToCheck = self.startDate + pd.Timedelta(days=i)
+                idx = DFTO(asset.shareprice).getIndex(dateToCheck, pd.Timedelta(days=0.7))
+                if idx != -1:
+                    assetdateIdx[ticker] = idx
+                    break
+                else:
+                    message = f"Asset {ticker} start index could not be established on date ({dateToCheck})."
+                    if i < maxDays:
+                        message += " Checking next day."
+                    else:
+                        message += " It is discarded."
+                        assetdateIdx.pop(ticker)
+                        discardedAsset.append(ticker)
+                    warnings.warn(message)
+
+        for ticker in discardedAsset:
+            self.assets.pop(ticker)
+
+        return assetdateIdx
+
+    def run(self):
+        assetdateIdx = self.__checkAssetSetupIdx()
+
+        # Init Calculation of Asset Prices
+        asset_prices = {}
+        price_data = pd.DataFrame(None)
+        for ticker, asset in self.assets.items():
+            price_data = asset.shareprice.iloc[assetdateIdx[ticker]]
+            asset_prices[ticker] = price_data['Close']
+
+        # Main Loop
         dates = pd.date_range(self.startDate, self.endDate, freq='B', tz='UTC') # 'B' for business days
         for date in dates:
-            asset_prices = {}
+            # Apply the strategy
+            self.strategy.apply(assets = self.assets, 
+                                portfolio = self.portfolio, 
+                                currentDate = date, 
+                                assetdateIdx = assetdateIdx)
+
             # Gather asset_prices
             for ticker, asset in self.assets.items():
-                price_data = pd.DataFrame(None)
+                if assetdateIdx[ticker] > len(asset.shareprice.index):
+                    warnings.warn(f"Out of Bound access for {ticker}. Skipped.")
+                    continue
                 assetDate: pd.Timestamp = asset.shareprice.index[assetdateIdx[ticker]]
-                if (assetDate >= date - pd.Timedelta(days=1)) & (assetDate < date + pd.Timedelta(days=1)):
+                if (assetDate >= date - pd.Timedelta(hours=18)) & (assetDate < date + pd.Timedelta(hours=18)):
                     price_data = asset.shareprice.iloc[assetdateIdx[ticker]]
                     asset_prices[ticker] = price_data['Close']
                     assetdateIdx[ticker] += 1
-                else:
-                    asset_prices[ticker] = np.nan
 
-            # Apply the strategy
-            self.strategy.apply(self.assets, self.portfolio, date, assetdateIdx)
             # Update portfolio value
             self.portfolio.updateValue(date, asset_prices)

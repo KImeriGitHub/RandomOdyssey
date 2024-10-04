@@ -5,26 +5,40 @@ from src.common.ActionCost import ActionCost
 from typing import Dict, List
 import pandas as pd
 import numpy as np
-import datetime
 
 class StratBuyAndHold(IStrategy):
-    def __init__(self, targetTickers: List[str]):
-        self.targetTickers = [ticker.lower() for ticker in targetTickers]
+    def __init__(self, 
+                 targetTickers: List[str]):
+        self.targetTickers = targetTickers
+        self.__assets: Dict[str, AssetData] = {}
+        self.__portfolio: Portfolio = None
 
-    def apply(self, assets: Dict[str, AssetData], portfolio: Portfolio, current_time: pd.Timestamp, assetdateIdx = None):
-        assets = {key.lower(): value for key, value in assets.items()} #enforce lower case
+        self.__stoplossLimit: Dict[str, float] = {}
+        self.__blacklist: Dict[str, pd.Timestamp] = {}
+
+        self.__currentDate: pd.Timestamp = pd.Timestamp(None)
+        self.__assetdateIdx: Dict[str, int] = {}
+
+    def apply(self,
+              assets: Dict[str, AssetData], 
+              portfolio: Portfolio, 
+              currentDate: pd.Timestamp, 
+              assetdateIdx: Dict[str, int] = {}):
+        
+        self.__assets = assets
+        self.__portfolio = portfolio
+        self.__currentDate = currentDate
+        self.__assetdateIdx = assetdateIdx
 
         for targetTicker in self.targetTickers:
-            if portfolio.positions.keys().__contains__(targetTicker):
+            if self.__portfolio.positions.keys().__contains__(targetTicker):
                 continue
                 
-            cash_per_stock = np.floor(portfolio.cash / len(self.targetTickers))
-            asset = assets.get(targetTicker)
+            cashPerStock = np.floor(self.__portfolio.cash / len(self.targetTickers))
+            asset: AssetData = self.__assets.get(targetTicker)
             if asset is not None:
-                timeintervalIdx = (asset.shareprice.index >= current_time-pd.Timedelta(hours=18)) & \
-                                  (asset.shareprice.index < current_time+pd.Timedelta(hours=18))
-                price_data = asset.shareprice.loc[timeintervalIdx]
-                if not price_data.empty:
-                    price: float = float(price_data['Close'].iloc[0])
-                    quantity = np.floor((cash_per_stock - ActionCost().buy(cash_per_stock)) / price)
-                    portfolio.buy(targetTicker, quantity, price)
+                priceData = asset.shareprice[self.__assetdateIdx[targetTicker]]
+                if not priceData.empty:
+                    price: float = float(priceData['Close'])
+                    quantity = np.floor((cashPerStock - ActionCost().buy(cashPerStock)) / price)
+                    self.__portfolio.buy(targetTicker, quantity, price)
