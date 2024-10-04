@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 from src.common.Portfolio import Portfolio
 
 class ResultAnalyzer:
@@ -6,8 +7,8 @@ class ResultAnalyzer:
         self.portfolio = portfolio
 
     def plot_portfolio_value(self):
-        self.portfolio.valueOverTime.set_index('Date', inplace=True)
-        self.portfolio.valueOverTime['Value'].plot()
+        df = pd.DataFrame(self.portfolio.valueOverTime, columns=["Timestamp", "Value"]).set_index("Timestamp")
+        df.plot()
         plt.title('Portfolio Value Over Time')
         plt.xlabel('Date')
         plt.ylabel('Portfolio Value')
