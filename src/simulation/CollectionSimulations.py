@@ -42,11 +42,11 @@ class CollectionSimulations():
     @staticmethod
     def LinearAscend():
         # Load asset data
-        #tickers = ['GOOGL', 'AAPL', 'MSFT', 'IRM', 'T', 
-        #           'KO', 'AMZN', 'NVO', 'NVDA', 'HRB', 
-        #           "WARN.SW", "HBLN.SW", "GRKP.SW", "ABBN.SW", "GF.SW"]
+        tickers = ['GOOGL', 'AAPL', 'MSFT', 'IRM', 'T', 
+                   'KO', 'AMZN', 'NVO', 'NVDA', 'HRB', 
+                   "WARN.SW", "HBLN.SW", "GRKP.SW", "ABBN.SW", "GF.SW"]
         #tickers = ['GOOGL', 'AAPL', 'MSFT']
-        tickers = YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
+        #tickers = YamlTickerInOut("src/stockGroups").loadFromFile("group_swiss_over20years")
         assets={}
         for i, ticker in enumerate(tickers):
             assets[ticker] = AssetFileInOut("src/database").loadFromFile(ticker)
@@ -55,7 +55,7 @@ class CollectionSimulations():
 
         # Define strategy
         initialCash=10000.0
-        strategy = StratLinearAscend(num_months = 6, num_choices= 1)
+        strategy = StratLinearAscend(num_months = 1, num_choices= 1)
 
         # Set up simulation
         simulation = SimulatePortfolio(
@@ -72,3 +72,4 @@ class CollectionSimulations():
         # Analyze results
         analyzer = ResultAnalyzer(simulation.portfolio)
         analyzer.plot_portfolio_value()
+        analyzer.plot_positions_per_asset(assets)

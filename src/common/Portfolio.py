@@ -20,13 +20,14 @@ class Portfolio:
         self.valueOverTime.append((date, total_value))
 
     def __updatePositions(self, date: pd.Timestamp):
-        if self.positionsOverTime == []:
-            self.positionsOverTime.append((date, self.positions))
-            return
+        # Ensure we copy the positions to avoid referencing the same dict
+        if self.positionsOverTime and self.positionsOverTime[-1][0] == date:
+            # Replace the last entry if the date is the same
+            self.positionsOverTime[-1] = (date, self.positions.copy())
+        else:
+            # Append a new entry with the current positions
+            self.positionsOverTime.append((date, self.positions.copy()))
 
-        if self.positionsOverTime[-1][0] == date:
-            self.positionsOverTime.pop()
-            self.positionsOverTime.append((date, self.positions))
 
     def buy(self, ticker: str, quantity: float, price: float, date: pd.Timestamp):
         total_value = quantity * price

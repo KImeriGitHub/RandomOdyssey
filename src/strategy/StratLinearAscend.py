@@ -36,6 +36,7 @@ class StratLinearAscend(IStrategy):
             if not price_data.empty:
                 price: float = float(price_data['Close'])
                 if price < 0.00001:
+                    print("Weird price.")
                     continue
 
                 if price <= self.__stoplossLimit[boughtTicker]:
@@ -57,18 +58,18 @@ class StratLinearAscend(IStrategy):
             print(f"Sold {quantity} shares of {ticker} at {price} on date: {self.__currentDate}.")
 
     def updateStoplossLimit(self):
-        # Calculate the start date based on num_months
         for portticker in self.__portfolio.positions.keys():
             asset: AssetData = self.__assets[portticker]
             price_data = asset.shareprice.iloc[self.__assetdateIdx[portticker]]
             price_data = price_data['Close']
-            self.__stoplossLimit[portticker] =  price_data * StratLinearAscend.__stoplossRatio \
-                    if price_data * StratLinearAscend.__stoplossRatio > self.__stoplossLimit[portticker] \
-                    else self.__stoplossLimit[portticker]
+            if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
+                self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
+            else:
+                self.__stoplossLimit[portticker] = self.__stoplossLimit[portticker]
 
     def preAnalyze(self) -> pd.DataFrame:
         modAssetList: List[str] = []
-        priceData: int = 0
+        priceData: float = 0.0
         for ticker in self.__assets.keys():
             asset: AssetData = self.__assets[ticker]
             priceData = asset.shareprice.iloc[self.__assetdateIdx[ticker]]['Close']
@@ -79,7 +80,7 @@ class StratLinearAscend(IStrategy):
         startDate = self.__currentDate - pd.DateOffset(months=self.num_months)
         for ticker in modAssetList:
             asset: AssetData = self.__assets[ticker]
-            priceData = DFTO(asset.shareprice).inbetween(startDate, self.__currentDate, pd.Timedelta(hours=18))
+            priceData: pd.DataFrame = DFTO(asset.shareprice).inbetween(startDate, self.__currentDate, pd.Timedelta(hours=18))
             if priceData.empty:
                 continue
 
@@ -99,7 +100,7 @@ class StratLinearAscend(IStrategy):
         results_df: pd.DataFrame = self.preAnalyze()
 
         # Calculate the 75% quantile of the 'Slope' column
-        quant = results_df['Slope'].quantile(0.60)
+        quant = results_df['Slope'].quantile(0.90)
         # Initialize 'Rankslope' by assigning rank 1 to values above the  quantile
         results_df['Rankslope'] = np.where(results_df['Slope'] > quant, 1, np.nan)
         # Create a mask for values at or below the quantile
@@ -132,7 +133,7 @@ class StratLinearAscend(IStrategy):
                 price: float = float(price_data['Close'])
                 if price < 0.00001:
                     continue
-                quantity = np.floor((cashPerStock - ActionCost().buy(cashPerStock)) / price)
+                quantity = np.floor((cashPerStock) / (price + ActionCost().buy(price)))
                 if abs(quantity) > 0.00001:
                     buyOrders[ticker] = {
                         "quantity": quantity,
@@ -150,7 +151,7 @@ class StratLinearAscend(IStrategy):
             quantity = buyOrders[ticker]['quantity']
             price = buyOrders[ticker]['price']
             self.__portfolio.buy(ticker, quantity, price, self.__currentDate)
-            self.__stoplossLimit[ticker] = price * StratLinearAscend.__stoplossRatio
+            self.__stoplossLimit[ticker] = price * self.__stoplossRatio
             print(f"Bought {quantity} shares of {ticker} at {price} on Date: {self.__currentDate}.")
 
     def apply(self,
@@ -170,7 +171,7 @@ class StratLinearAscend(IStrategy):
         self.updateStoplossLimit()
 
         if len(self.__portfolio.positions.keys()) > 0 and not sellOrders:
-            return # Do not buy if empty
+            return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
         self.buy(buyOrders)
@@ -202,8 +203,11 @@ class StratLinearAscend(IStrategy):
 
         # Calculate residuals and variance
         residuals = y-y_pred
-        #variance = np.var(np.maximum(residuals,0))
-        variance = np.var(residuals/np.mean(y_pred))
+        
+        mean_y_pred = np.mean(y_pred)
+        if mean_y_pred == 0:
+            mean_y_pred = np.finfo(float).eps  # Smallest representable float
+        variance = np.var(residuals / mean_y_pred)
 
         return {
             'Ticker': ticker,
