@@ -5,7 +5,7 @@ from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut 
 from src.databaseService.OutsourceLoader import OutsourceLoader
 
-class LoadStocks:
+class EstablishStocks:
     def __init__(self, dirPathManualTicker: str, dirPathLoadedTicker:str, manualYamlName: str, loadedYamlName: str):
         self.dirPathToManualTicker = dirPathManualTicker
         self.dirPathToLoadedTicker = dirPathLoadedTicker
