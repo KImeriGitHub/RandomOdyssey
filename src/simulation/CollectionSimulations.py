@@ -72,4 +72,4 @@ class CollectionSimulations():
         # Analyze results
         analyzer = ResultAnalyzer(simulation.portfolio)
         analyzer.plot_portfolio_value()
-        analyzer.plot_positions_per_asset_separate_test(assets)
+        analyzer.plot_positions_per_asset_separate(assets)
