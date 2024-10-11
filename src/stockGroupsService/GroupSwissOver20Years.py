@@ -1,4 +1,3 @@
-from datetime import datetime
 import pandas as pd
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup

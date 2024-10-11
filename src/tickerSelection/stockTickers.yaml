@@ -2680,6 +2680,8 @@
     - ZWS
 - stockExchange: NASDAQ
   stocks:
+    - BF-B
+    - BRK-B
     - ADBE
     - ABNB
     - GOOGL
