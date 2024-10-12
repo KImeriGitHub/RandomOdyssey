@@ -7,7 +7,7 @@ class AssetData:
     ticker: str
     isin: str = ""
 
-    # [Open, High, Low, Close]
+    # [Open, High, Low, Close, Adj Close]
     shareprice: pd.DataFrame = None
     volume: pd.Series = None
     dividends: pd.Series = None
