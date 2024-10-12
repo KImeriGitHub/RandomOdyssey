@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Dict
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetData import AssetData
@@ -20,14 +20,19 @@ class GroupManager:
 
         # Initialize group lists
         group_lists = {criterion.groupName(): [] for criterion in self.groupClasses}
-
+        assets: Dict[str, AssetData] = {}
         for ticker in all_stocks_list:
-            asset = AssetFileInOut(self.databasePath).loadFromFile(ticker)
-            print(f"Processing asset: {asset.ticker}")
+            assets[ticker] = AssetFileInOut(self.databasePath).loadFromFile(ticker)
+            print(f"Processing asset: {assets[ticker].ticker}")
             for criterion in self.groupClasses:
-                if criterion.checkAsset(asset):
-                    group_lists[criterion.groupName()].append(asset.ticker)
+                if criterion.checkAsset(assets[ticker]):
+                    group_lists[criterion.groupName()].append(assets[ticker].ticker)
 
         # Save group lists to YAML files
-        for groupName, tickers in group_lists.items():
-            YamlTickerInOut(self.stockGroupPath).saveToFile(tickers, groupName)
+        for groupName, grouptickers in group_lists.items():
+            YamlTickerInOut(self.stockGroupPath).saveToFile(grouptickers, groupName)
+            assetsInGroup: Dict[str, AssetData] = {}
+            for ticker in grouptickers:
+                assetsInGroup[ticker] = assets[ticker]
+
+            AssetFileInOut(os.path.join(self.stockGroupPath, "bin")).saveDictToFile(assetsInGroup,groupName)

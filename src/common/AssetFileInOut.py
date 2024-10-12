@@ -17,3 +17,15 @@ class AssetFileInOut:
         file_path = os.path.join(self.directoryPath, f"{tickername}.pkl")
         assetdictread = pd.read_pickle(file_path)
         return AssetDataService.from_dict(assetdictread)
+    
+    def saveDictToFile(self, dictad: dict[str, AssetData], filename: str):
+        if not filename.lower().endswith('.pkl'):
+            filename += '.pkl'
+        file_path = os.path.join(self.directoryPath, f"{filename}")
+        pd.to_pickle(dictad, file_path)
+
+    def loadDictFromFile(self, filename: str) -> dict[str, AssetData]:
+        if not filename.lower().endswith('.pkl'):
+            filename += '.pkl'
+        file_path = os.path.join(self.directoryPath, f"{filename}")
+        return pd.read_pickle(file_path)
