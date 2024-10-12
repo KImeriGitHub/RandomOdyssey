@@ -28,6 +28,7 @@ class EstablishStocks:
                 stockList.append(ticker)
                 continue # discard
             stockList.append(ticker+'.SW')
+        stockList.extend(tickersDict[3]['stocks'])
         if not stockList:
             print("No stocks found in the YAML file.")
             return []

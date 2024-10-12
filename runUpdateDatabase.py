@@ -1,4 +1,4 @@
-from databaseService.LoadStocks import EstablishStocks
+from databaseService.EstablishStocks import EstablishStocks
 
 if __name__ == "__main__":
     EstablishStocks(dirPathManualTicker = "src/tickerSelection",

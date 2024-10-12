@@ -7,7 +7,7 @@ class ActionCost:
             return 0
         
         stempelGebuehr = 0.15 * 0.01
-        commission = 0.3 * 0.01
+        commission = 0.05 * 0.01
         total_portion = stempelGebuehr + commission
 
         return price * total_portion 
