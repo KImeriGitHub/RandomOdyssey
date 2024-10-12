@@ -1,3 +1,4 @@
+from src.mathTools.CurveAnalysis import CurveAnalysis
 from src.strategy.IStrategy import IStrategy
 from src.common.AssetData import AssetData
 from src.common.Portfolio import Portfolio
@@ -8,7 +9,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
 
-class StratLinearAscend(IStrategy):
+class StratLinearAscendRanked(IStrategy):
     __stoplossRatio = 0.95
 
     def __init__(self,
@@ -88,7 +89,7 @@ class StratLinearAscend(IStrategy):
             priceData = priceData.resample('B').mean().dropna()  # Resample to business days
 
             # Store results
-            analysis_results.append(self.curveAnalysis(priceData['Close'].values, ticker))
+            analysis_results.append(CurveAnalysis.lineFit(priceData['Close'].values, ticker))
 
         if not analysis_results:
             print("No assets available for analysis.")
@@ -177,40 +178,3 @@ class StratLinearAscend(IStrategy):
         self.buy(buyOrders)
 
         self.updateStoplossLimit()
-
-    def curveAnalysis(self, priceArray, ticker: str) -> Dict:
-        x = np.arange(len(priceArray))
-
-        # Dependent variable: 'Close' prices
-        y = priceArray
-
-        # Fit line through the first data point and minimize residuals
-        x0 = x[0]
-        y0 = y[0]
-        dx = x - x0
-        dy = y - y0
-
-        denominator = np.sum(dx * dx)
-        if denominator == 0:
-            raise ValueError("Denominator is zero; all x values are the same.")
-        
-        # Calculate the slope (m) and intercept (c)
-        m = np.sum(dx * dy) / denominator
-        c = y0 - m * x0
-
-        # Predict y-values using the fitted line
-        y_pred = m * x + c
-
-        # Calculate residuals and variance
-        residuals = y-y_pred
-        
-        mean_y_pred = np.mean(y_pred)
-        if mean_y_pred == 0:
-            mean_y_pred = np.finfo(float).eps  # Smallest representable float
-        variance = np.var(residuals / mean_y_pred)
-
-        return {
-            'Ticker': ticker,
-            'Slope': m,
-            'Variance': variance
-        }

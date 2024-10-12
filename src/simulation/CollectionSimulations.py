@@ -1,6 +1,6 @@
 from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
-from src.strategy.StratLinearAscend import StratLinearAscend
+from strategy.StratLinearAscendRanked import StratLinearAscendRanked
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
@@ -50,7 +50,7 @@ class CollectionSimulations():
 
         # Define strategy
         initialCash=10000.0
-        strategy = StratLinearAscend(num_months = 1, num_choices= 1)
+        strategy = StratLinearAscendRanked(num_months = 1, num_choices= 1)
 
         # Set up simulation
         simulation = SimulatePortfolio(
