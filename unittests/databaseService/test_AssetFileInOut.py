@@ -31,7 +31,6 @@ def test_FileInOut_FileLoadedSameMOCKED_true():
     'High': [1.236482, 1.236482, 1.236482, 1.236482, 1.236482],
     'Low': [1.217459, 1.217460, 1.217460, 1.217460, 1.217460],
     'Close': [1.226971, 1.236482, 1.217460, 1.217460, 1.217460],
-    'Adj Close': [1.236971, 1.236482, 1.227460, 1.207460, 1.217460]
     }
 
     # Convert the dictionary to a pandas dataframe

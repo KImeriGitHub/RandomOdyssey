@@ -72,13 +72,13 @@ class CollectionSimulations():
 
     @staticmethod
     def SimCurveML():
-        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_swiss_over20years")
+        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
 
         # Define strategy
         initialCash=10000.0
         strategy = StratCurvePrediction(num_months = 1,
                                         modelPath = "src/predictionModule/bin",
-                                        modelName= "curveML_swiss_10to20")
+                                        modelName= "curveML_snp500_10to20")
 
         # Set up simulation
         simulation = SimulatePortfolio(

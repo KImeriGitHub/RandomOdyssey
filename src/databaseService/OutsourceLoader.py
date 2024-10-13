@@ -40,7 +40,7 @@ class OutsourceLoader:
 
         fullSharePrice = stock.history(period="max", raise_errors = raise_errors)
         try:
-            assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close", "Adj Close"]]
+            assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close"]]
 
             assetData.volume = fullSharePrice["Volume"]  #think on how to deal with nan results
 
