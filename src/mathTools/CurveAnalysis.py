@@ -29,7 +29,11 @@ class CurveAnalysis:
         # Calculate R-squared
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((y - np.mean(y))**2)
-        r_squared = 1 - (ss_res / ss_tot)
+
+        if np.abs(ss_tot) < 10*np.finfo(float).eps:
+            r_squared = 1
+        else:
+            r_squared = 1 - (ss_res / ss_tot)
 
         # Standard errors of the coefficients are the square roots of the diagonal elements of the covariance matrix
         std_err = np.sqrt(np.diag(covariance))

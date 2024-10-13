@@ -1,6 +1,7 @@
 from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
 from strategy.StratLinearAscendRanked import StratLinearAscendRanked
+from strategy.StratCurvePrediction import StratCurvePrediction
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
@@ -58,7 +59,34 @@ class CollectionSimulations():
             strategy=strategy,
             assets=assets,
             startDate=pd.Timestamp(2020,1,4),
-            endDate=pd.Timestamp(2024,1,4),
+            endDate=pd.Timestamp(2024,9,4),
+        )
+
+        # Run simulation
+        simulation.run()
+
+        # Analyze results
+        analyzer = ResultAnalyzer(simulation.portfolio)
+        analyzer.plot_portfolio_value()
+        #analyzer.plot_positions_per_asset_separate(assets)
+
+    @staticmethod
+    def SimCurveML():
+        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_swiss_over20years")
+
+        # Define strategy
+        initialCash=10000.0
+        strategy = StratCurvePrediction(num_months = 1,
+                                        modelPath = "src/predictionModule/bin",
+                                        modelName= "curveML_swiss_10to20")
+
+        # Set up simulation
+        simulation = SimulatePortfolio(
+            portfolio = Portfolio(cash = initialCash),
+            strategy=strategy,
+            assets=assets,
+            startDate=pd.Timestamp(2010,1,4),
+            endDate=pd.Timestamp(2020,1,4),
         )
 
         # Run simulation
