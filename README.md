@@ -60,3 +60,12 @@ run active_venv.ps1
 
 ### Database update
 python runUpdateDatabase.py
+
+### Group Updates
+python runGenerateGroups.py
+
+### ML Model Update
+python runGenerateModels.py
+
+### Run Simulation
+python runSimulation.py
