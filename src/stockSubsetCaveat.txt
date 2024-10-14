@@ -1,6 +1,0 @@
-marketcap big enough
-more than 5 years existing
-profit >0
-
-soft conditions:
-price > 50 for 5 years
