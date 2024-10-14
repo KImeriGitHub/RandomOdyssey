@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
-import os
-from typing import Dict, Tuple
+from typing import Dict
 import xgboost as xgb
 from dataclasses import dataclass
 from sklearn.metrics import mean_squared_error
@@ -9,16 +8,16 @@ from sklearn.model_selection import train_test_split
 from src.common.AssetData import AssetData
 from src.mathTools.CurveAnalysis import CurveAnalysis
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DFTO
-class CurveML:
+from src.predictionModule.IML import IML
+
+class CurveML(IML):
     __idxLengthOneMonth = 21
 
     def __init__(self, assets: Dict[str, AssetData], trainStartDate: pd.Timestamp, trainEndDate: pd.Timestamp):
+        super().__init__()
         self.__assets = assets
         self.__trainStartDate = trainStartDate
         self.__trainEndDate = trainEndDate
-        self.model: xgb.XGBRegressor = xgb.XGBRegressor()
-        self.X: np.array = np.array([])
-        self.y: np.array = np.array([])
 
     def establishAssetIdx(self) -> Dict:
         # FOR FASTER RUN: Establish index in dataframe to start date
@@ -98,26 +97,3 @@ class CurveML:
         features = np.array(features).reshape(1, -1)
         predicted_prices = self.model.predict(features)
         return predicted_prices[0]
-        
-    def saveModel(self, dirPath: str, fileName:str):
-        if not fileName.lower().endswith('.mdl'):
-            fileName += '.mdl'
-        filePath = os.path.join(dirPath, f"{fileName}.")
-        if self.model is None:
-            raise ValueError('No model has been trained to save.')
-        
-        # Save the model to the specified filepath
-        self.model.save_model(filePath)
-        print(f'Model saved to {filePath}')
-
-    def loadModel(self, dirPath: str, fileName:str):
-        if not fileName.lower().endswith('.mdl'):
-            fileName += '.mdl'
-        filePath = os.path.join(dirPath, f"{fileName}.")
-        if not os.path.exists(filePath):
-            raise FileNotFoundError(f'Model file {filePath} does not exist.')
-        
-        # Initialize a new model and load the saved parameters
-        self.model = xgb.XGBRegressor()
-        self.model.load_model(filePath)
-        print(f'Model loaded from {filePath}')

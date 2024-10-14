@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 
 class StratCurvePrediction(IStrategy):
-    __stoplossRatio = 0.95
+    __stoplossRatio = 0.90
     __cashthreshhold = 0.2
 
     def __init__(self,
@@ -41,7 +41,7 @@ class StratCurvePrediction(IStrategy):
 
             currentPrice=priceData.values[-1]
             if currentPrice <= self.__stoplossLimit[boughtTicker] \
-                or predictedPrice[-1] <= self.__stoplossLimit[boughtTicker]:
+                or np.all(predictedPrice <= self.__stoplossLimit[boughtTicker]):
                 sellOrders[boughtTicker] = {
                     "quantity": self.__portfolio.positions[boughtTicker],
                     "price": currentPrice
