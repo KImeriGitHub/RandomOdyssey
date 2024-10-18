@@ -1,7 +1,9 @@
 import pandas as pd
+import polars as pl
 from typing import Dict
 
 from src.common.AssetData import AssetData
+from src.common.AssetDataPolars import AssetDataPolars
 
 class AssetDataService:
     def __init__(self):
@@ -66,3 +68,24 @@ class AssetDataService:
         defaultAD.basicEPS = pd.Series(basicEPSDict)
 
         return defaultAD
+    
+    @staticmethod
+    def to_polars(ad: AssetData) -> AssetDataPolars:
+        adpl = AssetDataPolars(ticker = ad.ticker, 
+            isin = ad.isin, 
+            shareprice = pl.DataFrame(None),
+            volume = pl.DataFrame(None),
+            dividends = pl.DataFrame(None),
+            splits = pl.DataFrame(None),
+            about = ad.about,
+            revenue = pl.DataFrame(None),
+            EBITDA = pl.DataFrame(None),
+            basicEPS = pl.DataFrame(None))
+        
+        adpl.shareprice = pl.from_pandas(ad.shareprice.reset_index())
+        adpl.volume = pl.from_pandas(ad.volume.reset_index())
+        adpl.dividends = pl.from_pandas(ad.dividends.reset_index())
+        adpl.splits = pl.from_pandas(ad.splits.reset_index())
+        adpl.revenue = pl.from_pandas(ad.revenue.reset_index())
+        adpl.EBITDA = pl.from_pandas(ad.EBITDA.reset_index())
+        adpl.basicEPS = pl.from_pandas(ad.basicEPS.reset_index())
