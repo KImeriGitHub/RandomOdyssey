@@ -2,14 +2,18 @@ from typing import List, Dict
 from src.common.Portfolio import Portfolio
 from src.strategy.IStrategy import IStrategy
 from src.common.AssetData import AssetData
+from src.common.AssetDataPolars import AssetDataPolars
 from src.simulation.ISimulation import ISimulation
-from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DFTO
+from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 import pandas as pd
+import polars as pl
 import numpy as np
+import datetime
 import warnings
+import line_profiler
 
 class SimulatePortfolio(ISimulation):
-    def __init__(self, strategy: IStrategy, assets: Dict[str, AssetData], portfolio: Portfolio, startDate: pd.Timestamp, endDate: pd.Timestamp):
+    def __init__(self, strategy: IStrategy, assets: Dict[str, AssetDataPolars], portfolio: Portfolio, startDate: pd.Timestamp, endDate: pd.Timestamp):
         self.portfolio = portfolio
         self.strategy = strategy
         self.assets = assets
@@ -27,7 +31,7 @@ class SimulatePortfolio(ISimulation):
         assetdateIdx = {}
         discardedAsset = []
         for ticker, asset in self.assets.items():
-            if asset.shareprice.index[-1] < self.startDate:
+            if asset.shareprice.select(pl.col("Date").last()).item() < self.startDate:
                 warnings.warn(f"Asset {ticker} history not old enough or startDate ({self.startDate}) too far back. It is discarded.")
                 discardedAsset.append(ticker)
                 continue
@@ -37,7 +41,7 @@ class SimulatePortfolio(ISimulation):
                 raise ValueError(f"End Date ({self.endDate}) must be {maxDays} after Start Date {self.startDate}.")
             for i in range(maxDays+1):
                 dateToCheck = self.startDate + pd.Timedelta(days=i)
-                idx = DFTO(asset.shareprice).getIndex(dateToCheck, pd.Timedelta(days=0.7))
+                idx = DPl(asset.shareprice).getIndex(dateToCheck, pd.Timedelta(days=0.7))
                 if idx != -1:
                     assetdateIdx[ticker] = idx
                     break
@@ -56,15 +60,16 @@ class SimulatePortfolio(ISimulation):
 
         return assetdateIdx
 
+    @line_profiler.profile
     def run(self):
         assetdateIdx = self.__checkAssetSetupIdx()
 
         # Init Calculation of Asset Prices
         asset_prices = {}
-        price_data = pd.DataFrame(None)
+        price_data = pl.DataFrame(None)
         for ticker, asset in self.assets.items():
-            price_data = asset.shareprice.iloc[assetdateIdx[ticker]]
-            asset_prices[ticker] = price_data['Close']
+            price_data = asset.shareprice['Close']
+            asset_prices[ticker] = price_data.item(assetdateIdx[ticker])
 
         # Main Loop
         dates = pd.date_range(self.startDate, self.endDate, freq='B', tz='UTC') # 'B' for business days
@@ -75,15 +80,14 @@ class SimulatePortfolio(ISimulation):
                                 currentDate = date, 
                                 assetdateIdx = assetdateIdx)
 
-            # Gather asset_prices
+            # Advance assetdateIdx
             for ticker, asset in self.assets.items():
-                if assetdateIdx[ticker] > len(asset.shareprice.index):
+                if assetdateIdx[ticker] > asset.shareprice['Date'].len():
                     warnings.warn(f"Out of Bound access for {ticker}. Skipped.")
                     continue
-                assetDate: pd.Timestamp = asset.shareprice.index[assetdateIdx[ticker]]
+                assetDate: datetime.datetime = asset.shareprice['Date'][assetdateIdx[ticker]]
                 if (assetDate >= date - pd.Timedelta(hours=18)) & (assetDate < date + pd.Timedelta(hours=18)):
-                    price_data = asset.shareprice.iloc[assetdateIdx[ticker]]
-                    asset_prices[ticker] = price_data['Close']
+                    asset_prices[ticker] = asset.shareprice['Close'].item(assetdateIdx[ticker])
                     assetdateIdx[ticker] += 1
 
             # Update portfolio value

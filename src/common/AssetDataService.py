@@ -82,10 +82,32 @@ class AssetDataService:
             EBITDA = pl.DataFrame(None),
             basicEPS = pl.DataFrame(None))
         
+        # Convert and rename shareprice
         adpl.shareprice = pl.from_pandas(ad.shareprice.reset_index())
+        adpl.shareprice = adpl.shareprice.rename({"index": "Date"})
+
+        # Convert and rename volume
         adpl.volume = pl.from_pandas(ad.volume.reset_index())
+        adpl.volume = adpl.volume.rename({"index": "Date", "0": "Volume"})
+
+        # Convert and rename dividends
         adpl.dividends = pl.from_pandas(ad.dividends.reset_index())
+        adpl.dividends = adpl.dividends.rename({"index": "Date", "0": "Dividends"})
+
+        # Convert and rename splits
         adpl.splits = pl.from_pandas(ad.splits.reset_index())
+        adpl.splits = adpl.splits.rename({"index": "Date", "0": "Splits"})
+
+        # Convert and rename revenue
         adpl.revenue = pl.from_pandas(ad.revenue.reset_index())
+        adpl.revenue = adpl.revenue.rename({"index": "Date", "0": "Revenue"})
+
+        # Convert and rename EBITDA
         adpl.EBITDA = pl.from_pandas(ad.EBITDA.reset_index())
+        adpl.EBITDA = adpl.EBITDA.rename({"index": "Date", "0": "EBITDA"})
+
+        # Convert and rename basicEPS
         adpl.basicEPS = pl.from_pandas(ad.basicEPS.reset_index())
+        adpl.basicEPS = adpl.basicEPS.rename({"index": "Date", "0": "BasicEPS"})
+
+        return adpl

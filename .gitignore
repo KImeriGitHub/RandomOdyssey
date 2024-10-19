@@ -12,3 +12,5 @@ src/stockGroups/*
 src/tickerSelection/*
 
 src/predictionmodule/bin/*
+
+*.lprof

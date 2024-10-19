@@ -69,3 +69,13 @@ python runGenerateModels.py
 
 ### Run Simulation
 python runSimulation.py
+
+## How to Line Profile
+Add to a function or method the decorator
+@line_profiler.profile
+
+Then run the python script via kernprof -l like
+kernprof -l runSimulation.py
+
+it produces a file with the profiling. To inspect it run
+python -m line_profiler -rmt "runSimulation.py.lprof"

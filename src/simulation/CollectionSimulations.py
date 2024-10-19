@@ -6,8 +6,12 @@ from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.Portfolio import Portfolio
+from src.common.AssetDataPolars import AssetDataPolars
+from src.common.AssetDataService import AssetDataService
 
 import pandas as pd
+import polars as pl
+from typing import Dict
 
 class CollectionSimulations():
     def __init__():
@@ -49,6 +53,10 @@ class CollectionSimulations():
         #tickers = ['GOOGL', 'AAPL', 'MSFT']
         assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
 
+        assetspl: Dict[str, AssetDataPolars] = {}
+        for ticker, asset in assets.items():
+            assetspl[ticker]= AssetDataService.to_polars(asset)
+
         # Define strategy
         initialCash=10000.0
         strategy = StratLinearAscendRanked(num_months = 1, num_choices= 1)
@@ -57,9 +65,9 @@ class CollectionSimulations():
         simulation = SimulatePortfolio(
             portfolio = Portfolio(cash = initialCash),
             strategy=strategy,
-            assets=assets,
-            startDate=pd.Timestamp(2020,1,4),
-            endDate=pd.Timestamp(2024,9,4),
+            assets=assetspl,
+            startDate=pd.Timestamp(2005,1,4),
+            endDate=pd.Timestamp(2024,10,4),
         )
 
         # Run simulation

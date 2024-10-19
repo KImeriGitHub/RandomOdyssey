@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from src.common.AssetData import AssetData
 from src.mathTools.CurveAnalysis import CurveAnalysis
-from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DFTO
+from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DFTO
 from src.predictionModule.IML import IML
 
 class CurveML(IML):
