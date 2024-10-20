@@ -47,7 +47,49 @@ class CurveAnalysis:
         }
 
         return fit_results
+    
+    @staticmethod
+    def quadraticFit(priceArray, ticker: str) -> Dict:
+        x = np.arange(len(priceArray))
+        y = priceArray
 
+        # Perform linear regression using scipy
+        # x[0]**2 * coeff[0] + x[0] * coeff[1]+coeff[2] approximates y[0]
+        coeff, covariance = np.polyfit(x, y, 2, cov=True)
+
+        # Calculate the fitted y-values
+        y_fit = np.polyval(coeff, x)
+
+        # Compute residuals
+        residuals = y - y_fit
+
+        # Calculate variance of residuals (using sample variance, ddof=1)
+        variance = np.var(residuals, ddof=1)
+
+        # Calculate R-squared
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((y - np.mean(y))**2)
+
+        if np.abs(ss_tot) < 10*np.finfo(float).eps:
+            r_squared = 1
+        else:
+            r_squared = 1 - (ss_res / ss_tot)
+
+        # Standard errors of the coefficients are the square roots of the diagonal elements of the covariance matrix
+        std_err = np.sqrt(np.diag(covariance))
+
+        fit_results = {
+            'Ticker': ticker,
+            'Intercept': coeff[2],
+            'Linear_Exp': coeff[1],
+            'Quadratic_Exp': coeff[0],
+            'Std_Errors': std_err.tolist(),
+            'R_Squared': r_squared,
+            'Variance': variance
+        }
+
+        return fit_results
+    
     @staticmethod
     def lineFit(priceArray, ticker: str) -> Dict:
         x = np.arange(len(priceArray))

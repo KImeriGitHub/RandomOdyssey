@@ -2,6 +2,7 @@ from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
 from strategy.StratLinearAscendRanked import StratLinearAscendRanked
 from strategy.StratCurvePrediction import StratCurvePrediction
+from strategy.StratQuadraticAscendRanked import StratQuadraticAscendRanked
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
@@ -53,6 +54,7 @@ class CollectionSimulations():
         #tickers = ['GOOGL', 'AAPL', 'MSFT']
         assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
 
+        # Convert to Polars for speedup
         assetspl: Dict[str, AssetDataPolars] = {}
         for ticker, asset in assets.items():
             assetspl[ticker]= AssetDataService.to_polars(asset)
@@ -77,6 +79,37 @@ class CollectionSimulations():
         analyzer = ResultAnalyzer(simulation.portfolio)
         analyzer.plot_portfolio_value()
         #analyzer.plot_positions_per_asset_separate(assets)
+
+    @staticmethod
+    def QuadraticAscend():
+        # Load asset data
+        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
+
+        # Convert to Polars for speedup
+        assetspl: Dict[str, AssetDataPolars] = {}
+        for ticker, asset in assets.items():
+            assetspl[ticker]= AssetDataService.to_polars(asset)
+
+        # Define strategy
+        initialCash=10000.0
+        strategy = StratQuadraticAscendRanked(num_months = 1, num_choices= 1)
+
+        # Set up simulation
+        simulation = SimulatePortfolio(
+            portfolio = Portfolio(cash = initialCash),
+            strategy=strategy,
+            assets=assetspl,
+            startDate=pd.Timestamp(2018,1,4),
+            endDate=pd.Timestamp(2023,10,4),
+        )
+
+        # Run simulation
+        simulation.run()
+
+        # Analyze results
+        analyzer = ResultAnalyzer(simulation.portfolio)
+        analyzer.plot_portfolio_value()
+        analyzer.plot_positions_per_asset_separate(assets)
 
     @staticmethod
     def SimCurveML():
