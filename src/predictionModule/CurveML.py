@@ -1,32 +1,32 @@
 import numpy as np
 import pandas as pd
+import polars as pl
 from typing import Dict
 import xgboost as xgb
 from dataclasses import dataclass
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
-from src.common.AssetData import AssetData
+from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.CurveAnalysis import CurveAnalysis
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DFTO
+from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 from src.predictionModule.IML import IML
 
 class CurveML(IML):
     __idxLengthOneMonth = 21
 
-    def __init__(self, assets: Dict[str, AssetData], trainStartDate: pd.Timestamp, trainEndDate: pd.Timestamp):
+    def __init__(self, assets: Dict[str, AssetDataPolars], trainStartDate: pd.Timestamp, trainEndDate: pd.Timestamp):
         super().__init__()
-        self.__assets = assets
-        self.__trainStartDate = trainStartDate
-        self.__trainEndDate = trainEndDate
+        self.__assets: Dict[str, AssetDataPolars] = assets
+        self.__trainStartDate: pd.Timestamp = trainStartDate
+        self.__trainEndDate: pd.Timestamp = trainEndDate
 
     def establishAssetIdx(self) -> Dict:
         # FOR FASTER RUN: Establish index in dataframe to start date
         assetdateIdx = {}
         for ticker, asset in self.__assets.items():
-            if asset.shareprice.index[-1] < self.__trainStartDate:
+            if asset.shareprice.select(pl.col("Date").last()).item() < self.__trainStartDate:
                 raise ValueError(f"Asset {ticker} history not old enough or startDate ({self.startDate}) too far back. We stop.")
-
-            assetdateIdx[ticker] = DFTO(asset.shareprice).getNextLowerIndex(self.__trainStartDate)+1
+            assetdateIdx[ticker] = DPl(asset.shareprice).getIndex(self.__trainStartDate, pd.Timedelta(days=0.7))
 
         return assetdateIdx
 
@@ -43,20 +43,20 @@ class CurveML(IML):
             processedCounter += 1
 
             pricesArray = asset.shareprice['Close']
-            pricesArray = pricesArray.resample('B').mean().dropna()
+            datesArray = asset.shareprice['Date']
             dates = pd.date_range(self.__trainStartDate, self.__trainEndDate, freq='B', tz='UTC') # 'B' for business days
             for date in dates:
-                if not abs(pricesArray.index[assetdateIdx[ticker]] - date) <= pd.Timedelta(hours=18):
-                    if pricesArray.index[assetdateIdx[ticker]] < date:
-                        assetdateIdx[ticker] = DFTO(asset.shareprice).getNextLowerIndex(date)+1
+                if not abs(datesArray.item(assetdateIdx[ticker]) - date) <= pd.Timedelta(hours=18):
+                    if datesArray.item(assetdateIdx[ticker]) < date:
+                        assetdateIdx[ticker] = DPl(asset.shareprice).getNextLowerIndex(date)+1
                     continue
                 
                 for m in [1,2,3,4,5,6]:
                     aidx = assetdateIdx[ticker]
                     if (aidx - m * self.__idxLengthOneMonth)<0:
                         continue
-                    pastPrices = pricesArray.iloc[(aidx - m * self.__idxLengthOneMonth) : (aidx+1)]
-                    futurePrices = pricesArray.iloc[(aidx+1):(aidx+6)]
+                    pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
+                    futurePrices = pricesArray.slice((aidx+1),5).to_numpy()
                     fit_results = CurveAnalysis.thirdDegreeFit(pastPrices, ticker)
                     features = [m,
                                 fit_results['Coefficients'][0],
@@ -70,6 +70,7 @@ class CurveML(IML):
                         or not np.isfinite(futurePrices).all()\
                         or not np.isfinite(features).all():
                         continue
+
                     X.append(features)
                     y.append(futurePrices.values.tolist())
         self.X = np.array(X)

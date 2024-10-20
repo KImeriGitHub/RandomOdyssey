@@ -1,16 +1,18 @@
 from src.mathTools.CurveAnalysis import CurveAnalysis
 from src.strategy.IStrategy import IStrategy
 from src.common.AssetData import AssetData
+from src.common.AssetDataPolars import AssetDataPolars
 from src.common.Portfolio import Portfolio
 from src.common.ActionCost import ActionCost
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DFTO
 from src.predictionModule.CurveML import CurveML
 from typing import Dict, List
 import pandas as pd
+import polars as pl
 import numpy as np
 
 class StratCurvePrediction(IStrategy):
-    __stoplossRatio = 0.90
+    __stoplossRatio = 0.92
     __cashthreshhold = 0.2
 
     def __init__(self,
@@ -19,7 +21,7 @@ class StratCurvePrediction(IStrategy):
                  modelName: str = ""):
         self.num_months: int = num_months
 
-        self.__assets: Dict[str, AssetData] = {}
+        self.__assets: Dict[str, AssetDataPolars] = {}
         self.__portfolio: Portfolio = None
 
         self.__stoplossLimit: Dict[str, float] = {}
@@ -34,19 +36,16 @@ class StratCurvePrediction(IStrategy):
     def sellOrders(self) -> Dict:
         sellOrders = {}
         for boughtTicker in self.__portfolio.positions.keys():
-            asset: AssetData = self.__assets[boughtTicker]
-            priceData = asset.shareprice.iloc[(self.__assetdateIdx[boughtTicker]-21):(self.__assetdateIdx[boughtTicker]+1)]["Close"]
-            priceData = priceData.resample('B').mean().dropna()
-            predictedPrice = self.__curveML.predictNextPrices(priceData, boughtTicker, 1)
-
-            currentPrice=priceData.values[-1]
-            if currentPrice <= self.__stoplossLimit[boughtTicker] \
-                or np.all(predictedPrice <= self.__stoplossLimit[boughtTicker]):
+            asset: AssetDataPolars = self.__assets[boughtTicker]
+            price = asset.shareprice['Close'].item(self.__assetdateIdx[boughtTicker])
+            if price < 0.00001:
+                print("Weird price.")
+                continue
+            if price <= self.__stoplossLimit[boughtTicker]:
                 sellOrders[boughtTicker] = {
                     "quantity": self.__portfolio.positions[boughtTicker],
-                    "price": currentPrice
+                    "price": price
                 }
-
         return sellOrders
 
     def sell(self, sellOrders: Dict):
@@ -62,9 +61,8 @@ class StratCurvePrediction(IStrategy):
 
     def updateStoplossLimit(self):
         for portticker in self.__portfolio.positions.keys():
-            asset: AssetData = self.__assets[portticker]
-            price_data = asset.shareprice.iloc[self.__assetdateIdx[portticker]]
-            price_data = price_data['Close']
+            asset: AssetDataPolars = self.__assets[portticker]
+            price_data = asset.shareprice["Close"].item(self.__assetdateIdx[portticker])
             if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
                 self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
             else:
@@ -72,15 +70,13 @@ class StratCurvePrediction(IStrategy):
 
     def preAnalyze(self) -> List:
         analysis_results = []
-        startDate = self.__currentDate - pd.DateOffset(months=self.num_months)
-        for ticker, asset in self.__assets.items():
-            priceData: pd.DataFrame = DFTO(asset.shareprice).inbetween(startDate, self.__currentDate, pd.Timedelta(hours=18))
-            if priceData.empty:
-                continue
+        startDateIdxDiff = self.num_months*21
+        for ticker in self.__assets:
+            asset: AssetDataPolars = self.__assets[ticker]
+            priceData: pl.DataFrame = asset.shareprice.slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
 
             # Prepare data for linear regression
-            priceData = priceData["Close"]
-            priceData = priceData.resample('B').mean().dropna()  # Resample to business days
+            priceData = priceData.drop_nulls()["Close"].to_numpy()
 
             # Store results
             predictedPrice = self.__curveML.predictNextPrices(priceData, ticker, 1)
@@ -101,31 +97,25 @@ class StratCurvePrediction(IStrategy):
         buyOrders = {}
 
         # Select top choices
-        analysis_results = self.preAnalyze()
-        maxprod = 1
-        topChoice = ""
-        for tickerResult in analysis_results:
-            prod = np.prod(tickerResult["predicted ratio"])
-            if prod > maxprod:
-                topChoice = tickerResult["ticker"]
-                maxprod=prod
-
-        if topChoice == "":
+        top_choices: pl.DataFrame = self.rankAssets()
+        if top_choices is pl.DataFrame(None):
             return buyOrders
 
-        ticker: str = topChoice
-        asset: AssetData = self.__assets[ticker]
-        priceData: pd.DataFrame = asset.shareprice.iloc[self.__assetdateIdx[ticker]]
-        if not priceData.empty:
-            price: float = float(priceData['Close'])
-            quantity = np.floor((self.__portfolio.cash) / (price + ActionCost().buy(price)))
+        # Divide cash equally among selected stocks
+        cashPerStock = self.__portfolio.cash / len(top_choices)
+
+        for topTicker in top_choices["Ticker"].to_list():
+            asset: AssetDataPolars = self.__assets[topTicker]
+            price_data: pl.DataFrame = asset.shareprice["Close"].item(self.__assetdateIdx[topTicker])
+            price: float = float(price_data)
+            if price < 0.00001:
+                continue
+            quantity = np.floor((cashPerStock) / (price + ActionCost().buy(price)))
             if abs(quantity) > 0.00001:
-                buyOrders[ticker] = {
+                buyOrders[topTicker] = {
                     "quantity": quantity,
                     "price": price
                 }
-        else:
-            print(f"No price data for {ticker} on {self.__currentDate}")
 
         return buyOrders
 
@@ -155,9 +145,10 @@ class StratCurvePrediction(IStrategy):
 
         self.updateStoplossLimit()
 
-        if not len(self.__portfolio.valueOverTime) == 0 \
-            and portfolio.cash / portfolio.valueOverTime[-1][1] < self.__cashthreshhold:
-            return  # stop if cash is smaller than threshold
+        if not self.__portfolio.valueOverTime == [] \
+            and self.__portfolio.cash/self.__portfolio.valueOverTime[-1][1] < self.__cashthreshhold \
+            and not sellOrders:
+            return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
         self.buy(buyOrders)
