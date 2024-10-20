@@ -99,8 +99,8 @@ class CollectionSimulations():
             portfolio = Portfolio(cash = initialCash),
             strategy=strategy,
             assets=assetspl,
-            startDate=pd.Timestamp(2018,1,4),
-            endDate=pd.Timestamp(2023,10,4),
+            startDate=pd.Timestamp(2005,1,4),
+            endDate=pd.Timestamp(2024,10,4),
         )
 
         # Run simulation
@@ -109,7 +109,7 @@ class CollectionSimulations():
         # Analyze results
         analyzer = ResultAnalyzer(simulation.portfolio)
         analyzer.plot_portfolio_value()
-        analyzer.plot_positions_per_asset_separate(assets)
+        #analyzer.plot_positions_per_asset_separate(assets)
 
     @staticmethod
     def SimCurveML():

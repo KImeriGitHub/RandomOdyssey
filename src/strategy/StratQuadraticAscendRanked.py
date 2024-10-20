@@ -10,7 +10,8 @@ import polars as pl
 import numpy as np
 
 class StratQuadraticAscendRanked(IStrategy):
-    __stoplossRatio = 0.93
+    __stoplossRatio = 0.92
+    __cashthreshhold = 0.2
 
     def __init__(self,
                  num_months: int = 2, 
@@ -100,7 +101,7 @@ class StratQuadraticAscendRanked(IStrategy):
     def rankAssets(self) -> pl.DataFrame:
         results_df: pl.DataFrame = self.preAnalyze()
 
-        quant = results_df.select(pl.col("Slope").quantile(0.95)).item()
+        quant = results_df.select(pl.col("Slope").quantile(0.90)).item()
 
         results_df = results_df.with_columns([
             pl.when(pl.col("Slope") <= quant)
@@ -125,7 +126,13 @@ class StratQuadraticAscendRanked(IStrategy):
         ])
 
         results_df = results_df.with_columns([
-            (pl.col("Rankslope") + pl.col("Rankvar")).alias("Score")
+            pl.col("Quadratic_Exp")
+              .rank(method="ordinal", descending=True)
+              .alias("RankQuadraticCoeff")
+        ])
+
+        results_df = results_df.with_columns([
+            (pl.col("Rankslope") + pl.col("Rankvar") + 3*pl.col("RankQuadraticCoeff")).alias("Score")
         ])
         results_df = results_df.sort("Score", descending=False)
 
@@ -188,7 +195,9 @@ class StratQuadraticAscendRanked(IStrategy):
 
         self.updateStoplossLimit()
 
-        if len(self.__portfolio.positions.keys()) > 0 and not sellOrders:
+        if not self.__portfolio.valueOverTime == [] \
+            and self.__portfolio.cash/self.__portfolio.valueOverTime[-1][1] < self.__cashthreshhold \
+            and not sellOrders:
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()

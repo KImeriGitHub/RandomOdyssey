@@ -1,6 +1,9 @@
 # StratLinearAscendRanked_18Sep24
 ## setup
+Git Hash a9c3c507605345560d307e21f303219aabd2722c
+'''
 __stoplossRatio = 0.92
+'''
 '''
 assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
 initialCash=10000.0
