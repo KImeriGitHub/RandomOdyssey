@@ -12,6 +12,7 @@ def test_OutsourceLoader_Loadsyfinance():
     assert asset.ticker == "IRM", "Ticker not same"
     assert asset.isin == "-", "isin not same"
     assert type(asset.shareprice) == type(pd.DataFrame(None)), "shareprice not DataFrame"
+    assert type(asset.adjClosePrice) == type(pd.Series(None)), "adjClosePrice not Series"
     assert type(asset.volume) == type(pd.Series(None)), "volume not Series"
     assert type(asset.dividends) == type(pd.Series(None)), "dividends not Series"
     assert type(asset.splits) == type(pd.Series(None)), "splits not Series"
@@ -21,6 +22,7 @@ def test_OutsourceLoader_Loadsyfinance():
     assert type(asset.basicEPS) == type(pd.Series(None)), "basicEPS not Series"
 
     assert is_datetime64_any_dtype(asset.shareprice.index), "The dataframe index is not a date."
+    assert is_datetime64_any_dtype(asset.adjClosePrice.index), "The adjClosePrice index is not a date."
     assert is_datetime64_any_dtype(asset.volume.index), "The volume index is not a date."
     assert is_datetime64_any_dtype(asset.dividends.index), "The dividends index is not a date."
     assert is_datetime64_any_dtype(asset.splits.index), "The splits index is not a date."
@@ -33,6 +35,7 @@ def test_OutsourceLoader_Loadsyfinance():
     assert asset2.ticker == "BSLN.SW", "Ticker not same"
     assert asset2.isin == "-", "isin not same"
     assert type(asset2.shareprice) == type(pd.DataFrame(None)), "shareprice not DataFrame"
+    assert type(asset2.adjClosePrice) == type(pd.Series(None)), "volume not Series"
     assert type(asset2.volume) == type(pd.Series(None)), "volume not Series"
     assert type(asset2.dividends) == type(pd.Series(None)), "dividends not Series"
     assert type(asset2.splits) == type(pd.Series(None)), "splits not Series"
@@ -46,7 +49,7 @@ def test_OutsourceLoader_Loadsyfinance():
 
 def test_OutsourceLoader_LoadsUndefined_yfinance():
     outsourceLoader = OutsourceLoader(outsourceOperator="yfinance")
-    ticker="aaaa"
+    ticker="aaaaaaa"
     try:
         asset: AssetData = outsourceLoader.load(ticker=ticker)
     except:

@@ -11,8 +11,8 @@ class TestGroupOver20Years(unittest.TestCase):
         Test that check_asset returns True when the asset has over 20 years of data.
         """
         # Create an AssetData object with share price data over 20 years
-        start_date = datetime.today() - timedelta(days=20 * 365.25 + 10)
-        dates = pd.date_range(start=start_date, periods=int(20 * 365.25) + 10)
+        start_date = pd.Timestamp.now(tz='UTC') - timedelta(days=21 * 365.25 + 10)
+        dates = pd.date_range(start=start_date, periods=int(21 * 365.25) + 10)
         prices = pd.Series(100, index=dates)
         shareprice = pd.DataFrame({'Price': prices})
         asset = AssetData(ticker='TEST', shareprice=shareprice)
@@ -24,7 +24,7 @@ class TestGroupOver20Years(unittest.TestCase):
         Test that check_asset returns False when the asset has less than 20 years of data.
         """
         # Create an AssetData object with share price data less than 20 years
-        start_date = datetime.today() - timedelta(days=19 * 365.25)
+        start_date = pd.Timestamp.now(tz='UTC') - timedelta(days=19 * 365.25)
         dates = pd.date_range(start=start_date, periods=int(19 * 365.25))
         prices = pd.Series(100, index=dates)
         shareprice = pd.DataFrame({'Price': prices})

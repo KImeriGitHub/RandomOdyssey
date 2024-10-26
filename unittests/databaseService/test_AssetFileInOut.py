@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import polars as pl
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetDataService import AssetDataService
 
@@ -16,7 +17,6 @@ def test_FileInOut_FileExists_true():
     # After the test, clean up the file
     if os.path.exists(destPath):
         os.remove(destPath)
-        pass
 
 def test_FileInOut_FileLoadedSameMOCKED_true():
     fileOut = AssetFileInOut("unittests/database")
@@ -31,6 +31,7 @@ def test_FileInOut_FileLoadedSameMOCKED_true():
     'High': [1.236482, 1.236482, 1.236482, 1.236482, 1.236482],
     'Low': [1.217459, 1.217460, 1.217460, 1.217460, 1.217460],
     'Close': [1.226971, 1.236482, 1.217460, 1.217460, 1.217460],
+    'Adj Close': [1.126971, 1.136482, 1.117460, 1.117460, 1.017460],
     }
 
     # Convert the dictionary to a pandas dataframe
@@ -59,6 +60,7 @@ def test_FileInOut_FileLoadedSameMOCKED_true():
     assert asset.ticker == loadedAsset.ticker, "Ticker not same"
     assert asset.isin == loadedAsset.isin, "isin not same"
     assert asset.shareprice.equals(loadedAsset.shareprice), "shareprice not same"
+    assert asset.adjClosePrice.equals(loadedAsset.adjClosePrice), "volume not same"
     assert asset.volume.equals(loadedAsset.volume), "volume not same"
     assert asset.dividends.equals(loadedAsset.dividends), "dividends not same"
     assert asset.splits.equals(loadedAsset.splits), "splits not same"
