@@ -20,10 +20,18 @@ class SeriesExpansion():
          - ft can be complex. Then this program divides real part and imaginary part
            and combines them again.
         """
-        M, N = ft.shape
+        # Handle both 1D and 2D cases
+        if ft.ndim == 1:
+            M, N = 1, ft.shape[0]
+            ft = ft.reshape(1, -1)
+        elif ft.ndim == 2:
+            M, N = ft.shape
+        elif ft.ndim > 2:
+            raise ValueError
     
         rFfft = np.fft.fft(np.real(ft), axis=1)
         iFfft = np.fft.fft(np.imag(ft), axis=1)
+        
         cjrFfft = np.conj(rFfft)
         cjiFfft = np.conj(iFfft)
     
@@ -36,10 +44,10 @@ class SeriesExpansion():
         ai = (iFfft + cjiFfft) * signmat / (N * 2)
         bi = (iFfft - cjiFfft) * signmat * (1j) / (N * 2)
     
-        CosConst = (np.hstack([ar[:, :1], ar[:, 1:N//2] + np.fliplr(ar[:, N//2+1:])]) +
-                    1j * np.hstack([ai[:, :1], ai[:, 1:N//2] + np.fliplr(ai[:, N//2+1:])]))
+        CosConst = (np.hstack([ar[:, :1], ar[:, 1:N//2] + np.fliplr(ar[:, N//2+N%2+1:])]) +
+                    1j * np.hstack([ai[:, :1], ai[:, 1:N//2] + np.fliplr(ai[:, N//2+N%2+1:])]))
     
-        SinConst = (np.hstack([br[:, :1], br[:, 1:N//2] - np.fliplr(br[:, N//2+1:])]) +
-                    1j * np.hstack([bi[:, :1], bi[:, 1:N//2] - np.fliplr(bi[:, N//2+1:])]))
+        SinConst = (np.hstack([br[:, :1], br[:, 1:N//2] - np.fliplr(br[:, N//2+N%2+1:])]) +
+                    1j * np.hstack([bi[:, :1], bi[:, 1:N//2] - np.fliplr(bi[:, N//2+N%2+1:])]))
     
         return CosConst, SinConst
