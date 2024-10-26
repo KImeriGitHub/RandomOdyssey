@@ -9,14 +9,14 @@ def test_getFourierConst():
     """
     # Parameters
     M = 1  # Number of functions (can be increased to test vectorization)
-    N = 64  # Number of sample points, must be even
+    N = 64
 
     # Known Fourier coefficients
-    a0 = 1.0
-    a1 = 0.5
-    a2 = 0.25
-    b1 = -0.3
-    b2 = 0.15
+    a0 = 1.0+1j
+    a1 = 0.5-1j
+    a2 = 0.25+0.3j
+    b1 = -0.3+1j
+    b2 = 0.15-0.5j
 
     # Generate sample points
     t = np.linspace(-np.pi, np.pi, N+1)[:-1]  # Exclude the last point to get N points
@@ -45,15 +45,17 @@ def test_getFourierConst():
     print("Known coefficients:")
     print(f"a0 = {a0}, a1 = {a1}, a2 = {a2}, b1 = {b1}, b2 = {b2}")
     print("\nComputed coefficients:")
-    print(f"a0 = {computed_a0}, a1 = {computed_a1}, a2 = {computed_a2}, b1 = {computed_b1}, b2 = {computed_b2}")
+    print(f"a0 = {CosConst[0, 0]}, a1 = {CosConst[0, 1]}, a2 = {CosConst[0, 2]}, b1 = {SinConst[0, 1]}, b2 = {SinConst[0, 2]}")
 
     # Check if the computed coefficients are close to the known ones
     tol = 1e-6  # Tolerance for floating-point comparison
-    assert np.allclose(computed_a0, a0, atol=tol), "a0 does not match"
-    assert np.allclose(computed_a1, a1, atol=tol), "a1 does not match"
-    assert np.allclose(computed_a2, a2, atol=tol), "a2 does not match"
-    assert np.allclose(computed_b1, b1, atol=tol), "b1 does not match"
-    assert np.allclose(computed_b2, b2, atol=tol), "b2 does not match"
+    assert np.allclose(computed_a0, a0.real, atol=tol), "a0 does not match"
+    assert np.allclose(CosConst[0, 0].imag, a0.imag, atol=tol), "a0 does not match"
+    assert np.allclose(computed_a1, a1.real, atol=tol), "a1 does not match"
+    assert np.allclose(CosConst[0, 1].imag, a1.imag, atol=tol), "a0 does not match"
+    assert np.allclose(computed_a2, a2.real, atol=tol), "a2 does not match"
+    assert np.allclose(computed_b1, b1.real, atol=tol), "b1 does not match"
+    assert np.allclose(computed_b2, b2.real, atol=tol), "b2 does not match"
 
     print("\nAll coefficients match within the specified tolerance.")
     print("Test passed!")
@@ -68,7 +70,7 @@ def test_getFourierConst_multi():
     """
     # Parameters
     M = 3   # Number of functions
-    N = 64  # Number of sample points, must be even
+    N = 64 
 
     # Generate sample points
     t = np.linspace(-np.pi, np.pi, N+1)[:-1]  # Exclude the last point to get N points
