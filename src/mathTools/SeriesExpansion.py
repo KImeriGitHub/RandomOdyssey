@@ -24,7 +24,7 @@ class SeriesExpansion():
         if ft.ndim == 1 and ft.shape[0] == 1:
             M, N = 1, ft.shape[1]
         elif ft.ndim == 1 and ft.shape[0] > 1:
-            M, N = ft.shape
+            M, N = 1, ft.shape[0]
             ft = ft.reshape(1,-1)
         elif ft.ndim == 2:
             M, N = ft.shape
