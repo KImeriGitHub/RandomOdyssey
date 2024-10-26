@@ -14,6 +14,7 @@ class AssetDataService:
         return AssetData(ticker = "", 
             isin = "", 
             shareprice = pd.DataFrame(None),
+            adjClosePrice = pd.Series(None),
             volume = pd.Series(None),
             dividends = pd.Series(None),
             splits = pd.Series(None),
@@ -32,6 +33,7 @@ class AssetDataService:
         }
 
         data['shareprice'] = asset.shareprice.to_dict() if isinstance(asset.shareprice, pd.DataFrame) else pd.DataFrame(None).to_dict()
+        data['adjClosePrice'] = asset.adjClosePrice.to_dict() if isinstance(asset.adjClosePrice, pd.Series) else pd.Series(None).to_dict()
         data['volume'] = asset.volume.to_dict() if isinstance(asset.volume, pd.Series) else pd.Series(None).to_dict()
         data['dividends'] = asset.dividends.to_dict() if isinstance(asset.dividends, pd.Series) else pd.Series(None).to_dict()
         data['splits'] = asset.splits.to_dict() if isinstance(asset.splits, pd.Series) else pd.Series(None).to_dict()
@@ -49,6 +51,7 @@ class AssetDataService:
             raise ValueError("Ticker symbol could not be loaded. (From from_dict in AssetDataService)")
         
         sharepriceDict = assetdict.get("shareprice")
+        adjClosePriceDict = assetdict.get("adjClosePrice")
         volumeDict = assetdict.get("volume")
         dividendsDict = assetdict.get("dividends")
         splitsDict = assetdict.get("splits")
@@ -59,6 +62,7 @@ class AssetDataService:
         defaultAD.ticker = assetdict["ticker"]
         defaultAD.isin = assetdict.get("isin") or ""
         defaultAD.shareprice = pd.DataFrame(sharepriceDict)
+        defaultAD.adjClosePrice = pd.Series(adjClosePriceDict)
         defaultAD.volume = pd.Series(volumeDict)
         defaultAD.dividends = pd.Series(dividendsDict)
         defaultAD.splits = pd.Series(splitsDict)
@@ -74,6 +78,7 @@ class AssetDataService:
         adpl = AssetDataPolars(ticker = ad.ticker, 
             isin = ad.isin, 
             shareprice = pl.DataFrame(None),
+            adjClosePrice = pl.DataFrame(None),
             volume = pl.DataFrame(None),
             dividends = pl.DataFrame(None),
             splits = pl.DataFrame(None),
@@ -85,6 +90,10 @@ class AssetDataService:
         # Convert and rename shareprice
         adpl.shareprice = pl.from_pandas(ad.shareprice.reset_index())
         adpl.shareprice = adpl.shareprice.rename({"index": "Date"})
+
+        # Convert and rename shareprice
+        adpl.adjClosePrice = pl.from_pandas(ad.adjClosePrice.reset_index())
+        adpl.adjClosePrice = adpl.adjClosePrice.rename({"index": "Date"})
 
         # Convert and rename volume
         adpl.volume = pl.from_pandas(ad.volume.reset_index())

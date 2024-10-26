@@ -7,11 +7,13 @@ class AssetDataPolars:
     ticker: str
     isin: str = ""
 
-    # [Open, High, Low, Close]
+    # [Date, Open, High, Low, Close, Adj Close]
     shareprice: pl.DataFrame = None
     volume: pl.DataFrame = None
     dividends: pl.DataFrame = None
     splits: pl.DataFrame = None
+
+    adjClosePrice: pl.DataFrame = None
 
     #General Information about the asset in dict format
     about: Dict = None

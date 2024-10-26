@@ -18,11 +18,11 @@ class OutsourceLoader:
     def load(self, ticker: str) -> AssetData:
         assetData: AssetData = AssetDataService.defaultInstance()
         if self.outsourceOperator == "yfinance":
-            self._load_from_yfinance(assetData, ticker, raise_errors=True)
+            self._load_from_yfinance(assetData, ticker)
         
         return assetData
 
-    def _load_from_yfinance(self, assetData: AssetData, tickerHandle: str, raise_errors=False):
+    def _load_from_yfinance(self, assetData: AssetData, tickerHandle: str):
         stock = yf.Ticker(tickerHandle)
 
         # The saved ticker symbol is not the tickerHandle.
@@ -38,19 +38,17 @@ class OutsourceLoader:
         except:
             warnings.warn("Failed to retrieve INFO for ticker: " + tickerHandle)
 
-        fullSharePrice = stock.history(period="max", raise_errors = raise_errors)
-        try:
-            assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close"]]
+        fullSharePrice: pd.DataFrame = yf.download(tickerHandle, period="max")
+        if not fullSharePrice.empty:
+            fullSharePrice = yf.download(tickerHandle, period="max")
+            assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close", "Adj Close"]]
+            assetData.volume = fullSharePrice["Volume"]
+            assetData.dividends = stock.dividends
+            assetData.splits = stock.splits
 
-            assetData.volume = fullSharePrice["Volume"]  #think on how to deal with nan results
-
-            assetData.dividends = fullSharePrice["Dividends"].dropna()
-            assetData.dividends = assetData.dividends[(assetData.dividends > 0.000001) | (assetData.dividends < -0.000001)]
-
-            assetData.splits = fullSharePrice["Stock Splits"].dropna()
-            assetData.splits = assetData.splits[(assetData.splits > 0.000001) | (assetData.splits < -0.000001)]
-        except:
-            warnings.warn("Failed to retrieve Price History for ticker: " + tickerHandle)
+            assetData.adjClosePrice = fullSharePrice["Adj Close"]
+        else:
+            raise ValueError("Failed to retrieve Price History for ticker: " + tickerHandle)
 
         try:
             fullFinancials = stock.quarterly_financials
