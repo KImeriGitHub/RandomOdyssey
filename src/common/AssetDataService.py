@@ -93,7 +93,7 @@ class AssetDataService:
 
         # Convert and rename shareprice
         adpl.adjClosePrice = pl.from_pandas(ad.adjClosePrice.reset_index())
-        adpl.adjClosePrice = adpl.adjClosePrice.rename({"index": "Date"})
+        adpl.adjClosePrice = adpl.adjClosePrice.rename({"index": "Date", "0": "AdjClose"})
 
         # Convert and rename volume
         adpl.volume = pl.from_pandas(ad.volume.reset_index())
