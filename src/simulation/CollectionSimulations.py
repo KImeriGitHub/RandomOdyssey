@@ -130,7 +130,7 @@ class CollectionSimulations():
         simulation = SimulatePortfolio(
             portfolio = Portfolio(cash = initialCash),
             strategy=strategy,
-            assets=assets,
+            assets=assetspl,
             startDate=pd.Timestamp(2010,1,4),
             endDate=pd.Timestamp(2020,1,4),
         )

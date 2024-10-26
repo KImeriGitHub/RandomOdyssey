@@ -27,7 +27,6 @@ class StratCurvePrediction(IStrategy):
         self.__stoplossLimit: Dict[str, float] = {}
         self.__blacklist: Dict[str, pd.Timestamp] = {}
 
-        self.__currentDate: pd.Timestamp = pd.Timestamp(None)
         self.__assetdateIdx: Dict[str, int] = {}
 
         self.__curveML = CurveML(self.__assets, pd.Timestamp(None), pd.Timestamp(None))
@@ -37,10 +36,8 @@ class StratCurvePrediction(IStrategy):
         sellOrders = {}
         for boughtTicker in self.__portfolio.positions.keys():
             asset: AssetDataPolars = self.__assets[boughtTicker]
-            price = asset.shareprice['Close'].item(self.__assetdateIdx[boughtTicker])
-            if price < 0.00001:
-                print("Weird price.")
-                continue
+            price = asset.adjClosePrice['AdjClose'].item(self.__assetdateIdx[boughtTicker])
+
             if price <= self.__stoplossLimit[boughtTicker]:
                 sellOrders[boughtTicker] = {
                     "quantity": self.__portfolio.positions[boughtTicker],
@@ -48,21 +45,10 @@ class StratCurvePrediction(IStrategy):
                 }
         return sellOrders
 
-    def sell(self, sellOrders: Dict):
-        if not sellOrders:
-            return
-        # Sell
-        for ticker in sellOrders.keys():
-            quantity = sellOrders[ticker]['quantity']
-            price = sellOrders[ticker]['price']
-            self.__portfolio.sell(ticker, quantity, price, self.__currentDate)
-            self.__stoplossLimit.pop(ticker)
-            print(f"Sold {quantity} shares of {ticker} at {price} on date: {self.__currentDate}.")
-
     def updateStoplossLimit(self):
         for portticker in self.__portfolio.positions.keys():
             asset: AssetDataPolars = self.__assets[portticker]
-            price_data = asset.shareprice["Close"].item(self.__assetdateIdx[portticker])
+            price_data = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[portticker])
             if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
                 self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
             else:
@@ -73,10 +59,7 @@ class StratCurvePrediction(IStrategy):
         startDateIdxDiff = self.num_months*21
         for ticker in self.__assets:
             asset: AssetDataPolars = self.__assets[ticker]
-            priceData: pl.DataFrame = asset.shareprice.slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
-
-            # Prepare data for linear regression
-            priceData = priceData.drop_nulls()["Close"].to_numpy()
+            priceData: pl.DataFrame = asset.adjClosePrice["AdjClose"].slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
 
             # Store results
             predictedPrice = self.__curveML.predictNextPrices(priceData, ticker, 1)
@@ -119,29 +102,18 @@ class StratCurvePrediction(IStrategy):
 
         return buyOrders
 
-    def buy(self, buyOrders: Dict):
-        if not buyOrders:
-            return
-        for ticker in buyOrders.keys():
-            quantity = buyOrders[ticker]['quantity']
-            price = buyOrders[ticker]['price']
-            self.__portfolio.buy(ticker, quantity, price, self.__currentDate)
-            self.__stoplossLimit[ticker] = price * self.__stoplossRatio
-            print(f"Bought {quantity} shares of {ticker} at {price} on Date: {self.__currentDate}.")
-
     def apply(self,
-              assets: Dict[str, AssetData], 
+              assets: Dict[str, AssetDataPolars], 
               portfolio: Portfolio, 
               currentDate: pd.Timestamp, 
               assetdateIdx: Dict[str, int] = {}):
         
         self.__assets = assets
         self.__portfolio = portfolio
-        self.__currentDate = currentDate
         self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders)
+        self.sell(sellOrders, portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()
 
@@ -151,6 +123,6 @@ class StratCurvePrediction(IStrategy):
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders)
+        self.buy(buyOrders, portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()
