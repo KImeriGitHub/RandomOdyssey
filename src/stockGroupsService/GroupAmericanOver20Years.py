@@ -13,4 +13,4 @@ class GroupAmericanOver20Years(IGroup):
         current_date: pd.Timestamp = pd.Timestamp.now(tz='UTC')
         return ((current_date - first_date).days >= 20 * 366.0) \
             and not (asset.ticker.__contains__('.')) \
-            and ((current_date - max_date).days < 60)
+            and ((current_date - max_date).days < 20)
