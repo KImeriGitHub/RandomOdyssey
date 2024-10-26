@@ -26,17 +26,13 @@ class StratQuadraticAscendRanked(IStrategy):
         self.__stoplossLimit: Dict[str, float] = {}
         self.__blacklist: Dict[str, pd.Timestamp] = {}
 
-        self.__currentDate: pd.Timestamp = pd.Timestamp(None)
         self.__assetdateIdx: Dict[str, int] = {}
 
     def sellOrders(self) -> Dict:
         sellOrders = {}
         for boughtTicker in self.__portfolio.positions.keys():
             asset: AssetDataPolars = self.__assets[boughtTicker]
-            price = asset.shareprice['Close'].item(self.__assetdateIdx[boughtTicker])
-            if price < 0.00001:
-                print("Weird price.")
-                continue
+            price = asset.adjClosePrice['AdjClose'].item(self.__assetdateIdx[boughtTicker])
             if price <= self.__stoplossLimit[boughtTicker]:
                 sellOrders[boughtTicker] = {
                     "quantity": self.__portfolio.positions[boughtTicker],
@@ -44,21 +40,10 @@ class StratQuadraticAscendRanked(IStrategy):
                 }
         return sellOrders
 
-    def sell(self, sellOrders: Dict):
-        if not sellOrders:
-            return
-        # Sell
-        for ticker in sellOrders.keys():
-            quantity = sellOrders[ticker]['quantity']
-            price = sellOrders[ticker]['price']
-            self.__portfolio.sell(ticker, quantity, price, self.__currentDate)
-            self.__stoplossLimit.pop(ticker)
-            print(f"Sold {quantity} shares of {ticker} at {price} on date: {self.__currentDate}.")
-
     def updateStoplossLimit(self):
         for portticker in self.__portfolio.positions.keys():
             asset: AssetDataPolars = self.__assets[portticker]
-            price_data = asset.shareprice["Close"].item(self.__assetdateIdx[portticker])
+            price_data: float = asset.shareprice["Close"].item(self.__assetdateIdx[portticker])
             if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
                 self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
             else:
@@ -69,7 +54,7 @@ class StratQuadraticAscendRanked(IStrategy):
         priceData: float = 0.0
         for ticker in self.__assets.keys():
             asset: AssetDataPolars = self.__assets[ticker]
-            priceData = asset.shareprice['Close'].item(self.__assetdateIdx[ticker])
+            priceData: float = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[ticker])
             if priceData > 10.0:
                 modAssetList.append(ticker)
 
@@ -77,14 +62,11 @@ class StratQuadraticAscendRanked(IStrategy):
         startDateIdxDiff = self.num_months*21
         for ticker in modAssetList:
             asset: AssetDataPolars = self.__assets[ticker]
-            priceData: pl.DataFrame = asset.shareprice.slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
-
-            # Prepare data for linear regression
-            priceData = priceData.drop_nulls()["Close"].to_numpy()
-
+            priceData: pl.DataFrame = asset.adjClosePrice["AdjClose"].slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
+            priceDataNumpy = priceData.to_numpy()
             # Store results
-            analysis_results_quadratic = CurveAnalysis.quadraticFit(priceData/priceData[0], ticker)
-            analysis_results_linear = CurveAnalysis.lineFit(priceData/priceData[0], ticker)
+            analysis_results_quadratic = CurveAnalysis.quadraticFit(priceDataNumpy/priceDataNumpy[0], ticker)
+            analysis_results_linear = CurveAnalysis.lineFit(priceDataNumpy/priceDataNumpy[0], ticker)
 
             analsis_results_comb = analysis_results_quadratic
             analsis_results_comb["Slope"] = analysis_results_linear["Slope"]
@@ -156,10 +138,7 @@ class StratQuadraticAscendRanked(IStrategy):
 
         for topTicker in top_choices["Ticker"].to_list():
             asset: AssetDataPolars = self.__assets[topTicker]
-            price_data: pl.DataFrame = asset.shareprice["Close"].item(self.__assetdateIdx[topTicker])
-            price: float = float(price_data)
-            if price < 0.00001:
-                continue
+            price: float = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[topTicker])
             quantity = np.floor((cashPerStock) / (price + ActionCost().buy(price)))
             if abs(quantity) > 0.00001:
                 buyOrders[topTicker] = {
@@ -169,16 +148,6 @@ class StratQuadraticAscendRanked(IStrategy):
 
         return buyOrders
 
-    def buy(self, buyOrders: Dict):
-        if not buyOrders:
-            return
-        for ticker in buyOrders.keys():
-            quantity = buyOrders[ticker]['quantity']
-            price = buyOrders[ticker]['price']
-            self.__portfolio.buy(ticker, quantity, price, self.__currentDate)
-            self.__stoplossLimit[ticker] = price * self.__stoplossRatio
-            print(f"Bought {quantity} shares of {ticker} at {price} on Date: {self.__currentDate}.")
-
     def apply(self,
               assets: Dict[str, AssetDataPolars], 
               portfolio: Portfolio, 
@@ -187,11 +156,10 @@ class StratQuadraticAscendRanked(IStrategy):
         
         self.__assets = assets
         self.__portfolio = portfolio
-        self.__currentDate = currentDate
         self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders)
+        self.sell(sellOrders, portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()
 
@@ -201,6 +169,6 @@ class StratQuadraticAscendRanked(IStrategy):
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders)
+        self.buy(buyOrders, portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()

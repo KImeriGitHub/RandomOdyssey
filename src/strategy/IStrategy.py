@@ -6,12 +6,34 @@ import pandas as pd
 
 class IStrategy(ABC):
     @abstractmethod
-    def apply(self,
-              assets: Dict[str, AssetData], 
-              portfolio: Portfolio, 
-              currentDate: pd.Timestamp, 
-              assetdateIdx: Dict[str, int] = {}):
-        """Apply the strategy to the given assets and update the portfolio accordingly.
-        
-        assetdateIdx: Index of assets at the closest trading day to currentDate."""
+    def apply():
         pass
+    
+    def sell(self,
+              sellOrders: Dict,
+              portfolio: Portfolio,
+              currentDate: pd.Timestamp,
+              stoplossLimit: Dict[str, float] = {}):
+        if not sellOrders:
+            return
+        # Sell
+        for ticker in sellOrders.keys():
+            quantity = sellOrders[ticker]['quantity']
+            price = sellOrders[ticker]['price']
+            portfolio.sell(ticker, quantity, price, currentDate)
+            stoplossLimit.pop(ticker)
+            print(f"Sold {quantity} shares of {ticker} at {price} on date: {currentDate}.")
+
+    def buy(self,
+              buyOrders: Dict,
+              portfolio: Portfolio,
+              currentDate: pd.Timestamp,
+              stoplossLimit: Dict[str, float] = {}):
+        if not buyOrders:
+            return
+        for ticker in buyOrders.keys():
+            quantity = buyOrders[ticker]['quantity']
+            price = buyOrders[ticker]['price']
+            portfolio.buy(ticker, quantity, price, currentDate)
+            stoplossLimit[ticker] = price * stoplossLimit
+            print(f"Bought {quantity} shares of {ticker} at {price} on Date: {currentDate}.")

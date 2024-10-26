@@ -31,7 +31,7 @@ class SimulatePortfolio(ISimulation):
         assetdateIdx = {}
         discardedAsset = []
         for ticker, asset in self.assets.items():
-            if asset.shareprice.select(pl.col("Date").last()).item() < self.startDate:
+            if asset.adjClosePrice.select(pl.col("Date").last()).item() < self.startDate:
                 warnings.warn(f"Asset {ticker} history not old enough or startDate ({self.startDate}) too far back. It is discarded.")
                 discardedAsset.append(ticker)
                 continue
@@ -68,7 +68,7 @@ class SimulatePortfolio(ISimulation):
         asset_prices = {}
         price_data = pl.DataFrame(None)
         for ticker, asset in self.assets.items():
-            price_data = asset.shareprice['Close']
+            price_data = asset.adjClosePrice['AdjClose']
             asset_prices[ticker] = price_data.item(assetdateIdx[ticker])
 
         # Main Loop
@@ -82,12 +82,12 @@ class SimulatePortfolio(ISimulation):
 
             # Advance assetdateIdx
             for ticker, asset in self.assets.items():
-                if assetdateIdx[ticker] > asset.shareprice['Date'].len():
+                if assetdateIdx[ticker] > asset.adjClosePrice['Date'].len():
                     warnings.warn(f"Out of Bound access for {ticker}. Skipped.")
                     continue
-                assetDate: datetime.datetime = asset.shareprice['Date'][assetdateIdx[ticker]]
+                assetDate: datetime.datetime = asset.adjClosePrice['Date'].item(assetdateIdx[ticker])
                 if (assetDate >= date - pd.Timedelta(hours=18)) & (assetDate < date + pd.Timedelta(hours=18)):
-                    asset_prices[ticker] = asset.shareprice['Close'].item(assetdateIdx[ticker])
+                    asset_prices[ticker] = asset.adjClosePrice['AdjClose'].item(assetdateIdx[ticker])
                     assetdateIdx[ticker] += 1
 
             # Update portfolio value

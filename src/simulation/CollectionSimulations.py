@@ -83,7 +83,7 @@ class CollectionSimulations():
     @staticmethod
     def QuadraticAscend():
         # Load asset data
-        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
+        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_american_over20years")
 
         # Convert to Polars for speedup
         assetspl: Dict[str, AssetDataPolars] = {}
@@ -92,14 +92,14 @@ class CollectionSimulations():
 
         # Define strategy
         initialCash=10000.0
-        strategy = StratQuadraticAscendRanked(num_months = 1, num_choices= 1)
+        strategy = StratQuadraticAscendRanked(num_months = 1, num_choices= 2)
 
         # Set up simulation
         simulation = SimulatePortfolio(
             portfolio = Portfolio(cash = initialCash),
             strategy=strategy,
             assets=assetspl,
-            startDate=pd.Timestamp(2005,1,4),
+            startDate=pd.Timestamp(2006,1,4),
             endDate=pd.Timestamp(2024,10,4),
         )
 
@@ -114,6 +114,11 @@ class CollectionSimulations():
     @staticmethod
     def SimCurveML():
         assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
+
+        # Convert to Polars for speedup
+        assetspl: Dict[str, AssetDataPolars] = {}
+        for ticker, asset in assets.items():
+            assetspl[ticker]= AssetDataService.to_polars(asset)
 
         # Define strategy
         initialCash=10000.0
