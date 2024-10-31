@@ -3,6 +3,8 @@ import pandas as pd
 import polars as pl
 from typing import Dict, List
 import xgboost as xgb
+from scipy.interpolate import CubicSpline
+from scipy.ndimage import gaussian_filter1d
 from dataclasses import dataclass
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
@@ -31,7 +33,7 @@ class CurveML(IML):
 
         return assetdateIdx
 
-    def __getFeaturesFromPrice(pastPrices: np.array) -> list[float]:
+    def __getFeaturesFromPrice(pastPrices: np.array, multFactor: int = 8, fouriercutoff: int = 100) -> list[float]:
         n = len(pastPrices)
         if n==1:
             raise ValueError("Input to getFeatureFromPrice are invalid.")
@@ -44,16 +46,27 @@ class CurveML(IML):
         yfit = fx0 + (fxend-fx0)*(x/(n-1))
         skewedPrices = pastPrices-yfit
         fourierInput = np.concatenate((skewedPrices,np.flipud(-skewedPrices[:n-1])))
-        res_cos, res_sin = SeriesExpansion.getFourierConst(fourierInput)
+        cs = CubicSpline(np.arange(len(fourierInput)), fourierInput)
+        fourierInputSpline = cs(np.linspace(0, len(fourierInput)-1, 1 + (len(fourierInput) - 1) * multFactor))
+        fourierInputSmooth = gaussian_filter1d(fourierInputSpline, sigma=np.max([len(fourierInputSpline)//(2*n),1]))
+        res_cos, res_sin = SeriesExpansion.getFourierConst(fourierInputSmooth)
         res_cos=res_cos.T
         res_sin=res_sin.T
+        altaddup_cos = res_cos[::2] + res_cos[1::2]
+        altaddup_sin = res_sin[::2] + res_sin[1::2]
+
+        if altaddup_cos.__len__ < fouriercutoff:
+            raise Warning("fouriercutoff is bigger than the array itself.")
 
         features = [fxend, (fxend-fx0)/(n-1)]
-        for i in range(1, (len(res_cos)//2) + 1):
-            if i < len(res_cos):
-                features.append(res_cos[i])
-            if i < len(res_sin):
-                features.append(res_sin[i])
+        for i in range(0, (len(altaddup_cos)//2) + 1):
+            if i > fouriercutoff//2:
+                break
+
+            if i < len(altaddup_cos):
+                features.append(altaddup_cos[i])
+            if i < len(altaddup_sin):
+                features.append(altaddup_sin[i])
 
         return features
 
@@ -90,6 +103,9 @@ class CurveML(IML):
 
 
                     fit_results_cos, fit_results_sin = SeriesExpansion.getFourierConst(pastPrices)
+
+                    altaddup_cos = fit_results_cos[::2] + fit_results_cos[1::2]
+                    altaddup_sin = fit_results_sin[::2] + fit_results_sin[1::2]
                     fit_results = np.concatenate((fit_results_cos.real,fit_results_sin.real), axis=1)
                     features = [m,
                                 fit_results['Coefficients'][0],
