@@ -81,35 +81,43 @@ class CollectionSimulations():
         #analyzer.plot_positions_per_asset_separate(assets)
 
     @staticmethod
-    def QuadraticAscend():
-        # Load asset data
-        assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_american_over20years")
-
-        # Convert to Polars for speedup
-        assetspl: Dict[str, AssetDataPolars] = {}
-        for ticker, asset in assets.items():
-            assetspl[ticker]= AssetDataService.to_polars(asset)
+    def QuadraticAscend(assets: Dict, 
+                        stoplossratio: float = 0.9,
+                        num_months = 1,
+                        num_months_var = 6,
+                        num_choices = 1):
 
         # Define strategy
         initialCash=10000.0
-        strategy = StratQuadraticAscendRanked(num_months = 1, num_choices= 2)
+        strategy = StratQuadraticAscendRanked(
+            num_months = num_months,
+            num_months_var=num_months_var,
+            num_choices= num_choices, 
+            stoplossratio = stoplossratio,
+            printBuySell=False
+        )
 
         # Set up simulation
+        portfolio = Portfolio(cash = initialCash)
         simulation = SimulatePortfolio(
-            portfolio = Portfolio(cash = initialCash),
+            portfolio = portfolio,
             strategy=strategy,
-            assets=assetspl,
+            assets=assets,
             startDate=pd.Timestamp(2006,1,4),
-            endDate=pd.Timestamp(2024,10,4),
+            endDate=pd.Timestamp(2024,10,16)
         )
 
         # Run simulation
         simulation.run()
 
         # Analyze results
-        analyzer = ResultAnalyzer(simulation.portfolio)
-        analyzer.plot_portfolio_value()
+        analyzer = ResultAnalyzer(portfolio)
+        #analyzer.plot_portfolio_value()
         #analyzer.plot_positions_per_asset_separate(assets)
+        print(f"Stoplossratio: {stoplossratio}, EndValue: {portfolio.valueOverTime[-1][1]}")
+
+        del strategy
+        del simulation
 
     @staticmethod
     def SimCurveML():

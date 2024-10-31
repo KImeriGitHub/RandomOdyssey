@@ -3,8 +3,12 @@ from typing import Dict
 from src.common.AssetData import AssetData
 from src.common.Portfolio import Portfolio
 import pandas as pd
+import numpy as np
 
 class IStrategy(ABC):
+    def __init__(self, printBuySell):
+        self.printBuySell = printBuySell
+
     @abstractmethod
     def apply():
         pass
@@ -12,8 +16,7 @@ class IStrategy(ABC):
     def sell(self,
               sellOrders: Dict,
               portfolio: Portfolio,
-              currentDate: pd.Timestamp,
-              stoplossLimit: Dict[str, float] = {}):
+              currentDate: pd.Timestamp):
         if not sellOrders:
             return
         # Sell
@@ -21,19 +24,20 @@ class IStrategy(ABC):
             quantity = sellOrders[ticker]['quantity']
             price = sellOrders[ticker]['price']
             portfolio.sell(ticker, quantity, price, currentDate)
-            stoplossLimit.pop(ticker)
-            print(f"Sold {quantity} shares of {ticker} at {price} on date: {currentDate}.")
+
+            if self.printBuySell:
+                print(f"Sold {quantity} shares of {ticker} at {np.floor(price)} on date: {currentDate}.")
 
     def buy(self,
               buyOrders: Dict,
               portfolio: Portfolio,
-              currentDate: pd.Timestamp,
-              stoplossLimit: Dict[str, float] = {}):
+              currentDate: pd.Timestamp):
         if not buyOrders:
             return
         for ticker in buyOrders.keys():
             quantity = buyOrders[ticker]['quantity']
             price = buyOrders[ticker]['price']
             portfolio.buy(ticker, quantity, price, currentDate)
-            stoplossLimit[ticker] = price * stoplossLimit
-            print(f"Bought {quantity} shares of {ticker} at {price} on Date: {currentDate}.")
+            
+            if self.printBuySell:
+                print(f"Bought {quantity} shares of {ticker} at {np.floor(price)} on Date: {currentDate}.")

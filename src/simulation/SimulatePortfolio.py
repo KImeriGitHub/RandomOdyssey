@@ -13,16 +13,17 @@ import warnings
 import line_profiler
 
 class SimulatePortfolio(ISimulation):
-    def __init__(self, strategy: IStrategy, assets: Dict[str, AssetDataPolars], portfolio: Portfolio, startDate: pd.Timestamp, endDate: pd.Timestamp):
+    def __init__(self, 
+                strategy: IStrategy,
+                assets: Dict[str, AssetDataPolars], 
+                portfolio: Portfolio, 
+                startDate: pd.Timestamp, 
+                endDate: pd.Timestamp):
+    
         self.portfolio = portfolio
         self.strategy = strategy
         self.assets = assets
-
-        if startDate.tzinfo is None:
-            startDate = startDate.tz_localize('UTC')
-        if endDate.tzinfo is None:
-            endDate = endDate.tz_localize('UTC')
-
+        
         self.startDate = startDate
         self.endDate = endDate
 
@@ -60,7 +61,6 @@ class SimulatePortfolio(ISimulation):
 
         return assetdateIdx
 
-    @line_profiler.profile
     def run(self):
         assetdateIdx = self.__checkAssetSetupIdx()
 
@@ -72,7 +72,7 @@ class SimulatePortfolio(ISimulation):
             asset_prices[ticker] = price_data.item(assetdateIdx[ticker])
 
         # Main Loop
-        dates = pd.date_range(self.startDate, self.endDate, freq='B', tz='UTC') # 'B' for business days
+        dates = pd.date_range(self.startDate, self.endDate, freq='B') # 'B' for business days
         for date in dates:
             # Apply the strategy
             self.strategy.apply(assets = self.assets, 
@@ -92,3 +92,5 @@ class SimulatePortfolio(ISimulation):
 
             # Update portfolio value
             self.portfolio.updateValue(date, asset_prices)
+
+        del assetdateIdx

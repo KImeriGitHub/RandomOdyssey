@@ -10,15 +10,21 @@ import polars as pl
 import numpy as np
 
 class StratQuadraticAscendRanked(IStrategy):
-    __stoplossRatio = 0.92
     __cashthreshhold = 0.2
 
     def __init__(self,
                  num_months: int = 2, 
+                 num_months_var: int = 2, 
                  num_choices: int = 1,
+                 stoplossratio: float = 0.9,
+                 printBuySell = True
                  ):
+        super().__init__(printBuySell=printBuySell)
+        
         self.num_months: int = num_months
+        self.num_months_var: int = num_months_var
         self.num_choices: int = num_choices
+        self.__stoplossRatio = stoplossratio
 
         self.__assets: Dict[str, AssetDataPolars] = {}
         self.__portfolio: Portfolio = None
@@ -40,14 +46,35 @@ class StratQuadraticAscendRanked(IStrategy):
                 }
         return sellOrders
 
-    def updateStoplossLimit(self):
-        for portticker in self.__portfolio.positions.keys():
+    def updateStoplossLimit(self, buyorders: dict[str,]={}, sellorders: dict[str,]={}):
+        # Deal with buy order
+        for portticker in buyorders.keys():
+            if not portticker in self.__stoplossLimit:
+                self.__stoplossLimit[portticker] = self.__stoplossRatio
+                continue
+
             asset: AssetDataPolars = self.__assets[portticker]
-            price_data: float = asset.shareprice["Close"].item(self.__assetdateIdx[portticker])
+            price_data: float = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[portticker])
             if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
                 self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
-            else:
-                self.__stoplossLimit[portticker] = self.__stoplossLimit[portticker]
+
+        # Deal with sell order
+        for portticker in sellorders.keys():
+            if not portticker in self.__stoplossLimit:
+                price_data: float = self.__assets[portticker] \
+                                        .adjClosePrice["AdjClose"] \
+                                        .item(self.__assetdateIdx[portticker])
+                self.__stoplossLimit[portticker] = price_data*self.__stoplossRatio
+                continue
+
+            del self.__stoplossLimit[portticker]
+
+        # Update Stop loss
+        for portticker in self.__stoplossLimit.keys():
+            asset: AssetDataPolars = self.__assets[portticker]
+            price_data: float = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[portticker])
+            if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
+                self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
 
     def preAnalyze(self) -> pl.DataFrame:
         modAssetList: List[str] = []
@@ -60,12 +87,15 @@ class StratQuadraticAscendRanked(IStrategy):
 
         analysis_results = []
         startDateIdxDiff = self.num_months*21
+        startDateIdxDiffVar = self.num_months_var*21
         for ticker in modAssetList:
             asset: AssetDataPolars = self.__assets[ticker]
             priceData: pl.DataFrame = asset.adjClosePrice["AdjClose"].slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
+            priceDataVar: pl.DataFrame = asset.adjClosePrice["AdjClose"].slice(self.__assetdateIdx[ticker]-startDateIdxDiffVar, startDateIdxDiffVar+1)
             priceDataNumpy = priceData.to_numpy()
+            priceDataVarNumpy = priceDataVar.to_numpy()
             # Store results
-            analysis_results_quadratic = CurveAnalysis.quadraticFit(priceDataNumpy/priceDataNumpy[0], ticker)
+            analysis_results_quadratic = CurveAnalysis.quadraticFit(priceDataVarNumpy/priceDataVarNumpy[0], ticker)
             analysis_results_linear = CurveAnalysis.lineFit(priceDataNumpy/priceDataNumpy[0], ticker)
 
             analsis_results_comb = analysis_results_quadratic
@@ -159,16 +189,17 @@ class StratQuadraticAscendRanked(IStrategy):
         self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders, portfolio, currentDate, self.__stoplossLimit)
+        self.sell(sellOrders, portfolio, currentDate)
 
-        self.updateStoplossLimit()
+        self.updateStoplossLimit(sellorders = sellOrders)
 
         if not self.__portfolio.valueOverTime == [] \
             and self.__portfolio.cash/self.__portfolio.valueOverTime[-1][1] < self.__cashthreshhold \
-            and not sellOrders:
+            and not sellOrders \
+            or self.__portfolio.positions.keys().__len__ == self.num_choices:
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders, portfolio, currentDate, self.__stoplossLimit)
+        self.buy(buyOrders, portfolio, currentDate)
 
-        self.updateStoplossLimit()
+        self.updateStoplossLimit(buyorders = buyOrders)

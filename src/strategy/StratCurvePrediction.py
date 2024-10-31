@@ -89,7 +89,7 @@ class StratCurvePrediction(IStrategy):
 
         for topTicker in top_choices["Ticker"].to_list():
             asset: AssetDataPolars = self.__assets[topTicker]
-            price_data: pl.DataFrame = asset.shareprice["Close"].item(self.__assetdateIdx[topTicker])
+            price_data: pl.DataFrame = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[topTicker])
             price: float = float(price_data)
             if price < 0.00001:
                 continue

@@ -39,14 +39,32 @@ class StratLinearAscendRanked(IStrategy):
                 }
         return sellOrders
 
-    def updateStoplossLimit(self):
-        for portticker in self.__portfolio.positions.keys():
+    def updateStoplossLimit(self, buyorders: dict[str,]={}, sellorders: dict[str,]={}):
+        # Deal with buy order
+        for portticker in buyorders.keys():
+            if not portticker in self.__stoplossLimit:
+                self.__stoplossLimit[portticker] = self.__stoplossRatio
+                continue
+
             asset: AssetDataPolars = self.__assets[portticker]
             price_data: float = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[portticker])
             if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
                 self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
-            else:
-                self.__stoplossLimit[portticker] = self.__stoplossLimit[portticker]
+
+        # Deal with sell order
+        for portticker in sellorders.keys():
+            if not portticker in self.__stoplossLimit:
+                continue
+
+            del self.__stoplossLimit[portticker]
+
+        # Update Stop loss
+        for portticker in self.__stoplossLimit.keys():
+            asset: AssetDataPolars = self.__assets[portticker]
+            price_data: float = asset.adjClosePrice["AdjClose"].item(self.__assetdateIdx[portticker])
+            if price_data * self.__stoplossRatio > self.__stoplossLimit[portticker]:
+                self.__stoplossLimit[portticker] =  price_data * self.__stoplossRatio
+
 
     def preAnalyze(self) -> pl.DataFrame:
         modAssetList: List[str] = []
@@ -152,9 +170,9 @@ class StratLinearAscendRanked(IStrategy):
         self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders, portfolio, currentDate, self.__stoplossLimit)
+        self.sell(sellOrders, portfolio, currentDate)
 
-        self.updateStoplossLimit()
+        self.updateStoplossLimit(sellorders = sellOrders)
 
         if not self.__portfolio.valueOverTime == [] \
             and self.__portfolio.cash/self.__portfolio.valueOverTime[-1][1] < self.__cashthreshhold \
@@ -162,6 +180,6 @@ class StratLinearAscendRanked(IStrategy):
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders, portfolio, currentDate, self.__stoplossLimit)
+        self.buy(buyOrders, portfolio, currentDate)
 
-        self.updateStoplossLimit()
+        self.updateStoplossLimit(buyorders = buyOrders)
