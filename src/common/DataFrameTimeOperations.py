@@ -115,7 +115,7 @@ class DataFrameTimeOperationsPolars:
     
     def getNextLowerIndex(self, targetDate: pd.Timestamp) -> int:
         # Get the index of dates
-        dateIndex = self.df.index
+        dateIndex = self.df['Date']
 
         # Check boundary conditions
         if targetDate < dateIndex[0]:

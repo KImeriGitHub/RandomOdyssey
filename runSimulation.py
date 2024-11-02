@@ -21,6 +21,8 @@ nchoice = np.arange(1, 2, 1).round(0).tolist()
 for nc in nchoice:
     for nm in nmon:
         for nmv in nmonvar:
+            if (nc ==1 and nm<3) or (nc ==1 and nmv<10 and nm==3):
+                continue
             print(f"Choices: {nc},   Months: {nm},   Months Var: {nmv}")
             for slr in slrList:
                 CollectionSimulations.QuadraticAscend(assets = assetspl, 
