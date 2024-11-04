@@ -14,3 +14,5 @@ src/tickerSelection/*
 src/predictionmodule/bin/*
 
 *.lprof
+
+documents
