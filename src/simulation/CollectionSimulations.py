@@ -1,7 +1,7 @@
 from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
 from strategy.StratLinearAscendRanked import StratLinearAscendRanked
-from strategy.StratCurvePrediction import StratCurvePrediction
+from strategy.StratFourierPrediction import StratFourierPrediction
 from strategy.StratQuadraticAscendRanked import StratQuadraticAscendRanked
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
@@ -120,7 +120,7 @@ class CollectionSimulations():
         del simulation
 
     @staticmethod
-    def SimCurveML():
+    def SimFourierML():
         assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
 
         # Convert to Polars for speedup
@@ -130,9 +130,9 @@ class CollectionSimulations():
 
         # Define strategy
         initialCash=10000.0
-        strategy = StratCurvePrediction(num_months = 1,
+        strategy = StratFourierPrediction(num_choices = 1,
                                         modelPath = "src/predictionModule/bin",
-                                        modelName= "curveML_snp500_10to20")
+                                        modelName = "fourierML_snp500_10to20")
 
         # Set up simulation
         simulation = SimulatePortfolio(

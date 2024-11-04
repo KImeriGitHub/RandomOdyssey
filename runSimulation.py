@@ -13,10 +13,14 @@ assetspl: Dict[str, AssetDataPolars] = {}
 for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
 
-slrList = np.arange(0.77, 0.98, 0.002).round(3).tolist()
+## FourierML
+
+## Quadratic Ascend
+"""
+slrList = np.arange(0.77, 0.95, 0.005).round(3).tolist()
 nmon = np.arange(1, 7, 1).round(0).tolist()
 nmonvar = np.arange(1, 13, 1).round(0).tolist()
-nchoice = np.arange(1, 2, 1).round(0).tolist()
+nchoice = np.arange(2, 3, 1).round(0).tolist()
 
 for nc in nchoice:
     for nm in nmon:
@@ -32,5 +36,4 @@ for nc in nchoice:
                                                       num_months_var=nmv)
                 gc.collect()
                 time.sleep(0.1)
-
-#CollectionSimulations.QuadraticAscend(assets = assetspl, stoplossratio = 0.857)
+                """

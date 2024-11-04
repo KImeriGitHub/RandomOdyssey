@@ -5,21 +5,22 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.common.Portfolio import Portfolio
 from src.common.ActionCost import ActionCost
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DFTO
-from src.predictionModule.CurveML import CurveML
+from predictionModule.FourierML import FourierML
 from typing import Dict, List
 import pandas as pd
 import polars as pl
 import numpy as np
 
-class StratCurvePrediction(IStrategy):
+class StratFourierPrediction(IStrategy):
     __stoplossRatio = 0.92
     __cashthreshhold = 0.2
 
     def __init__(self,
-                 num_months: int = 2,
+                 num_choices: int = 1,
                  modelPath: str = "",
                  modelName: str = ""):
-        self.num_months: int = num_months
+
+        self.__num_choices: int = num_choices
 
         self.__assets: Dict[str, AssetDataPolars] = {}
         self.__portfolio: Portfolio = None
@@ -29,8 +30,10 @@ class StratCurvePrediction(IStrategy):
 
         self.__assetdateIdx: Dict[str, int] = {}
 
-        self.__curveML = CurveML(self.__assets, pd.Timestamp(None), pd.Timestamp(None))
-        self.__curveML.loadModel(modelPath, modelName)
+        self.__fourierML = FourierML(self.__assets, pd.Timestamp(None), pd.Timestamp(None))
+        self.__fourierML.loadCNNModel(modelPath, modelName)
+
+        self.__nextDayPrediction: Dict[str, float] = {}
 
     def sellOrders(self) -> Dict:
         sellOrders = {}
@@ -56,13 +59,13 @@ class StratCurvePrediction(IStrategy):
 
     def preAnalyze(self) -> List:
         analysis_results = []
-        startDateIdxDiff = self.num_months*21
         for ticker in self.__assets:
             asset: AssetDataPolars = self.__assets[ticker]
-            priceData: pl.DataFrame = asset.adjClosePrice["AdjClose"].slice(self.__assetdateIdx[ticker]-startDateIdxDiff, startDateIdxDiff+1)
+            aidx = self.__assetdateIdx[ticker]
+            priceData: pl.DataFrame = asset.adjClosePrice["AdjClose"].slice(aidx-24 * 21, 24 * 21 +1).to_numpy()
 
             # Store results
-            predictedPrice = self.__curveML.predictNextPrices(priceData, ticker, 1)
+            predictedPrice = self.__fourierML.predictNextPrices(priceData, ticker, 1)
             ratios = predictedPrice[1:] / predictedPrice[:-1]
 
             analysis_results.append({
@@ -107,10 +110,6 @@ class StratCurvePrediction(IStrategy):
               portfolio: Portfolio, 
               currentDate: pd.Timestamp, 
               assetdateIdx: Dict[str, int] = {}):
-        
-        self.__assets = assets
-        self.__portfolio = portfolio
-        self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
         self.sell(sellOrders, portfolio, currentDate, self.__stoplossLimit)
@@ -119,10 +118,13 @@ class StratCurvePrediction(IStrategy):
 
         if not self.__portfolio.valueOverTime == [] \
             and self.__portfolio.cash/self.__portfolio.valueOverTime[-1][1] < self.__cashthreshhold \
-            and not sellOrders:
+            and not sellOrders \
+            or self.__portfolio.positions.keys().__len__ == self.num_choices:
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
         self.buy(buyOrders, portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()
+
+        self.__nextDayPrediction = {}
