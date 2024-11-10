@@ -3,11 +3,15 @@ import os
 import numpy as np
 import xgboost as xgb
 from tensorflow.keras.models import load_model, Sequential
+from src.mathTools.RandomProjectionClassifier import RandomProjectionClassifier as rpc
+import lightgbm as lgb
 
 class IML(ABC):
     def __init__(self):
         self.XGBoostModel: xgb.XGBRegressor = xgb.XGBRegressor()
         self.CNNModel: Sequential = Sequential()
+        self.LGBMModel = lgb.LGBMRegressor()
+        self.RPModel = rpc()
         self.X: np.array = np.array([])
         self.y: np.array = np.array([])
 

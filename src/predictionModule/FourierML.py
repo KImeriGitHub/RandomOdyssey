@@ -12,21 +12,23 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.utils import to_categorical
+import lightgbm as lgb
 
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.mathTools.RandomProjectionClassifier import RandomProjectionClassifier as rpc
 from src.predictionModule.IML import IML
 
 class FourierML(IML):
     __idxLengthOneMonth = 21
-    __fouriercutoff = 10
-    __spareDatesRatio = 0.5
+    __fouriercutoff = 20
+    __spareDatesRatio = 0.3
     __multFactor = 32
     __lenClassInterval = 1
     __daysAfterPrediction = 1
-    __numOfMonths = 24
+    __numOfMonths = 6
 
 
     #__classificationInterval = [0.01*(2*i+1) for i in range(0,lenClassInterval)]
@@ -34,7 +36,7 @@ class FourierML(IML):
     #__classificationInterval = ((np.power(2,range(0,__lenClassInterval))-1)*0.001).tolist()
     chebyNodes = np.cos(( 2*np.arange(1, __lenClassInterval + 2) - 1) * np.pi / (4 * (__lenClassInterval+1)))
     #__classificationInterval = (0.10*(chebyNodes[1:]-chebyNodes[0])/(chebyNodes[-1]-chebyNodes[0])).tolist()
-    __classificationInterval = [0.01]
+    __classificationInterval = [0.0045]
 
     ## NOTE! 
     # > len(__classificationInterval) must be equal to __lenClassInterval
@@ -72,12 +74,12 @@ class FourierML(IML):
         yfit = fx0 + (fxend-fx0)*(x/(n-1))
         skewedPrices = pastPrices-yfit
         fourierInput = np.concatenate((skewedPrices,np.flipud(-skewedPrices[:(n-1)])))
-        cs = CubicSpline(np.arange(len(fourierInput)), fourierInput)
+        cs = CubicSpline(np.arange(len(fourierInput)), fourierInput, bc_type='periodic')
         fourierInputSpline = cs(np.linspace(0, len(fourierInput)-1, 1 + (len(fourierInput) - 1) * multFactor))
-        fourierInputSmooth = gaussian_filter1d(fourierInputSpline, sigma=np.max([len(fourierInputSpline)//((multFactor)*n),1]))
+        fourierInputSmooth = gaussian_filter1d(fourierInputSpline, sigma=np.max([multFactor//4,1]), mode = "wrap")
         res_cos, res_sin = SeriesExpansion.getFourierConst(fourierInputSmooth)
-        res_cos=res_cos.T.real.flatten()
-        res_sin=res_sin.T.real.flatten()
+        res_cos=res_cos.T.real.flatten().tolist()
+        res_sin=res_sin.T.real.flatten().tolist()
 
         if len(res_cos) < fouriercutoff:
             raise Warning("fouriercutoff is bigger than the array itself.")
@@ -89,14 +91,9 @@ class FourierML(IML):
         else:
             features.append((1-fx0/fxend)/(n-1))
 
-        for i in range(0, (len(res_cos)//2) + 1):
-            if i > fouriercutoff//2:
-                break
-
-            if i < len(res_cos):
-                features.append(res_cos[i])
-            if i < len(res_sin):
-                features.append(res_sin[i])
+        endIdx = np.min([len(res_cos), fouriercutoff//2])
+        features.extend(res_cos[1:endIdx])
+        features.extend(res_sin[1:endIdx])
 
         return features
     
@@ -157,7 +154,9 @@ class FourierML(IML):
                 pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
                 futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
                 
-                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], multFactor=self.__multFactor, fouriercutoff=self.__fouriercutoff)
+                features = self.getFeaturesFromPrice(pastPrices, multFactor=self.__multFactor, 
+                                                     fouriercutoff=self.__fouriercutoff,
+                                                     includeLastPrice = True)
                 target = self.__getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
                 target = target[0]
                 
@@ -205,6 +204,49 @@ class FourierML(IML):
         
         test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
         print(f'\nTest accuracy: {test_acc:.4f}')
+
+    def traintestCNNModel(self):
+        if not self.__dataIsPrepared:
+            self.prepareData()
+        
+        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.2)
+
+        y_cat_train = to_categorical(y_train)
+        y_cat_test = to_categorical(y_test)
+
+        # Define the model
+        self.LGBMModel = lgb.LGBMRegressor(
+            n_estimator=2000,
+            learning_rate = 0.01,
+            max_depth=5,
+            num_leaves=2 ** 5,
+            colsample_bytree=0.1
+        )
+
+        # Train the model
+        self.LGBMModel.fit(X_train, y_cat_train)
+        
+        test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
+        print(f'\nTest accuracy: {test_acc:.4f}')
+
+    def traintestRPModel(self):
+        if not self.__dataIsPrepared:
+            self.prepareData()
+        
+        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.2)
+
+        # Initialize the classifier
+        self.RPCModel = rpc(
+            num_random_features=2000,
+            regularization=30,
+            max_iter=10,
+            verbose=True,
+            random_state=None
+        )
+
+        # Train the model
+        self.RPCModel.fit(X_train, y_train)
+
 
     def predictNextPrices(self, priceArray: np.array, ticker: str) -> int:
         # priceArray is array_like and for at least two years

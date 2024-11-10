@@ -17,12 +17,12 @@ class CollectionModels():
 
     @staticmethod
     def fourierML_snp500_10to20(assets: Dict[str, AssetDataPolars]):
-        startDate=pd.Timestamp(year=2010, month=1, day=4)
+        startDate=pd.Timestamp(year=2019, month=9, day=4)
         endDate=pd.Timestamp(year=2020, month=1, day=4)
 
         fourierML = FourierML(assets, startDate, endDate)
 
-        fourierML.traintestCNNModel()
+        fourierML.traintestRPModel()
 
-        fourierML.saveCNNModel("src/predictionModule/bin", "fourierML_snp500_10to20")
+        #fourierML.saveCNNModel("src/predictionModule/bin", "fourierML_snp500_10to20")
 
