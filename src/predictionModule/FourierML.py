@@ -23,12 +23,12 @@ from src.predictionModule.IML import IML
 
 class FourierML(IML):
     __idxLengthOneMonth = 21
-    __fouriercutoff = 20
-    __spareDatesRatio = 0.3
-    __multFactor = 32
+    __fouriercutoff = 4000
+    __spareDatesRatio = 0.05
+    __multFactor = 128
     __lenClassInterval = 1
-    __daysAfterPrediction = 1
-    __numOfMonths = 6
+    __daysAfterPrediction = +1
+    __numOfMonths = 28
 
 
     #__classificationInterval = [0.01*(2*i+1) for i in range(0,lenClassInterval)]
@@ -42,11 +42,17 @@ class FourierML(IML):
     # > len(__classificationInterval) must be equal to __lenClassInterval
     # > __classificationInterval is positive and sorted. 0 is not in __classificationInterval
 
-    def __init__(self, assets: Dict[str, AssetDataPolars], trainStartDate: pd.Timestamp, trainEndDate: pd.Timestamp):
+    def __init__(self, assets: Dict[str, AssetDataPolars], 
+                 trainStartDate: pd.Timestamp, 
+                 trainEndDate: pd.Timestamp,
+                 testStartDate: pd.Timestamp, 
+                 testEndDate: pd.Timestamp = None,):
         super().__init__()
         self.__assets: Dict[str, AssetDataPolars] = assets
         self.__trainStartDate: pd.Timestamp = trainStartDate
         self.__trainEndDate: pd.Timestamp = trainEndDate
+        self.__testStartDate: pd.Timestamp = testStartDate
+        self.__testEndDate: pd.Timestamp = testEndDate
 
         self.__dataIsPrepared = False
 
@@ -98,15 +104,15 @@ class FourierML(IML):
         return features
     
     @staticmethod
-    def __getTargetFromPrice(futurePrices: np.array, percInt: list[float]) -> list[float]:
+    def getTargetFromPrice(futureReturn: np.array, percInt: list[float]) -> list[float]:
         """
         Let A be a entry in futurePrices.
         If A is between 0 and the first entry of percInt the method returns on first result entry 0. 
         If A is between the first entry of percInt and the second entry of percInt it returns on second result entry 1, and so on.
         If A is negative it does the above for -A and returns the negativ result entry.
         """
-        res = np.zeros(len(futurePrices))
-        for j, A in enumerate(futurePrices):
+        res = np.zeros(len(futureReturn))
+        for j, A in enumerate(futureReturn):
             if A == 0:
                 res[j] = 0
                 continue
@@ -126,12 +132,21 @@ class FourierML(IML):
         return res.tolist()
 
     def prepareData(self):
-        X = []
-        y = []
+        Xtrain = []
+        ytrain = []
+        Xtest = []
+        ytest = []
+        XtrainPrice = []
+        ytrainPrice = []
+        XtestPrice = []
+        ytestPrice = []
         lenClassInterval = self.__lenClassInterval
         classificationIntervals = self.__classificationInterval
+        m = self.__numOfMonths
         assetdateIdx = self.establishAssetIdx()
         processedCounter=0
+
+        #Main Loop
         for ticker, asset in self.__assets.items():
             if asset.adjClosePrice is None or not 'AdjClose' in asset.adjClosePrice.columns:
                 continue
@@ -139,43 +154,76 @@ class FourierML(IML):
             print(f"Processing asset: {asset.ticker}.  Processed {processedCounter} out of {len(self.__assets)}.")
             processedCounter += 1
 
+            # Prepare Dates
+            datesTrain = pd.date_range(self.__trainStartDate, self.__trainEndDate, freq='B') # 'B' for business days
+            spare_datesTrain = pd.DatetimeIndex(np.random.choice(datesTrain, size=int(len(datesTrain)*self.__spareDatesRatio), replace=False)) #unsorted. DO NOT SORT
+            if self.__testEndDate is None:
+                datesTest = pd.date_range(self.__testStartDate, self.__testStartDate + pd.Timedelta(days=5), freq='B')
+                datesTest = [datesTest[0]]
+            else:
+                datesTest = pd.date_range(self.__testStartDate, self.__testEndDate, freq='B') # 'B' for business days
+        
+
             pricesArray = asset.adjClosePrice['AdjClose']
             datesArray = asset.adjClosePrice['Date']
-            dates = pd.date_range(self.__trainStartDate, self.__trainEndDate, freq='B') # 'B' for business days
-            spare_dates = pd.DatetimeIndex(np.random.choice(dates, size=int(len(dates)*self.__spareDatesRatio), replace=False)) #unsorted. DO NOT SORT
-            for date in spare_dates:
+
+            # Prepare Train Data
+            for date in spare_datesTrain:
                 if not abs(datesArray.item(assetdateIdx[ticker]) - date) <= pd.Timedelta(hours=18):
                     assetdateIdx[ticker] = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
                 
-                m = self.__numOfMonths
                 aidx = assetdateIdx[ticker]
                 if (aidx - m * self.__idxLengthOneMonth)<0:
                     continue
                 pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
                 futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
                 
-                features = self.getFeaturesFromPrice(pastPrices, multFactor=self.__multFactor, 
+                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], multFactor=self.__multFactor, 
                                                      fouriercutoff=self.__fouriercutoff,
                                                      includeLastPrice = True)
-                target = self.__getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
+                target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
                 target = target[0]
+                Xtrain.append(features)
+                ytrain.append(target)
+                XtrainPrice.append(pastPrices/pastPrices[-1])
+                ytrainPrice.append(futurePrices/pastPrices[-1])
+
+            #Prepare Test Data
+            for date in datesTest:
+                if not abs(datesArray.item(assetdateIdx[ticker]) - date) <= pd.Timedelta(hours=18):
+                    assetdateIdx[ticker] = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
+                aidx = assetdateIdx[ticker]
+
+                if (aidx - m * self.__idxLengthOneMonth)<0:
+                    continue
+                pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
+                futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
                 
-                if not np.isfinite(pastPrices).all() \
-                    or not np.isfinite(futurePrices).all()\
-                    or not np.isfinite(features).all():
-                    raise ValueError("Stock Prices are not complete")
-                X.append(features)
-                y.append(target)
+                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], multFactor=self.__multFactor, 
+                                                     fouriercutoff=self.__fouriercutoff,
+                                                     includeLastPrice = True)
+                target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
+                target = target[0]
+                Xtest.append(features)
+                ytest.append(target)
+                XtestPrice.append(pastPrices/pastPrices[-1])
+                ytestPrice.append(futurePrices/pastPrices[-1])
 
         self.__dataIsPrepared = True
-        self.X = np.array(X)
-        self.y = np.array(y).astype(int)+lenClassInterval
+        self.X_train = np.array(Xtrain)
+        self.y_train = np.array(ytrain).astype(int)+lenClassInterval
+        self.X_test = np.array(Xtest)
+        self.y_test = np.array(ytest).astype(int)+lenClassInterval
+        self.X_train_fullprice = np.array(XtrainPrice)
+        self.y_train_fullprice = np.array(ytrainPrice)
+        self.X_test_fullprice = np.array(XtestPrice)
+        self.y_test_fullprice = np.array(ytestPrice)
 
     def traintestCNNModel(self):
         if not self.__dataIsPrepared:
             self.prepareData()
         
-        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.2)
+        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
 
         input_shape = X_train.shape[1]
         output_shape = 2*self.__lenClassInterval+1
@@ -205,11 +253,11 @@ class FourierML(IML):
         test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
         print(f'\nTest accuracy: {test_acc:.4f}')
 
-    def traintestCNNModel(self):
+    def traintestLGBMModel(self):
         if not self.__dataIsPrepared:
             self.prepareData()
         
-        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.2)
+        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
 
         y_cat_train = to_categorical(y_train)
         y_cat_test = to_categorical(y_test)
@@ -233,7 +281,7 @@ class FourierML(IML):
         if not self.__dataIsPrepared:
             self.prepareData()
         
-        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=.2)
+        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
 
         # Initialize the classifier
         self.RPCModel = rpc(

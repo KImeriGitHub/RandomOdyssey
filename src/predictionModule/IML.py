@@ -12,8 +12,14 @@ class IML(ABC):
         self.CNNModel: Sequential = Sequential()
         self.LGBMModel = lgb.LGBMRegressor()
         self.RPModel = rpc()
-        self.X: np.array = np.array([])
-        self.y: np.array = np.array([])
+        self.X_train: np.array = np.array([])
+        self.y_train: np.array = np.array([])
+        self.X_test: np.array = np.array([])
+        self.y_test: np.array = np.array([])
+        self.X_train_fullprice: np.array = np.array([])
+        self.y_train_fullprice: np.array = np.array([])
+        self.X_test_fullprice: np.array = np.array([])
+        self.y_test_fullprice: np.array = np.array([])
 
     def saveXGBoostModel(self, dirPath: str, fileName:str):
         if not fileName.lower().endswith('.mdl'):
