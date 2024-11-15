@@ -41,7 +41,6 @@ class OutsourceLoader:
 
         fullSharePrice: pd.DataFrame = yf.download(tickerHandle, period="max")
         if not fullSharePrice.empty:
-            fullSharePrice = yf.download(tickerHandle, period="max")
             assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close", "Adj Close"]]
             assetData.volume = fullSharePrice["Volume"]
             assetData.dividends = stock.dividends
@@ -88,12 +87,12 @@ class OutsourceLoader:
 
             # Find previous valid price
             prev_idx = idx - 1
-            while prev_idx >= 0 and pd.isna(s.iloc[prev_idx]):
+            while prev_idx >= 0 and pd.isna(s.iloc[prev_idx]).values:
                 prev_idx -= 1
 
             # Find next valid price
             next_idx = idx + 1
-            while next_idx < len(s) and pd.isna(s.iloc[next_idx]):
+            while next_idx < len(s) and pd.isna(s.iloc[next_idx]).values:
                 next_idx += 1
 
             # If both previous and next prices are found

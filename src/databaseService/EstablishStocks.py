@@ -46,7 +46,6 @@ class EstablishStocks:
                 fileOut.saveToFile(asset)
                 print(f"Got Stock data for {ticker}.")
                 allTickersYamlList.append(asset.ticker)
-                time.sleep(0.5)
             except:
                 pass
         
