@@ -1,7 +1,7 @@
 # Random Odyssey
 
 ```bash
-\*                  ~.				        \*
+\*                  ~.                  	\*
 \*           Ya...___|__..aab     .   .		\*
 \*            Y$$a  Y$$o  Y$$a   (     )	\*
 \*             Y$$b  Y$$b  Y$$b   `.oo'		\*
