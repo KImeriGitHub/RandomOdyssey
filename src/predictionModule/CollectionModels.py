@@ -16,13 +16,22 @@ class CollectionModels():
         pass
 
     @staticmethod
-    def fourierML_snp500_10to20(assets: Dict[str, AssetDataPolars]):
-        startDate=pd.Timestamp(year=2019, month=9, day=4)
-        endDate=pd.Timestamp(year=2020, month=1, day=4)
+    def fourierML(assetspl: Dict[str, AssetDataPolars]):
+        startTrainDate=pd.Timestamp(year=2009, month=1, day=4)
+        endTrainDate=pd.Timestamp(year=2019, month=2, day=4)
+        startTestDate=pd.Timestamp(year=2019, month=4, day=5)
+        fourierTestML = FourierML(assetspl, 
+                 trainStartDate = startTrainDate,
+                 trainEndDate = endTrainDate,
+                 testStartDate = startTestDate,
+                 testEndDate= startTestDate+ pd.Timedelta(days=10))
 
-        fourierML = FourierML(assets, startDate, endDate)
+        fourierTestML.prepareData()
 
-        fourierML.traintestRPModel()
+        fourierTestML.save_data('src/predictionModule/bin', "fourier_09to19_halfSpare")
 
-        #fourierML.saveCNNModel("src/predictionModule/bin", "fourierML_snp500_10to20")
+        fourierTestML.traintestXGBModel()
+        print(fourierTestML.metadata)
+
+        fourierTestML.save_data('src/predictionModule/bin', "fourier_09to19_halfSpare_xgb")
 

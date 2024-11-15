@@ -16,4 +16,4 @@ for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
 
 if __name__ == "__main__":
-    CollectionModels.fourierML_snp500_10to20(assets=assetspl)
+    CollectionModels.fourierML(assetspl=assetspl)

@@ -7,7 +7,7 @@ from scipy.interpolate import CubicSpline
 from scipy.ndimage import gaussian_filter1d
 from dataclasses import dataclass
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics import accuracy_score, log_loss
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.models import Sequential
@@ -23,12 +23,12 @@ from src.predictionModule.IML import IML
 
 class FourierML(IML):
     __idxLengthOneMonth = 21
-    __fouriercutoff = 4000
-    __spareDatesRatio = 0.05
-    __multFactor = 128
+    __fouriercutoff = 3000
+    __spareDatesRatio = 0.5
+    __multFactor = 256
     __lenClassInterval = 1
     __daysAfterPrediction = +1
-    __numOfMonths = 28
+    __numOfMonths = 27
 
 
     #__classificationInterval = [0.01*(2*i+1) for i in range(0,lenClassInterval)]
@@ -54,7 +54,20 @@ class FourierML(IML):
         self.__testStartDate: pd.Timestamp = testStartDate
         self.__testEndDate: pd.Timestamp = testEndDate
 
-        self.__dataIsPrepared = False
+        self.metadata['FourierML_params'] = {
+            "trainStartDate" : trainStartDate.strftime('%Y-%m-%d_%H:%M:%S'),
+            "trainEndDate" : trainEndDate.strftime('%Y-%m-%d_%H:%M:%S'),
+            "testStartDate" : testStartDate.strftime('%Y-%m-%d_%H:%M:%S'),
+            "testEndDate" : testEndDate.strftime('%Y-%m-%d_%H:%M:%S'),
+            "idxLengthOneMonth" : self.__idxLengthOneMonth,
+            "fouriercutoff" : self.__fouriercutoff,
+            "spareDatesRatio" : self.__spareDatesRatio,
+            "multFactor" : self.__multFactor,
+            "lenClassInterval" : self.__lenClassInterval,
+            "daysAfterPrediction" : self.__daysAfterPrediction,
+            "numOfMonths" : self.__numOfMonths,
+            "classificationInterval" : self.__classificationInterval,
+        }
 
     def establishAssetIdx(self) -> Dict:
         # FOR FASTER RUN: Establish index in dataframe to start date
@@ -209,18 +222,63 @@ class FourierML(IML):
                 XtestPrice.append(pastPrices/pastPrices[-1])
                 ytestPrice.append(futurePrices/pastPrices[-1])
 
-        self.__dataIsPrepared = True
+        self.dataIsPrepared = True
         self.X_train = np.array(Xtrain)
         self.y_train = np.array(ytrain).astype(int)+lenClassInterval
         self.X_test = np.array(Xtest)
         self.y_test = np.array(ytest).astype(int)+lenClassInterval
-        self.X_train_fullprice = np.array(XtrainPrice)
-        self.y_train_fullprice = np.array(ytrainPrice)
-        self.X_test_fullprice = np.array(XtestPrice)
-        self.y_test_fullprice = np.array(ytestPrice)
+        self.X_train_timeseries = np.array(XtrainPrice)
+        self.y_train_timeseries = np.array(ytrainPrice)
+        self.X_test_timeseries = np.array(XtestPrice)
+        self.y_test_timeseries = np.array(ytestPrice)
+
+    def traintestXGBModel(self):
+        if not self.dataIsPrepared:
+            self.prepareData()
+        
+        # Split the data
+        X_val = self.X_test
+        y_val = self.y_test
+        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.1)
+
+        # Define XGBoost parameters
+        xgb_params = {
+            'n_estimators': 1000,
+            'learning_rate': 0.01,
+            'max_depth': 5,
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
+            'objective': 'multi:softmax',
+            'num_class': 2 * self.__lenClassInterval + 1,
+            'random_state': 42
+        }
+        self.metadata['XGBoostModel_params'] = xgb_params
+
+        # Initialize and train XGBoost model
+        self.XGBoostModel = xgb.XGBClassifier(**xgb_params)
+        self.XGBoostModel.fit(
+            X_train, y_train,
+            eval_set=[(X_val, y_val)],
+            verbose=100
+        )
+
+        # Make predictions
+        y_pred = self.XGBoostModel.predict(X_val)
+        y_pred_proba = self.XGBoostModel.predict_proba(X_val)
+
+        # Calculate accuracy
+        test_acc = accuracy_score(y_val, y_pred)
+
+        # Calculate log loss
+        test_loss = log_loss(y_val, y_pred_proba)
+
+        self.metadata['XGBoostModel_Test_accuracy'] = test_acc
+        self.metadata['XGBoostModel_Test_log_loss'] = test_loss
+        print(f'\nTest accuracy: {test_acc:.4f}')
+        print(f'Test log loss: {test_loss:.4f}')
 
     def traintestCNNModel(self):
-        if not self.__dataIsPrepared:
+        if not self.dataIsPrepared:
             self.prepareData()
         
         X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
@@ -229,6 +287,22 @@ class FourierML(IML):
         output_shape = 2*self.__lenClassInterval+1
         y_cat_train = to_categorical(y_train)
         y_cat_test = to_categorical(y_test)
+
+        # Define CNN parameters
+        cnn_params = {
+            'layers': [
+                {'units': 128, 'activation': 'relu'},
+                {'dropout': 0.2},
+                {'units': 64, 'activation': 'relu'},
+                {'units': 2 * self.__lenClassInterval + 1, 'activation': 'softmax'}
+            ],
+            'optimizer': 'adam',
+            'loss': 'categorical_crossentropy',
+            'metrics': ['accuracy'],
+            'epochs': 20,
+            'batch_size': 128
+        }
+        self.metadata['CNNModel_params'] = cnn_params
 
         # Define the model
         self.CNNModel = models.Sequential([
@@ -239,22 +313,24 @@ class FourierML(IML):
         ])
 
         # Compile the model
-        self.CNNModel.compile(optimizer='adam',
-                              loss='binary_crossentropy',
-                              metrics=['accuracy'])
+        self.CNNModel.compile(optimizer=cnn_params['optimizer'],
+                              loss=cnn_params['loss'],
+                              metrics=cnn_params['metrics'])
 
         # Train the model
-        history = self.CNNModel.fit(X_train, y_cat_train,
-                                    epochs=20,
-                                    batch_size=128,
-                                    validation_split=0.1,
-                                    verbose=2)
+        history = self.CNNModel.fit(
+            self.X_train, to_categorical(self.y_train, num_classes=2 * self.__lenClassInterval + 1),
+            epochs=cnn_params['epochs'],
+            batch_size=cnn_params['batch_size'],
+            validation_split=0.2,
+            verbose=2
+        )
         
         test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
         print(f'\nTest accuracy: {test_acc:.4f}')
 
     def traintestLGBMModel(self):
-        if not self.__dataIsPrepared:
+        if not self.dataIsPrepared:
             self.prepareData()
         
         X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
@@ -262,38 +338,102 @@ class FourierML(IML):
         y_cat_train = to_categorical(y_train)
         y_cat_test = to_categorical(y_test)
 
+        # Define LGBM parameters
+        lgbm_params = {
+            'n_estimators': 2000,
+            'learning_rate': 0.01,
+            'max_depth': 5,
+            'num_leaves': 32,
+            'colsample_bytree': 0.1,
+            'early_stopping_rounds': 100
+        }
+        self.metadata['LGBMModel_params'] = lgbm_params
+
+        # Initialize and train LGBM model
+        self.LGBMModel = lgb.LGBMClassifier(**lgbm_params)
         # Define the model
         self.LGBMModel = lgb.LGBMRegressor(
-            n_estimator=2000,
-            learning_rate = 0.01,
-            max_depth=5,
-            num_leaves=2 ** 5,
-            colsample_bytree=0.1
+            n_estimator=lgbm_params["n_estimators"],
+            learning_rate = lgbm_params["learning_rate"],
+            max_depth=lgbm_params["max_depth"],
+            num_leaves=lgbm_params["num_leaves"],
+            colsample_bytree=lgbm_params["colsample_bytree"]
         )
 
         # Train the model
-        self.LGBMModel.fit(X_train, y_cat_train)
+        self.LGBMModel.fit(X_train, y_cat_train,
+                        eval_set=[(self.X_test, self.y_test)],
+                        early_stopping_rounds=lgbm_params["early_stopping_rounds"],
+                        verbose=100)
         
-        test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
+        test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=100)
         print(f'\nTest accuracy: {test_acc:.4f}')
 
     def traintestRPModel(self):
-        if not self.__dataIsPrepared:
+        if not self.dataIsPrepared:
             self.prepareData()
         
         X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
 
-        # Initialize the classifier
-        self.RPCModel = rpc(
-            num_random_features=2000,
-            regularization=30,
-            max_iter=10,
-            verbose=True,
-            random_state=None
-        )
+        # Define RPModel parameters
+        rp_params = {
+            'num_random_features': 2000,
+            'regularization': 30,
+            'max_iter': 10,
+            'verbose': True,
+            'random_state': None
+        }
+        self.metadata['RPModel_params'] = rp_params
+
+        # Initialize and train RPModel
+        self.RPModel = rpc(**rp_params)
 
         # Train the model
         self.RPCModel.fit(X_train, y_train)
+    
+    def traintestLSTMModel(self):
+        if not self.dataIsPrepared:
+            self.prepareData()
+
+        # Define LSTM parameters
+        lstm_params = {
+            'units': 128,
+            'dropout': 0.2,
+            'dense_units': 64,
+            'output_units': 2 * self.__lenClassInterval + 1,
+            'activation': 'relu',
+            'optimizer': 'adam',
+            'loss': 'categorical_crossentropy',
+            'metrics': ['accuracy'],
+            'epochs': 20,
+            'batch_size': 128
+        }
+        self.metadata['LSTMModel_params'] = lstm_params
+
+        # Initialize and compile LSTM model
+        self.LSTMModel = models.Sequential([
+            layers.LSTM(lstm_params['units'], input_shape=(1, self.X_train.shape[1])),
+            layers.Dropout(lstm_params['dropout']),
+            layers.Dense(lstm_params['dense_units'], activation=lstm_params['activation']),
+            layers.Dense(lstm_params['output_units'], activation='softmax')
+        ])
+        self.LSTMModel.compile(optimizer=lstm_params['optimizer'],
+                               loss=lstm_params['loss'],
+                               metrics=lstm_params['metrics'])
+
+        # Train the model
+        history = self.LSTMModel.fit(
+            self.X_train.reshape((self.X_train.shape[0], 1, self.X_train.shape[1])),
+            to_categorical(self.y_train, num_classes=lstm_params['output_units']),
+            epochs=lstm_params['epochs'],
+            batch_size=lstm_params['batch_size'],
+            validation_split=0.2,
+            verbose=2
+        )
+
+        # Evaluate the model
+        test_loss, test_acc = self.LSTMModel.evaluate(X_test, y_cat_test, verbose=0)
+        print(f'\nTest accuracy: {test_acc:.4f}')
 
 
     def predictNextPrices(self, priceArray: np.array, ticker: str) -> int:
