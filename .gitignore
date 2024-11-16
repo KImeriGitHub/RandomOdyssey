@@ -9,8 +9,6 @@ src/database/*
 
 src/stockGroups/*
 
-src/tickerSelection/*
-
 src/predictionmodule/bin/*
 
 *.lprof
