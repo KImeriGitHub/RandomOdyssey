@@ -6,7 +6,7 @@ from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.Portfolio import Portfolio
 from src.common.AssetDataPolars import AssetDataPolars
-from predictionModule.FourierML import FourierML
+from src.predictionModule.FourierML import FourierML
 
 import pandas as pd
 from typing import Dict
