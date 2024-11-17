@@ -1,6 +1,6 @@
 from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
-from strategy.StratLinearAscendRanked import StratLinearAscendRanked
+from src.strategy.StratLinearAscendRanked import StratLinearAscendRanked
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
@@ -17,7 +17,7 @@ class CollectionModels():
 
     @staticmethod
     def fourierML_saveData(assetspl: Dict[str, AssetDataPolars]):
-        startTrainDate=pd.Timestamp(year=2015, month=5, day=1)
+        startTrainDate=pd.Timestamp(year=2010, month=5, day=1)
         endTrainDate=pd.Timestamp(year=2016, month=6, day=21)
         startTestDate=pd.Timestamp(year=2016, month=6, day=22)
         fourierML = FourierML(assetspl, 
@@ -27,14 +27,14 @@ class CollectionModels():
 
         fourierML.prepareData()
 
-        fourierML.save_data('src/predictionModule/bin', "fourier_15to16_halfSpare_1000Coeff_19mon")
+        fourierML.save_data('src/predictionModule/bin', "fourier_10to16_halfSpare_200Coeff_27mon")
         print(fourierML.metadata)
 
     @staticmethod
     def fourierML_loadupData_xgb(assetspl: Dict[str, AssetDataPolars]):
         fourierML = FourierML(assetspl)
 
-        fourierML.load_data('src/predictionModule/bin', "fourier_15to16_halfSpare_1000Coeff_19mon")
+        fourierML.load_data('src/predictionModule/bin', "fourier_10to16_halfSpare_200Coeff_27mon")
 
         xgb_params = {
             'n_estimators': 2000,
@@ -46,13 +46,13 @@ class CollectionModels():
 
         fourierML.traintestXGBModel(xgb_params)
         print(fourierML.metadata)
-        fourierML.save_data('src/predictionModule/bin', "fourier_15to16_halfSpare_1000Coeff_19mon_xgb")
+        fourierML.save_data('src/predictionModule/bin', "fourier_10to16_halfSpare_200Coeff_27mon_xgb")
 
     @staticmethod
     def fourierML_loadupData_rp(assetspl: Dict[str, AssetDataPolars]):
         fourierML = FourierML(assetspl)
 
-        fourierML.load_data('src/predictionModule/bin', "fourier_15to16_halfSpare_1000Coeff_19mon")
+        fourierML.load_data('src/predictionModule/bin', "fourier_10to16_halfSpare_200Coeff_27mon")
 
         rp_params = {
             'num_random_features': 5000,
@@ -64,4 +64,4 @@ class CollectionModels():
 
         fourierML.traintestRPModel(rp_params)
         print(fourierML.metadata)
-        fourierML.save_data('src/predictionModule/bin', "fourier_15to16_halfSpare_1000Coeff_19mon_rp")
+        fourierML.save_data('src/predictionModule/bin', "fourier_10to16_halfSpare_200Coeff_27mon_rp")
