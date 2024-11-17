@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import os
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from typing import Dict
 from tensorflow.keras.models import load_model, Sequential
@@ -12,6 +13,10 @@ import pickle
 
 class IML(ABC):
     def __init__(self):
+        self.trainStartDate: pd.Timestamp = None,
+        self.trainEndDate: pd.Timestamp = None,
+        self.testStartDate: pd.Timestamp = None,
+        self.testEndDate: pd.Timestamp = None,
         self.XGBoostModel: xgb.XGBClassifier = xgb.XGBClassifier()
         self.CNNModel: Sequential = Sequential()
         self.LSTMModel: Sequential = Sequential()
@@ -140,6 +145,10 @@ class IML(ABC):
             'y_train_timeseries': self.y_train_timeseries,
             'X_test_timeseries': self.X_test_timeseries,
             'y_test_timeseries': self.y_test_timeseries,
+            'trainStartDate': self.trainStartDate,
+            'trainEndDate': self.trainEndDate,
+            'testStartDate': self.testStartDate,
+            'testEndDate': self.testEndDate,
             'metadata': self.metadata
         }
         with open(filePath, 'wb') as f:
@@ -162,6 +171,10 @@ class IML(ABC):
         self.y_train_timeseries = data.get('y_train_timeseries', np.array([]))
         self.X_test_timeseries = data.get('X_test_timeseries', np.array([]))
         self.y_test_timeseries = data.get('y_test_timeseries', np.array([]))
+        self.trainStartDate = data.get('trainStartDate', None)
+        self.trainEndDate = data.get('trainEndDate', None)
+        self.testStartDate = data.get('testStartDate', None)
+        self.testEndDate = data.get('testEndDate', None)
         self.metadata = data.get('metadata', {})
         print(f'Data and metadata loaded from {filePath}')
         self.dataIsPrepared = True

@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter1d
 from dataclasses import dataclass
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
+from sklearn.utils import shuffle
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.models import Sequential
@@ -23,12 +24,12 @@ from src.predictionModule.IML import IML
 
 class FourierML(IML):
     __idxLengthOneMonth = 21
-    __fouriercutoff = 3000
+    __fouriercutoff = 2000
     __spareDatesRatio = 0.5
-    __multFactor = 256
+    __multFactor = 128
     __lenClassInterval = 1
     __daysAfterPrediction = +1
-    __numOfMonths = 27
+    __numOfMonths = 19
 
 
     #__classificationInterval = [0.01*(2*i+1) for i in range(0,lenClassInterval)]
@@ -43,22 +44,19 @@ class FourierML(IML):
     # > __classificationInterval is positive and sorted. 0 is not in __classificationInterval
 
     def __init__(self, assets: Dict[str, AssetDataPolars], 
-                 trainStartDate: pd.Timestamp, 
-                 trainEndDate: pd.Timestamp,
-                 testStartDate: pd.Timestamp, 
+                 trainStartDate: pd.Timestamp = None, 
+                 trainEndDate: pd.Timestamp = None,
+                 testStartDate: pd.Timestamp = None, 
                  testEndDate: pd.Timestamp = None,):
         super().__init__()
         self.__assets: Dict[str, AssetDataPolars] = assets
-        self.__trainStartDate: pd.Timestamp = trainStartDate
-        self.__trainEndDate: pd.Timestamp = trainEndDate
-        self.__testStartDate: pd.Timestamp = testStartDate
-        self.__testEndDate: pd.Timestamp = testEndDate
+
+        self.trainStartDate: pd.Timestamp = trainStartDate
+        self.trainEndDate: pd.Timestamp = trainEndDate
+        self.testStartDate: pd.Timestamp = testStartDate
+        self.testEndDate: pd.Timestamp = testEndDate
 
         self.metadata['FourierML_params'] = {
-            "trainStartDate" : trainStartDate.strftime('%Y-%m-%d_%H:%M:%S'),
-            "trainEndDate" : trainEndDate.strftime('%Y-%m-%d_%H:%M:%S'),
-            "testStartDate" : testStartDate.strftime('%Y-%m-%d_%H:%M:%S'),
-            "testEndDate" : testEndDate.strftime('%Y-%m-%d_%H:%M:%S'),
             "idxLengthOneMonth" : self.__idxLengthOneMonth,
             "fouriercutoff" : self.__fouriercutoff,
             "spareDatesRatio" : self.__spareDatesRatio,
@@ -73,9 +71,9 @@ class FourierML(IML):
         # FOR FASTER RUN: Establish index in dataframe to start date
         assetdateIdx = {}
         for ticker, asset in self.__assets.items():
-            if asset.adjClosePrice["Date"].item(-1) < self.__trainStartDate:
-                raise ValueError(f"Asset {ticker} history not old enough or startDate ({self.__trainStartDate}) too far back. We stop.")
-            assetdateIdx[ticker] = DPl(asset.adjClosePrice).getIndex(self.__trainStartDate, pd.Timedelta(days=0.7))
+            if asset.adjClosePrice["Date"].item(-1) < self.trainStartDate:
+                raise ValueError(f"Asset {ticker} history not old enough or startDate ({self.trainStartDate}) too far back. We stop.")
+            assetdateIdx[ticker] = DPl(asset.adjClosePrice).getIndex(self.trainStartDate, pd.Timedelta(days=0.7))
 
         return assetdateIdx
 
@@ -159,6 +157,11 @@ class FourierML(IML):
         assetdateIdx = self.establishAssetIdx()
         processedCounter=0
 
+        if self.trainStartDate == None \
+             or self.trainEndDate == None \
+             or self.testStartDate == None:
+            raise ValueError("Data collection time is not defined.")
+
         #Main Loop
         for ticker, asset in self.__assets.items():
             if asset.adjClosePrice is None or not 'AdjClose' in asset.adjClosePrice.columns:
@@ -168,13 +171,13 @@ class FourierML(IML):
             processedCounter += 1
 
             # Prepare Dates
-            datesTrain = pd.date_range(self.__trainStartDate, self.__trainEndDate, freq='B') # 'B' for business days
+            datesTrain = pd.date_range(self.trainStartDate, self.trainEndDate, freq='B') # 'B' for business days
             spare_datesTrain = pd.DatetimeIndex(np.random.choice(datesTrain, size=int(len(datesTrain)*self.__spareDatesRatio), replace=False)) #unsorted. DO NOT SORT
-            if self.__testEndDate is None:
-                datesTest = pd.date_range(self.__testStartDate, self.__testStartDate + pd.Timedelta(days=5), freq='B')
+            if self.testEndDate is None:
+                datesTest = pd.date_range(self.testStartDate, self.testStartDate + pd.Timedelta(days=5), freq='B')
                 datesTest = [datesTest[0]]
             else:
-                datesTest = pd.date_range(self.__testStartDate, self.__testEndDate, freq='B') # 'B' for business days
+                datesTest = pd.date_range(self.testStartDate, self.testEndDate, freq='B') # 'B' for business days
         
 
             pricesArray = asset.adjClosePrice['AdjClose']
@@ -184,14 +187,16 @@ class FourierML(IML):
             for date in spare_datesTrain:
                 if not abs(datesArray.item(assetdateIdx[ticker]) - date) <= pd.Timedelta(hours=18):
                     assetdateIdx[ticker] = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
-                
                 aidx = assetdateIdx[ticker]
+
                 if (aidx - m * self.__idxLengthOneMonth)<0:
+                    print("Warning! assetdateIdx too low")
                     continue
                 pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
                 futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
                 
-                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], multFactor=self.__multFactor, 
+                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], 
+                                                     multFactor=self.__multFactor, 
                                                      fouriercutoff=self.__fouriercutoff,
                                                      includeLastPrice = True)
                 target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
@@ -208,11 +213,13 @@ class FourierML(IML):
                 aidx = assetdateIdx[ticker]
 
                 if (aidx - m * self.__idxLengthOneMonth)<0:
+                    print("Warning! assetdateIdx too low")
                     continue
                 pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
                 futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
                 
-                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], multFactor=self.__multFactor, 
+                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], 
+                                                     multFactor=self.__multFactor, 
                                                      fouriercutoff=self.__fouriercutoff,
                                                      includeLastPrice = True)
                 target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
@@ -232,33 +239,34 @@ class FourierML(IML):
         self.X_test_timeseries = np.array(XtestPrice)
         self.y_test_timeseries = np.array(ytestPrice)
 
-    def traintestXGBModel(self):
+        self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
+        self.X_train_timeseries, self.y_train_timeseries = shuffle(self.X_train_timeseries, self.y_train_timeseries)
+
+    def traintestXGBModel(self, xgb_params=None):
         if not self.dataIsPrepared:
             self.prepareData()
-        
+
         # Split the data
         X_val = self.X_test
         y_val = self.y_test
         X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.1)
 
-        # Define XGBoost parameters
-        xgb_params = {
-            'n_estimators': 1000,
-            'learning_rate': 0.01,
-            'max_depth': 5,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'objective': 'multi:softmax',
-            'num_class': 2 * self.__lenClassInterval + 1,
-            'random_state': 42
-        }
+        # Define XGBoost parameters if not provided
+        if xgb_params is None:
+            xgb_params = {
+                'n_estimators': 500,
+                'learning_rate': 0.01,
+                'max_depth': 5,
+                'subsample': 0.8,
+                'colsample_bytree': 0.05
+            }
         self.metadata['XGBoostModel_params'] = xgb_params
 
         # Initialize and train XGBoost model
         self.XGBoostModel = xgb.XGBClassifier(**xgb_params)
         self.XGBoostModel.fit(
             X_train, y_train,
-            eval_set=[(X_val, y_val)],
+            eval_set=[(X_test, y_test)],
             verbose=100
         )
 
@@ -369,27 +377,38 @@ class FourierML(IML):
         test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=100)
         print(f'\nTest accuracy: {test_acc:.4f}')
 
-    def traintestRPModel(self):
+    def traintestRPModel(self, rp_params=None):
         if not self.dataIsPrepared:
             self.prepareData()
         
-        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.2)
+        # Split the data
+        X_val = self.X_test
+        y_val = self.y_test
+        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.1)
 
-        # Define RPModel parameters
-        rp_params = {
-            'num_random_features': 2000,
-            'regularization': 30,
-            'max_iter': 10,
-            'verbose': True,
-            'random_state': None
-        }
+        # Define XGBoost parameters if not provided
+        if rp_params is None:
+            # Define RPModel parameters
+            rp_params = {
+                'num_random_features': 2000,
+                'regularization': 30,
+                'max_iter': 10,
+                'verbose': True,
+                'random_state': None
+            }
         self.metadata['RPModel_params'] = rp_params
 
         # Initialize and train RPModel
         self.RPModel = rpc(**rp_params)
 
         # Train the model
-        self.RPCModel.fit(X_train, y_train)
+        self.RPModel.fit(X_train, y_train)
+
+        self.RPModel.tune_regularization(X_test, y_test, low_start=1, high_start=10, max_iter=10)
+        print(self.RPModel.g)
+        test_acc = self.RPModel.compute_accuracy(g=self.RPModel.g, Y_test = y_val, X_test=X_val)
+        self.metadata['RPModel_Test_accuracy'] = test_acc
+        print(f'\nTest accuracy: {test_acc:.4f}')
     
     def traintestLSTMModel(self):
         if not self.dataIsPrepared:
