@@ -7,7 +7,7 @@ venv
 src/database/*
 !src/database/
 
-src/stockGroups/*
+src/stockGroups/bin/*
 
 src/predictionmodule/bin/*
 

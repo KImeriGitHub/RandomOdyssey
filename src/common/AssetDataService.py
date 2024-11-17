@@ -1,5 +1,6 @@
 import pandas as pd
 import polars as pl
+import pyarrow
 from typing import Dict
 
 from src.common.AssetData import AssetData
