@@ -17,6 +17,8 @@ class IML(ABC):
         self.trainEndDate: pd.Timestamp = None,
         self.testStartDate: pd.Timestamp = None,
         self.testEndDate: pd.Timestamp = None,
+        self.valStartDate: pd.Timestamp = None,
+        self.valEndDate: pd.Timestamp = None,
         self.XGBoostModel: xgb.XGBClassifier = xgb.XGBClassifier()
         self.CNNModel: Sequential = Sequential()
         self.LSTMModel: Sequential = Sequential()
@@ -149,6 +151,8 @@ class IML(ABC):
             'trainEndDate': self.trainEndDate,
             'testStartDate': self.testStartDate,
             'testEndDate': self.testEndDate,
+            'valStartDate': self.valStartDate,
+            'valEndDate': self.valEndDate,
             'metadata': self.metadata
         }
         with open(filePath, 'wb') as f:
@@ -175,6 +179,8 @@ class IML(ABC):
         self.trainEndDate = data.get('trainEndDate', None)
         self.testStartDate = data.get('testStartDate', None)
         self.testEndDate = data.get('testEndDate', None)
+        self.valStartDate = data.get('valStartDate', None)
+        self.valEndDate = data.get('valEndDate', None)
         self.metadata = data.get('metadata', {})
         print(f'Data and metadata loaded from {filePath}')
         self.dataIsPrepared = True

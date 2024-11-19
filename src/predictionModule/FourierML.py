@@ -24,12 +24,12 @@ from src.predictionModule.IML import IML
 
 class FourierML(IML):
     __idxLengthOneMonth = 21
-    __fouriercutoff = 2000
-    __spareDatesRatio = 0.5
+    __fouriercutoff = 1000
+    __spareDatesRatio = 0.05
     __multFactor = 128
     __lenClassInterval = 1
     __daysAfterPrediction = +1
-    __numOfMonths = 19
+    __numOfMonths = 33
 
 
     #__classificationInterval = [0.01*(2*i+1) for i in range(0,lenClassInterval)]
@@ -47,7 +47,9 @@ class FourierML(IML):
                  trainStartDate: pd.Timestamp = None, 
                  trainEndDate: pd.Timestamp = None,
                  testStartDate: pd.Timestamp = None, 
-                 testEndDate: pd.Timestamp = None,):
+                 testEndDate: pd.Timestamp = None,
+                 valStartDate: pd.Timestamp = None, 
+                 valEndDate: pd.Timestamp = None,):
         super().__init__()
         self.__assets: Dict[str, AssetDataPolars] = assets
 
@@ -55,6 +57,8 @@ class FourierML(IML):
         self.trainEndDate: pd.Timestamp = trainEndDate
         self.testStartDate: pd.Timestamp = testStartDate
         self.testEndDate: pd.Timestamp = testEndDate
+        self.valStartDate: pd.Timestamp = valStartDate
+        self.valEndDate: pd.Timestamp = valEndDate
 
         self.metadata['FourierML_params'] = {
             "idxLengthOneMonth" : self.__idxLengthOneMonth,
@@ -141,20 +145,42 @@ class FourierML(IML):
                     res[j] = i * sign
 
         return res.tolist()
+    
+    def getFeaturesAndTarget(self, asset: AssetDataPolars, pricesArray: pl.Series, date: pd.Timestamp):
+        aidx = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
+
+        m = self.__numOfMonths
+        if (aidx - m * self.__idxLengthOneMonth)<0:
+            print("Warning! Asset History does not span far enough.")
+        if (aidx + self.__daysAfterPrediction)>len(pricesArray):
+            print("Warning! Future price does not exist in asset.")
+
+        pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
+        futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
+        
+        features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], 
+                                             multFactor=self.__multFactor, 
+                                             fouriercutoff=self.__fouriercutoff,
+                                             includeLastPrice = True)
+        target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, self.__classificationInterval)
+        target = target[0]
+
+        return features, target, pastPrices/pastPrices[-1], futurePrices/pastPrices[-1]
 
     def prepareData(self):
         Xtrain = []
         ytrain = []
         Xtest = []
         ytest = []
+        Xval = []
+        yval = []
         XtrainPrice = []
         ytrainPrice = []
         XtestPrice = []
         ytestPrice = []
+        XvalPrice = []
+        yvalPrice = []
         lenClassInterval = self.__lenClassInterval
-        classificationIntervals = self.__classificationInterval
-        m = self.__numOfMonths
-        assetdateIdx = self.establishAssetIdx()
         processedCounter=0
 
         if self.trainStartDate == None \
@@ -171,76 +197,72 @@ class FourierML(IML):
             processedCounter += 1
 
             # Prepare Dates
+            #TRAIN
             datesTrain = pd.date_range(self.trainStartDate, self.trainEndDate, freq='B') # 'B' for business days
             spare_datesTrain = pd.DatetimeIndex(np.random.choice(datesTrain, size=int(len(datesTrain)*self.__spareDatesRatio), replace=False)) #unsorted. DO NOT SORT
+            #TEST
             if self.testEndDate is None:
                 datesTest = pd.date_range(self.testStartDate, self.testStartDate + pd.Timedelta(days=5), freq='B')
-                datesTest = [datesTest[0]]
+                spare_datesTest = [datesTest[0]]
             else:
                 datesTest = pd.date_range(self.testStartDate, self.testEndDate, freq='B') # 'B' for business days
+                spare_datesTest = pd.DatetimeIndex(np.random.choice(datesTest, size=int(len(datesTest)*self.__spareDatesRatio), replace=False))
+            # VALIDATION
+            if self.valStartDate is None:
+                spare_datesVal = []
+            elif self.valEndDate is None:
+                datesVal = pd.date_range(self.valStartDate, self.valStartDate + pd.Timedelta(days=5), freq='B')
+                spare_datesVal = [datesVal[0]]
+            else:
+                datesVal = pd.date_range(self.valStartDate, self.valEndDate, freq='B') # 'B' for business days
+                spare_datesVal = pd.DatetimeIndex(np.random.choice(datesVal, size=int(len(datesVal)*self.__spareDatesRatio), replace=False))
         
 
             pricesArray = asset.adjClosePrice['AdjClose']
-            datesArray = asset.adjClosePrice['Date']
 
             # Prepare Train Data
             for date in spare_datesTrain:
-                if not abs(datesArray.item(assetdateIdx[ticker]) - date) <= pd.Timedelta(hours=18):
-                    assetdateIdx[ticker] = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
-                aidx = assetdateIdx[ticker]
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, date)
 
-                if (aidx - m * self.__idxLengthOneMonth)<0:
-                    print("Warning! assetdateIdx too low")
-                    continue
-                pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
-                futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
-                
-                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], 
-                                                     multFactor=self.__multFactor, 
-                                                     fouriercutoff=self.__fouriercutoff,
-                                                     includeLastPrice = True)
-                target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
-                target = target[0]
                 Xtrain.append(features)
                 ytrain.append(target)
-                XtrainPrice.append(pastPrices/pastPrices[-1])
-                ytrainPrice.append(futurePrices/pastPrices[-1])
+                XtrainPrice.append(featuresTimeSeries)
+                ytrainPrice.append(targetTimeSeries)
 
             #Prepare Test Data
-            for date in datesTest:
-                if not abs(datesArray.item(assetdateIdx[ticker]) - date) <= pd.Timedelta(hours=18):
-                    assetdateIdx[ticker] = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
-                aidx = assetdateIdx[ticker]
+            for date in spare_datesTest:
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, date)
 
-                if (aidx - m * self.__idxLengthOneMonth)<0:
-                    print("Warning! assetdateIdx too low")
-                    continue
-                pastPrices = pricesArray.slice(aidx-m * self.__idxLengthOneMonth, m * self.__idxLengthOneMonth +1).to_numpy()
-                futurePrices = pricesArray.slice((aidx+self.__daysAfterPrediction),1).to_numpy()
-                
-                features = self.getFeaturesFromPrice(pastPrices/pastPrices[-1], 
-                                                     multFactor=self.__multFactor, 
-                                                     fouriercutoff=self.__fouriercutoff,
-                                                     includeLastPrice = True)
-                target = self.getTargetFromPrice(futurePrices/pastPrices[-1]-1, classificationIntervals)
-                target = target[0]
                 Xtest.append(features)
                 ytest.append(target)
-                XtestPrice.append(pastPrices/pastPrices[-1])
-                ytestPrice.append(futurePrices/pastPrices[-1])
+                XtestPrice.append(featuresTimeSeries)
+                ytestPrice.append(targetTimeSeries)
+
+            #Prepare Val Data
+            for date in spare_datesVal:
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, date)
+
+                Xval.append(features)
+                yval.append(target)
+                XvalPrice.append(featuresTimeSeries)
+                yvalPrice.append(targetTimeSeries)
 
         self.dataIsPrepared = True
         self.X_train = np.array(Xtrain)
         self.y_train = np.array(ytrain).astype(int)+lenClassInterval
         self.X_test = np.array(Xtest)
         self.y_test = np.array(ytest).astype(int)+lenClassInterval
+        self.X_val = np.array(Xval)
+        self.y_val = np.array(yval).astype(int)+lenClassInterval
         self.X_train_timeseries = np.array(XtrainPrice)
         self.y_train_timeseries = np.array(ytrainPrice)
         self.X_test_timeseries = np.array(XtestPrice)
         self.y_test_timeseries = np.array(ytestPrice)
 
         self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
+        self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
         self.X_train_timeseries, self.y_train_timeseries = shuffle(self.X_train_timeseries, self.y_train_timeseries)
+        self.X_test_timeseries, self.y_test_timeseries = shuffle(self.X_test_timeseries, self.y_test_timeseries)
 
     def traintestXGBModel(self, xgb_params=None):
         if not self.dataIsPrepared:
@@ -249,7 +271,10 @@ class FourierML(IML):
         # Split the data
         X_val = self.X_test
         y_val = self.y_test
-        X_train, X_test, y_train, y_test = train_test_split(self.X_train, self.y_train, test_size=.1)
+        X_train = self.X_train
+        X_test = self.X_test
+        y_train = self.y_train
+        y_test = self.y_test
 
         # Define XGBoost parameters if not provided
         if xgb_params is None:
