@@ -1,8 +1,8 @@
 from src.simulation.SimulatePortfolio import SimulatePortfolio
 from src.strategy.StratBuyAndHold import StratBuyAndHold
-from strategy.StratLinearAscendRanked import StratLinearAscendRanked
-from strategy.StratFourierPrediction import StratFourierPrediction
-from strategy.StratQuadraticAscendRanked import StratQuadraticAscendRanked
+from src.strategy.StratLinearAscendRanked import StratLinearAscendRanked
+from src.strategy.StratFourierPrediction import StratFourierPrediction
+from src.strategy.StratQuadraticAscendRanked import StratQuadraticAscendRanked
 from src.simulation.ResultAnalyzer import ResultAnalyzer
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
@@ -34,8 +34,8 @@ class CollectionSimulations():
             initialCash=10000,
             strategy=strategy,
             assets=[assetG, assetA, assetM],
-            startDate=pd.Timestamp(2010,1,1),
-            endDate=pd.Timestamp(2020,1,1),
+            startDate=pd.Timestamp(2010,1,1, tz="UTC"),
+            endDate=pd.Timestamp(2020,1,1, tz="UTC"),
         )
 
         # Run simulation
@@ -68,8 +68,8 @@ class CollectionSimulations():
             portfolio = Portfolio(cash = initialCash),
             strategy=strategy,
             assets=assetspl,
-            startDate=pd.Timestamp(2005,1,4),
-            endDate=pd.Timestamp(2024,10,4),
+            startDate=pd.Timestamp(2005,1,4, tz="UTC"),
+            endDate=pd.Timestamp(2024,10,4, tz="UTC"),
         )
 
         # Run simulation
@@ -103,8 +103,8 @@ class CollectionSimulations():
             portfolio = portfolio,
             strategy=strategy,
             assets=assets,
-            startDate=pd.Timestamp(2006,1,4),
-            endDate=pd.Timestamp(2024,10,16)
+            startDate=pd.Timestamp(2006,1,4, tz="UTC"),
+            endDate=pd.Timestamp(2024,10,16, tz="UTC")
         )
 
         # Run simulation
@@ -139,8 +139,8 @@ class CollectionSimulations():
             portfolio = Portfolio(cash = initialCash),
             strategy=strategy,
             assets=assetspl,
-            startDate=pd.Timestamp(2010,1,4),
-            endDate=pd.Timestamp(2020,1,4),
+            startDate=pd.Timestamp(2010,1,4, tz="UTC"),
+            endDate=pd.Timestamp(2020,1,4, tz="UTC"),
         )
 
         # Run simulation

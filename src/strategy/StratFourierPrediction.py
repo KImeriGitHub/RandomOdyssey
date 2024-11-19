@@ -5,7 +5,7 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.common.Portfolio import Portfolio
 from src.common.ActionCost import ActionCost
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DFTO
-from predictionModule.FourierML import FourierML
+from src.predictionModule.FourierML import FourierML
 from typing import Dict, List
 import pandas as pd
 import polars as pl
