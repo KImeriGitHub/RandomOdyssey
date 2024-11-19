@@ -17,12 +17,12 @@ class CollectionModels():
 
     @staticmethod
     def fourierML_saveData(assetspl: Dict[str, AssetDataPolars]):
-        startTrainDate=pd.Timestamp(year=2011, month=5, day=1)
-        endTrainDate=pd.Timestamp(year=2015, month=6, day=21)
-        startTestDate=pd.Timestamp(year=2015, month=6, day=22)
-        endTestDate=pd.Timestamp(year=2016, month=6, day=22)
-        startValDate=pd.Timestamp(year=2016, month=6, day=23)
-        endValDate=pd.Timestamp(year=2017, month=6, day=22)
+        startTrainDate=pd.Timestamp(year=2011, month=5, day=1, tz="UTC")
+        endTrainDate=pd.Timestamp(year=2015, month=6, day=21, tz="UTC")
+        startTestDate=pd.Timestamp(year=2015, month=6, day=22, tz="UTC")
+        endTestDate=pd.Timestamp(year=2016, month=6, day=22, tz="UTC")
+        startValDate=pd.Timestamp(year=2016, month=6, day=23, tz="UTC")
+        endValDate=pd.Timestamp(year=2017, month=6, day=22, tz="UTC")
         fourierML = FourierML(assetspl, 
                  trainStartDate = startTrainDate,
                  trainEndDate = endTrainDate,
