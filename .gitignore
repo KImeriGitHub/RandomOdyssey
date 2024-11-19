@@ -8,8 +8,10 @@ src/database/*
 !src/database/
 
 src/stockGroups/bin/*
+!src/stockGroups/bin/__init__.py
 
 src/predictionmodule/bin/*
+!src/predictionmodule/bin/__init__.py
 
 *.lprof
 
