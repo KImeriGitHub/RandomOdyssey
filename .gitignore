@@ -5,7 +5,7 @@ venv
 **/__pycache__/
 
 src/database/*
-!src/database/
+!src/database/.gitignore
 
 src/stockGroups/bin/*
 !src/stockGroups/bin/__init__.py
