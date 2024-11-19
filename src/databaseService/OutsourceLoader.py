@@ -47,7 +47,7 @@ class OutsourceLoader:
             assetData.dividends = stock.dividends
             assetData.splits = stock.splits
 
-            assetData.adjClosePrice = fullSharePrice["Adj Close"]
+            assetData.adjClosePrice = assetData.shareprice["Adj Close"]
             self._fill_NAN_to_BDays(assetData.adjClosePrice)
         else:
             raise ValueError("Failed to retrieve Price History for ticker: " + tickerHandle)
@@ -88,12 +88,12 @@ class OutsourceLoader:
 
             # Find previous valid price
             prev_idx = idx - 1
-            while prev_idx >= 0 and pd.isna(s.iloc[prev_idx]).values:
+            while prev_idx >= 0 and pd.isna(s.iloc[prev_idx]):
                 prev_idx -= 1
 
             # Find next valid price
             next_idx = idx + 1
-            while next_idx < len(s) and pd.isna(s.iloc[next_idx]).values:
+            while next_idx < len(s) and pd.isna(s.iloc[next_idx]):
                 next_idx += 1
 
             # If both previous and next prices are found
