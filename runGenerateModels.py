@@ -16,6 +16,8 @@ for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
 
 if __name__ == "__main__":
-    CollectionModels.fourierML_saveData(assetspl=assetspl)
-    CollectionModels.fourierML_loadupData_xgb(assetspl=assetspl)
-    #CollectionModels.fourierML_loadupData_rp(assetspl=assetspl)
+    binaries_name = "fourier_twomonth_test2015"
+    CollectionModels.fourierML_saveData(assetspl=assetspl, save_name = binaries_name)
+    CollectionModels.fourierML_loadupData_xgb(assetspl=assetspl, loadup_name = binaries_name)
+    #CollectionModels.fourierML_loadupData_rp(assetspl=assetspl, loadup_name = binaries_name)
+    CollectionModels.fourierML_loadupData_LSTM(assetspl=assetspl, loadup_name = binaries_name)

@@ -17,13 +17,12 @@ class CollectionModels():
         pass
 
     @staticmethod
-    def fourierML_saveData(assetspl: Dict[str, AssetDataPolars]):
+    def fourierML_saveData(assetspl: Dict[str, AssetDataPolars], save_name:str):
         params = {
             'idxLengthOneMonth': 21,
             'fouriercutoff': 100,
             'spareDatesRatio': 1.0,
             'multFactor': 8,
-            'lenClassInterval': 1,
             'daysAfterPrediction': +1,
             'numOfMonths': 13,
             'classificationInterval': [0.0045], 
@@ -46,14 +45,14 @@ class CollectionModels():
 
         fourierML.prepareData()
 
-        fourierML.save_data('src/predictionModule/bin', "fourier_twomonth_test2015")
+        fourierML.save_data('src/predictionModule/bin', save_name)
         print(fourierML.metadata)
 
     @staticmethod
-    def fourierML_loadupData_xgb(assetspl: Dict[str, AssetDataPolars]):
+    def fourierML_loadupData_xgb(assetspl: Dict[str, AssetDataPolars], loadup_name: str):
         fourierML = FourierML(assetspl)
 
-        fourierML.load_data('src/predictionModule/bin', "fourier_twomonth_test2015")
+        fourierML.load_data('src/predictionModule/bin', loadup_name)
 
         xgb_params = {
                 'n_estimators': 500,
@@ -63,18 +62,18 @@ class CollectionModels():
                 'colsample_bytree': 0.05
         }
 
-        fourierML.traintestXGBModel(xgb_params, name_model_name="fourier_twomonth_test2015_xgbModel", name_model_path="src/predictionModule/bin")
+        fourierML.traintestXGBModel(xgb_params, name_model_name=loadup_name+"_xgbModel", name_model_path="src/predictionModule/bin")
         print(fourierML.metadata)
-        fourierML.save_data('src/predictionModule/bin', "fourier_twomonth_test2015")
+        fourierML.save_data('src/predictionModule/bin', loadup_name)
         
         ModelAnalyzer(fourierML).plot_label_distribution()
         ModelAnalyzer(fourierML).plot_feature_importance()
 
     @staticmethod
-    def fourierML_loadupData_rp(assetspl: Dict[str, AssetDataPolars]):
+    def fourierML_loadupData_rp(assetspl: Dict[str, AssetDataPolars], loadup_name: str):
         fourierML = FourierML(assetspl)
 
-        fourierML.load_data('src/predictionModule/bin', "fourier_twomonth_test2015")
+        fourierML.load_data('src/predictionModule/bin', loadup_name)
 
         rp_params = {
             'num_random_features': 10000,
@@ -84,6 +83,30 @@ class CollectionModels():
             'random_state': None
         }
 
-        fourierML.traintestRPModel(rp_params, name_model_name="fourier_twomonth_test2015_xgbModel", name_model_path="src/predictionModule/bin")
+        fourierML.traintestRPModel(rp_params, name_model_name=loadup_name+"_rpModel", name_model_path="src/predictionModule/bin")
         print(fourierML.metadata)
-        fourierML.save_data('src/predictionModule/bin', "fourier_twomonth_test2015")
+        fourierML.save_data('src/predictionModule/bin', loadup_name)
+        
+    @staticmethod
+    def fourierML_loadupData_LSTM(assetspl: Dict[str, AssetDataPolars], loadup_name: str):
+        fourierML = FourierML(assetspl)
+
+        fourierML.load_data('src/predictionModule/bin', loadup_name)
+        
+        lstm_params = {
+            'units': 128,
+            'dropout': 0.2,
+            'dense_units': 64,
+            'activation': 'relu',
+            'optimizer': 'adam',
+            'loss': 'mean_absolute_error',
+            'metrics': ['mae'],
+            'epochs': 20,
+            'batch_size': 128
+        }
+
+        fourierML.traintestLSTMModel(lstm_params, name_model_name=loadup_name+"_lstmModel", name_model_path="src/predictionModule/bin")
+        print(fourierML.metadata)
+        fourierML.save_data('src/predictionModule/bin', loadup_name)
+        
+        ModelAnalyzer(fourierML).plot_lstm_absolute_diff_histogram()

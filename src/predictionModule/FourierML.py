@@ -24,7 +24,6 @@ class FourierML(IML):
         'fouriercutoff': 4000,
         'spareDatesRatio': 0.5,
         'multFactor': 256,
-        'lenClassInterval': 1,
         'daysAfterPrediction': +1,
         'numOfMonths': 13,
         'classificationInterval': [0.0045], 
