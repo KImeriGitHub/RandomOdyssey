@@ -3,6 +3,18 @@ import numpy as np
 class SeriesExpansion():
     def __init__():
         pass
+    
+    @staticmethod
+    def getChebychevNodes(N: int, mode:str = ""):
+        if mode == "half":
+            "Return nparray with N nodes in (0, 1)."
+            "Denser at 1. Sorted"
+            return np.flipud(np.cos(( 2*np.arange(1, N + 1) - 1) * np.pi / (4 * N)))
+        
+        "Return nparray with N+1 nodes in (-1, 1)"
+        "Denser at -1, 1. Symmetrical. Sorted"
+        return np.flipud(np.cos(( 2*np.arange(1, N + 1) - 1) * np.pi / (2 * N)))
+        
 
     @staticmethod
     def getFourierConst(ft):

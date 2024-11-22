@@ -18,4 +18,4 @@ for ticker, asset in assets.items():
 if __name__ == "__main__":
     CollectionModels.fourierML_saveData(assetspl=assetspl)
     CollectionModels.fourierML_loadupData_xgb(assetspl=assetspl)
-    CollectionModels.fourierML_loadupData_rp(assetspl=assetspl)
+    #CollectionModels.fourierML_loadupData_rp(assetspl=assetspl)

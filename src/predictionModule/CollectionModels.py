@@ -7,6 +7,7 @@ from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.Portfolio import Portfolio
 from src.common.AssetDataPolars import AssetDataPolars
 from src.predictionModule.FourierML import FourierML
+from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 
 import pandas as pd
 from typing import Dict
@@ -17,49 +18,63 @@ class CollectionModels():
 
     @staticmethod
     def fourierML_saveData(assetspl: Dict[str, AssetDataPolars]):
-        startTrainDate=pd.Timestamp(year=2011, month=5, day=1, tz="UTC")
-        endTrainDate=pd.Timestamp(year=2015, month=6, day=21, tz="UTC")
-        startTestDate=pd.Timestamp(year=2015, month=6, day=22, tz="UTC")
-        endTestDate=pd.Timestamp(year=2016, month=6, day=22, tz="UTC")
-        startValDate=pd.Timestamp(year=2016, month=6, day=23, tz="UTC")
-        endValDate=pd.Timestamp(year=2017, month=6, day=22, tz="UTC")
+        params = {
+            'idxLengthOneMonth': 21,
+            'fouriercutoff': 100,
+            'spareDatesRatio': 1.0,
+            'multFactor': 8,
+            'lenClassInterval': 1,
+            'daysAfterPrediction': +1,
+            'numOfMonths': 13,
+            'classificationInterval': [0.0045], 
+        }
+        
+        startTrainDate=pd.Timestamp(year=2015, month=1, day=4, tz='UTC')
+        endTrainDate=pd.Timestamp(year=2015, month=2, day=4, tz='UTC')
+        startTestDate=pd.Timestamp(year=2015, month=2, day=5, tz='UTC')
+        endTestDate=pd.Timestamp(year=2015, month=2, day=11, tz="UTC")
+        startValDate=pd.Timestamp(year=2015, month=2, day=12, tz="UTC")
+        endValDate=pd.Timestamp(year=2015, month=2, day=19, tz="UTC")
         fourierML = FourierML(assetspl, 
                  trainStartDate = startTrainDate,
                  trainEndDate = endTrainDate,
                  testStartDate = startTestDate,
                  testEndDate = endTestDate,
                  valStartDate = startValDate,
-                 valEndDate = endValDate)
+                 valEndDate = endValDate,
+                 params = params)
 
         fourierML.prepareData()
 
-        fourierML.save_data('src/predictionModule/bin', "fourier_tr11to15_te15to16_va16to17_twenthiesSpare_1000Coeff_13mon")
+        fourierML.save_data('src/predictionModule/bin', "fourier_twomonth_test2015")
         print(fourierML.metadata)
 
     @staticmethod
     def fourierML_loadupData_xgb(assetspl: Dict[str, AssetDataPolars]):
         fourierML = FourierML(assetspl)
 
-        fourierML.load_data('src/predictionModule/bin', "fourier_tr11to15_te15to16_va16to17_twenthiesSpare_1000Coeff_13mon")
+        fourierML.load_data('src/predictionModule/bin', "fourier_twomonth_test2015")
 
         xgb_params = {
-            'n_estimators': 5000,
-            'learning_rate': 0.01,
-            "colsample_bytree": 0.1,
-            "colsample_bylevel": 0.9,
-            "max_depth": 7,
-            "subsample": 0.9
+                'n_estimators': 500,
+                'learning_rate': 0.01,
+                'max_depth': 5,
+                'subsample': 0.8,
+                'colsample_bytree': 0.05
         }
 
-        fourierML.traintestXGBModel(xgb_params)
+        fourierML.traintestXGBModel(xgb_params, name_model_name="fourier_twomonth_test2015_xgbModel", name_model_path="src/predictionModule/bin")
         print(fourierML.metadata)
-        fourierML.save_data('src/predictionModule/bin', "fourier_tr11to15_te15to16_va16to17_twenthiesSpare_1000Coeff_13mon_xgb")
+        fourierML.save_data('src/predictionModule/bin', "fourier_twomonth_test2015")
+        
+        ModelAnalyzer(fourierML).plot_label_distribution()
+        ModelAnalyzer(fourierML).plot_feature_importance()
 
     @staticmethod
     def fourierML_loadupData_rp(assetspl: Dict[str, AssetDataPolars]):
         fourierML = FourierML(assetspl)
 
-        fourierML.load_data('src/predictionModule/bin', "fourier_tr11to15_te15to16_va16to17_twenthiesSpare_1000Coeff_13mon")
+        fourierML.load_data('src/predictionModule/bin', "fourier_twomonth_test2015")
 
         rp_params = {
             'num_random_features': 10000,
@@ -69,6 +84,6 @@ class CollectionModels():
             'random_state': None
         }
 
-        fourierML.traintestRPModel(rp_params)
+        fourierML.traintestRPModel(rp_params, name_model_name="fourier_twomonth_test2015_xgbModel", name_model_path="src/predictionModule/bin")
         print(fourierML.metadata)
-        fourierML.save_data('src/predictionModule/bin', "fourier_tr11to15_te15to16_va16to17_twenthiesSpare_1000Coeff_13mon_rp")
+        fourierML.save_data('src/predictionModule/bin', "fourier_twomonth_test2015")

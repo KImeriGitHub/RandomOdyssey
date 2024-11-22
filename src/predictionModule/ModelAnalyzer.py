@@ -1,0 +1,167 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from collections import Counter
+from sklearn.metrics import accuracy_score, log_loss
+import xgboost as xgb
+from typing import Optional
+
+from src.predictionModule.IML import IML
+
+class ModelAnalyzer:
+    def __init__(self, module):
+        """
+        Initialize the ModelAnalyzer with a trained model instance.
+
+        Parameters:
+            model (FourierML): An instance of the FourierML class containing trained models and data.
+        """
+        self.module: IML = module
+        sns.set(style="whitegrid")
+
+    def plot_label_distribution(self, label_data: Optional[np.ndarray] = None, title: str = 'Percentage Distribution of Labels', palette: str = 'viridis'):
+        """
+        Plot the distribution of class labels with percentage annotations.
+
+        Parameters:
+            label_data (np.ndarray, optional): Array of labels to plot. Defaults to model's y_train.
+            title (str): Title of the plot.
+            palette (str): Seaborn color palette.
+        
+        Returns:
+            float: Sum of squared percentages.
+        """
+        if label_data is None:
+            label_data = self.module.y_train
+        
+        plt.figure(figsize=(10,6))
+        total = len(label_data)
+        ax = sns.countplot(x=label_data, palette=palette)
+
+        # Add percentage labels on top of each bar
+        percentages = []
+        for p in ax.patches:
+            perc = '{:.1f}%'.format(100 * p.get_height() / total)
+            percentages.append(p.get_height() / total)
+            height = p.get_height()
+            ax.text(p.get_x() + p.get_width()/2., height + 1, perc, ha="center") 
+        
+        plt.title(title)
+        plt.xlabel('Class Labels')
+        plt.ylabel('Frequency')
+        plt.show()
+        
+        percentage_sum_sq = np.sum(np.array(percentages) ** 2)
+        print(f"Sum of squared percentages: {percentage_sum_sq:.4f}")
+        return percentage_sum_sq
+
+    def plot_per_class_accuracy(self, y_val: np.ndarray, y_pred: np.ndarray, test_acc: float, test_loss: float):
+        """
+        Calculate and plot per-class accuracy.
+
+        Parameters:
+            y_val (np.ndarray): True labels for validation set.
+            y_pred (np.ndarray): Predicted labels for validation set.
+            test_acc (float): Overall test accuracy.
+            test_loss (float): Overall test log loss.
+        """
+        most_common_class = Counter(y_val).most_common(1)[0][0]
+        print(f"Most common class in validation set: {most_common_class}")
+
+        # Calculate per-class accuracy
+        classes = np.unique(y_val)
+        per_class_accuracy = {}
+        for cls in classes:
+            idx = (y_val == cls)
+            if np.sum(idx) > 0:
+                per_class_accuracy[cls] = accuracy_score(y_val[idx], y_pred[idx])
+            else:
+                per_class_accuracy[cls] = np.nan  # Handle classes with no samples
+
+        # Plot per-class accuracy
+        plt.figure(figsize=(10, 6))
+        plt.bar(per_class_accuracy.keys(), per_class_accuracy.values(), color='skyblue')
+        plt.xlabel('Classes')
+        plt.ylabel('Accuracy')
+        plt.title('Per-Class Accuracy')
+        plt.ylim(0, 1)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
+
+        # Print overall metrics
+        print(f'\nTest Accuracy: {test_acc:.4f}')
+        print(f'Test Log Loss: {test_loss:.4f}')
+
+    def plot_feature_importance(self, model_name: str = 'XGBoostModel', max_num_features: int = 20, height: float = 0.5, save_path: str = 'feature_importance.png'):
+        """
+        Plot and save feature importance for a specified model.
+
+        Parameters:
+            model_name (str): Name of the model attribute in the IML instance.
+            max_num_features (int): Maximum number of top features to display.
+            height (float): Height of each feature importance bar.
+            save_path (str): File path to save the plot.
+        """
+        model = getattr(self.module, model_name, None)
+        if model is None:
+            raise ValueError(f"Model '{model_name}' not found in the provided model instance.")
+
+        plt.figure(figsize=(10, 8))
+        xgb.plot_importance(model, max_num_features=max_num_features, height=height, show_values=False)
+        plt.title(f'Feature Importance for {model_name}')
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches='tight')
+        plt.show()
+        print(f"Feature importance plot saved to {save_path}")
+
+    def plot_lstm_absolute_diff_histogram(self, 
+                                          bins: int = 50, color: str = 'skyblue', 
+                                          edgecolor: str = 'black', alpha: float = 0.7, 
+                                          title: str = 'Histogram of Absolute Differences Between Predictions and Actual Values'):
+        """
+        Plot a histogram of absolute differences between LSTM predictions and actual values.
+
+        Parameters:
+            bins (int): Number of bins for the histogram.
+            color (str): Color of the histogram bars.
+            edgecolor (str): Edge color of the histogram bars.
+            alpha (float): Transparency level of the histogram bars.
+            title (str): Title of the histogram.
+        """
+        # Generate predictions using LSTM on X_test_timeseries
+        if self.module.LSTMModel is None:
+            raise ValueError("LSTM model is not trained or not available.")
+        
+        # Prepare and scale the test data
+        X_test_scaled = self.module.scaler_X.transform(self.module.X_test_timeseries)
+        X_test_scaled = X_test_scaled.reshape((X_test_scaled.shape[0], 1, -1))
+        
+        # Predict with LSTM
+        predictions_scaled = self.module.LSTMModel.predict(X_test_scaled)
+
+        # Inverse scale the predictions and actual values
+        predictions = self.module.scaler_y.inverse_transform(predictions_scaled)
+        y_test = self.module.y_test_timeseries
+
+        # Compute the absolute differences
+        abs_diff = np.abs(predictions.flatten() - y_test.flatten())
+        rel_diff = abs_diff / np.abs(y_test.flatten())
+        
+        # Plot the histogram of absolute differences
+        plt.figure(figsize=(10,6))
+        plt.hist(abs_diff, bins=bins, color=color, edgecolor=edgecolor, alpha=alpha)
+        plt.title(title)
+        plt.xlabel('Absolute Difference')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        plt.show()
+        
+        # Plot the histogram of absolute differences
+        plt.figure(figsize=(10,6))
+        plt.hist(rel_diff, bins=bins, color=color, edgecolor=edgecolor, alpha=alpha)
+        plt.title(title)
+        plt.xlabel('Relative Difference')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        plt.show()
