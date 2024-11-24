@@ -94,7 +94,7 @@ class CollectionSimulations():
             num_months_var=num_months_var,
             num_choices= num_choices, 
             stoplossratio = stoplossratio,
-            printBuySell=False
+            printBuySell=True
         )
 
         # Set up simulation

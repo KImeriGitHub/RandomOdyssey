@@ -16,16 +16,17 @@ for ticker, asset in assets.items():
 ## FourierML
 
 ## Quadratic Ascend
+"""
 CollectionSimulations.QuadraticAscend(assets = assetspl, 
                                                       stoplossratio = 0.88,
                                                       num_choices=1,
                                                       num_months=6,
                                                       num_months_var=6)
 """
-slrList = np.arange(0.77, 0.95, 0.005).round(3).tolist()
-nmon = np.arange(1, 7, 1).round(0).tolist()
-nmonvar = np.arange(1, 13, 1).round(0).tolist()
-nchoice = np.arange(2, 3, 1).round(0).tolist()
+slrList = np.arange(0.875, 0.88, 0.005).round(3).tolist()
+nmon = np.arange(6, 7, 1).round(0).tolist()
+nmonvar = np.arange(12, 13, 1).round(0).tolist()
+nchoice = np.arange(5, 6, 1).round(0).tolist()
 
 for nc in nchoice:
     for nm in nmon:
@@ -41,4 +42,3 @@ for nc in nchoice:
                                                       num_months_var=nmv)
                 gc.collect()
                 time.sleep(0.1)
-                """

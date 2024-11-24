@@ -41,9 +41,9 @@ class OutsourceLoader:
 
         fullSharePrice: pd.DataFrame = yf.download(tickerHandle, period="max")
         if not fullSharePrice.empty:
-            assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close", "Adj Close"]]
-            assetData.shareprice.columns = ["Open", "High", "Low", "Close", "Adj Close"]
-            assetData.volume = fullSharePrice["Volume"]
+            assetData.shareprice = fullSharePrice[["Open", "High", "Low", "Close", "Adj Close", "Volume"]]
+            assetData.shareprice.columns = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
+            assetData.volume = assetData.shareprice["Volume"]
             assetData.dividends = stock.dividends
             assetData.splits = stock.splits
 
