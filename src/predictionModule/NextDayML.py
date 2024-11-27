@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import bisect
+import holidays
 from typing import Dict, List
 import xgboost as xgb
 from scipy.interpolate import CubicSpline
@@ -11,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 from sklearn.utils import shuffle
 from ta import add_all_ta_features
+
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
@@ -141,6 +143,66 @@ class NextDayML(IML):
         features = row[1:]
         return features
     
+    def getSeasonalFeatures(timestamp: pd.Timestamp, country: str = 'US') -> dict:
+        """
+        Extracts comprehensive date-related features for a given pd.Timestamp.
+
+        Parameters:
+            timestamp (pd.Timestamp): The date to extract features from.
+            country (str): The country code for holiday determination (default: 'US').
+
+        Returns:
+            dict: A dictionary containing the extracted date features.
+        """
+        if not isinstance(timestamp, pd.Timestamp):
+            raise ValueError("The input must be a pandas Timestamp object.")
+
+        # Ensure timestamp is timezone-aware (if not already)
+        timestamp = timestamp.tz_localize('UTC') if timestamp.tz is None else timestamp
+
+        # Define holidays for the given country
+        country_holidays = holidays.CountryHoliday(country)
+        holiday_dates = sorted(country_holidays.keys())
+
+        # General date-related features
+        features = {
+            "year": timestamp.year,
+            "month": timestamp.month,
+            "day": timestamp.day,
+            "day_of_week": timestamp.dayofweek,  # Monday=0, Sunday=6
+            "day_name": timestamp.day_name(),
+            "is_weekend": timestamp.dayofweek >= 5,  # True if Saturday or Sunday
+            "is_holiday": timestamp in country_holidays,
+            "holiday_name": country_holidays.get(timestamp, None),  # Name of the holiday if it's a holiday
+            "quarter": timestamp.quarter,
+            "week_of_year": timestamp.isocalendar()[1],  # Week number of the year
+            "is_month_start": timestamp.is_month_start,
+            "is_month_end": timestamp.is_month_end,
+            "is_year_start": timestamp.is_year_start,
+            "is_year_end": timestamp.is_year_end,
+        }
+
+        # Additional features
+        features.update({
+            "days_to_next_holiday": (
+                min((h - timestamp).days for h in holiday_dates if h >= timestamp)
+                if holiday_dates else None
+            ),
+            "days_since_last_holiday": (
+                min((timestamp - h).days for h in holiday_dates if h <= timestamp)
+                if holiday_dates else None
+            ),
+            "season": timestamp.month % 12 // 3 + 1,  # 1: Winter, 2: Spring, 3: Summer, 4: Fall
+            "is_trading_day": timestamp.dayofweek < 5 and timestamp not in country_holidays,  # Example; adjust for real calendars
+            "week_part": (
+                "early" if timestamp.dayofweek < 2 
+                else "mid" if timestamp.dayofweek < 4 
+                else "late"
+            )
+        })
+
+        return features
+    
     def getFeaturesAndTarget(self, asset: AssetDataPolars, pricesArray: pl.Series, asset_taExt: pd.DataFrame, date: pd.Timestamp):
         aidx = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
 
@@ -156,7 +218,8 @@ class NextDayML(IML):
         futurePricesScaled = futurePrices/pastPrices[-1]
         
         taRow = asset_taExt.iloc[aidx, :].values.tolist()
-        
+        country = asset.about.get('country','United States')
+
         features = []
         
         #Fourier Features
@@ -170,6 +233,9 @@ class NextDayML(IML):
         taFeatures = self.getTAFeatures(taRow)
         features.extend(taFeatures)
         
+        #Seasonal Events Features
+        seasFeatures = self.getSeasonalFeatures(date, country)
+        features.extend(seasFeatures)
         
         target = self.getTargetFromPrice(futurePricesScaled-1, self.classificationInterval)
         target = target[0]
