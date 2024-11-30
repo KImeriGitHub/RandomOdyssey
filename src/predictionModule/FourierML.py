@@ -48,10 +48,9 @@ class FourierML(IML):
         self.valEndDate: pd.Timestamp = valEndDate
         
         # Update default parameters with any provided parameters
-        if params is None:
-            self.params = self.DEFAULT_PARAMS
-        else:
-            self.params = params
+        self.params = self.DEFAULT_PARAMS
+        if params is not None:
+            self.params.update(params)
 
         # Assign parameters to instance variables
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']

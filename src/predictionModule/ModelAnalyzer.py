@@ -120,7 +120,7 @@ class ModelAnalyzer:
                                           edgecolor: str = 'black', alpha: float = 0.7, 
                                           title: str = 'Histogram of Absolute Differences Between Predictions and Actual Values'):
         """
-        Plot a histogram of absolute differences between LSTM predictions and actual values.
+        Plot histograms of absolute and relative differences between LSTM predictions and actual values.
 
         Parameters:
             bins (int): Number of bins for the histogram.
@@ -129,38 +129,47 @@ class ModelAnalyzer:
             alpha (float): Transparency level of the histogram bars.
             title (str): Title of the histogram.
         """
-        # Generate predictions using LSTM on X_test_timeseries
+        # Check if the LSTM model is trained
         if self.module.LSTMModel is None:
             raise ValueError("LSTM model is not trained or not available.")
         
         # Prepare and scale the test data
-        X_test_scaled = self.module.scaler_X.transform(self.module.X_test_timeseries)
-        X_test_scaled = X_test_scaled.reshape((X_test_scaled.shape[0], 1, -1))
+        X_test: np.array = self.module.X_test_timeseries
+        y_test: np.array = self.module.y_test_timeseries  # shape (:,1)
         
-        # Predict with LSTM
+        num_samples, timesteps, num_features = X_test.shape
+        
+        # Flatten X_test to 2D for scaling
+        X_test_flat = X_test.reshape(num_samples, -1)
+        X_test_scaled_flat = self.module.scaler_X.transform(X_test_flat)
+        X_test_scaled = X_test_scaled_flat.reshape(num_samples, timesteps, num_features)
+        
+        # Scale y_test
+        y_test_scaled = self.module.scaler_y.transform(y_test)
+        
+        # Predict with LSTM using scaled X_test
         predictions_scaled = self.module.LSTMModel.predict(X_test_scaled)
-
-        # Inverse scale the predictions and actual values
+        
+        # Inverse scale the predictions
         predictions = self.module.scaler_y.inverse_transform(predictions_scaled)
-        y_test = self.module.y_test_timeseries
-
-        # Compute the absolute differences
+        
+        # Compute the absolute and relative differences
         abs_diff = np.abs(predictions.flatten() - y_test.flatten())
         rel_diff = abs_diff / np.abs(y_test.flatten())
         
         # Plot the histogram of absolute differences
         plt.figure(figsize=(10,6))
         plt.hist(abs_diff, bins=bins, color=color, edgecolor=edgecolor, alpha=alpha)
-        plt.title(title)
+        plt.title('Histogram of Absolute Differences Between Predictions and Actual Values')
         plt.xlabel('Absolute Difference')
         plt.ylabel('Frequency')
         plt.grid(True)
         plt.show()
         
-        # Plot the histogram of absolute differences
+        # Plot the histogram of relative differences
         plt.figure(figsize=(10,6))
         plt.hist(rel_diff, bins=bins, color=color, edgecolor=edgecolor, alpha=alpha)
-        plt.title(title)
+        plt.title('Histogram of Relative Differences Between Predictions and Actual Values')
         plt.xlabel('Relative Difference')
         plt.ylabel('Frequency')
         plt.grid(True)

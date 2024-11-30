@@ -38,6 +38,8 @@ class IML(ABC):
         self.y_train_timeseries: np.array = np.array([])
         self.X_test_timeseries: np.array = np.array([])
         self.y_test_timeseries: np.array = np.array([])
+        self.X_val_timeseries: np.array = np.array([])
+        self.y_val_timeseries: np.array = np.array([])
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
         self.metadata: Dict = {}
@@ -151,10 +153,14 @@ class IML(ABC):
             'y_train': self.y_train,
             'X_test': self.X_test,
             'y_test': self.y_test,
+            'X_val': self.X_val,
+            'y_val': self.y_val,
             'X_train_timeseries': self.X_train_timeseries,
             'y_train_timeseries': self.y_train_timeseries,
             'X_test_timeseries': self.X_test_timeseries,
             'y_test_timeseries': self.y_test_timeseries,
+            'X_val_timeseries': self.X_val_timeseries,
+            'y_val_timeseries': self.y_val_timeseries,
             'trainStartDate': self.trainStartDate,
             'trainEndDate': self.trainEndDate,
             'testStartDate': self.testStartDate,
@@ -179,10 +185,14 @@ class IML(ABC):
         self.y_train = data.get('y_train', np.array([]))
         self.X_test = data.get('X_test', np.array([]))
         self.y_test = data.get('y_test', np.array([]))
+        self.X_val = data.get('X_val', np.array([]))
+        self.y_val = data.get('y_val', np.array([]))
         self.X_train_timeseries = data.get('X_train_timeseries', np.array([]))
         self.y_train_timeseries = data.get('y_train_timeseries', np.array([]))
         self.X_test_timeseries = data.get('X_test_timeseries', np.array([]))
         self.y_test_timeseries = data.get('y_test_timeseries', np.array([]))
+        self.X_val_timeseries = data.get('X_val_timeseries', np.array([]))
+        self.y_val_timeseries = data.get('y_val_timeseries', np.array([]))
         self.trainStartDate = data.get('trainStartDate', None)
         self.trainEndDate = data.get('trainEndDate', None)
         self.testStartDate = data.get('testStartDate', None)
@@ -348,9 +358,7 @@ class IML(ABC):
         # Initialize and train LGBM model
         self.LGBMModel = lgb.LGBMClassifier(**lgbm_params)
         self.LGBMModel.fit(X_train, y_train,
-                        eval_set=[(self.X_test, self.y_test)],
-                        early_stopping_rounds=lgbm_params["early_stopping_rounds"],
-                        verbose=100)
+                        eval_set=[(self.X_test, self.y_test)])
         
         if name_model_path != "" and name_model_name != "":
             self.saveLGBMModel(name_model_path, name_model_name)
@@ -427,25 +435,28 @@ class IML(ABC):
     def traintestLSTMModel(self, lstm_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:
             self.prepareData()
-
+        
         # Split the data
         X_train = self.X_train_timeseries
         X_test = self.X_test_timeseries
         y_train = self.y_train_timeseries #shape (:,1)
         y_test = self.y_test_timeseries #shape (:,1)
         
-        X_train = self.scaler_X.fit_transform(X_train)
-        X_test = self.scaler_X.transform(X_test)
+        num_samples, timesteps, num_features = X_train.shape
         
-        y_train = self.scaler_y.fit_transform(y_train)
-        y_test = self.scaler_y.transform(y_test)
+        X_train_flat = X_train.reshape(num_samples, -1)
+        X_test_flat = X_test.reshape(X_test.shape[0], -1)
+        
+        X_train_scaled_flat = self.scaler_X.fit_transform(X_train_flat)
+        X_test_scaled_flat = self.scaler_X.transform(X_test_flat)
+        
+        y_train_scaled = self.scaler_y.fit_transform(y_train)
+        y_test_scaled = self.scaler_y.transform(y_test)
         
         # Reshape the data to (num_samples, timesteps, features)
-        timesteps = 1
-        num_features = X_train.shape[1] // timesteps
-        X_train = X_train.reshape((X_train.shape[0], timesteps, num_features))
-        X_test = X_test.reshape((X_test.shape[0], timesteps, num_features))
-        
+        X_train_scaled = X_train_scaled_flat.reshape(num_samples, timesteps, num_features)
+        X_test_scaled = X_test_scaled_flat.reshape(X_test.shape[0], timesteps, num_features)  
+              
         # Define LSTM parameters
         if lstm_params is None:
             lstm_params = {

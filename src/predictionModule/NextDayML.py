@@ -12,6 +12,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 from sklearn.utils import shuffle
 from ta import add_all_ta_features
+import holidays
+import pycountry
+from sympy import isprime
 
 
 from src.common.AssetDataPolars import AssetDataPolars
@@ -24,11 +27,13 @@ class NextDayML(IML):
     # Class-level default parameters
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
-        'fouriercutoff': 25,
+        'fouriercutoff': 15,
         'spareDatesRatio': 0.5,
         'multFactor': 8,
         'daysAfterPrediction': 1,
         'monthsHorizon': 13,
+        'timesteps': 25,
+        'classificationInterval': [0.0045], 
     }
 
     def __init__(self, assets: Dict[str, AssetDataPolars], 
@@ -50,10 +55,9 @@ class NextDayML(IML):
         self.valEndDate: pd.Timestamp = valEndDate
         
         # Update default parameters with any provided parameters
-        if params is None:
-            self.params = self.DEFAULT_PARAMS
-        else:
-            self.params = params
+        self.params = self.DEFAULT_PARAMS
+        if params is not None:
+            self.params.update(params)
 
         # Assign parameters to instance variables
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
@@ -62,7 +66,8 @@ class NextDayML(IML):
         self.multFactor = self.params['multFactor']
         self.daysAfterPrediction = self.params['daysAfterPrediction']
         self.monthsHorizon = self.params['monthsHorizon']
-        self.classificationInterval = self.params['classificationInterval'] 
+        self.classificationInterval = self.params['classificationInterval']
+        self.timesteps = self.params['timesteps'] 
 
         # Store parameters in metadata
         self.metadata['NextDayML_params'] = self.params
@@ -106,7 +111,7 @@ class NextDayML(IML):
             raise Warning("fouriercutoff is bigger than the array itself.")
 
         features = []
-        features.append((1-fx0/fxend)/(n-1))
+        features.append((1-fx0/fxend)/(n-1)) if abs(fxend)>1e-10 else features.append(0)
         endIdx = np.min([len(res_cos), fouriercutoff])
         features.extend(res_cos[1:endIdx])
         features.extend(res_sin[1:endIdx])
@@ -121,6 +126,7 @@ class NextDayML(IML):
         absErrorVector = np.abs(fourierInputSmooth - f_reconstructed) / 2.0
         features.append(np.mean(absErrorVector ** 2)) # squared mean error
         features.append(np.mean(absErrorVector)) # absolute mean error
+        features.append(np.sqrt(np.mean(absErrorVector))) # root absolute mean error
         
         return features
     
@@ -141,106 +147,169 @@ class NextDayML(IML):
     
     def getTAFeatures(self, row:list):
         features = row[1:]
+        features = np.clip(features, -1e16, 1e16)
         return features
     
-    def getSeasonalFeatures(timestamp: pd.Timestamp, country: str = 'US') -> dict:
+    def getCategoryFeatures(self, asset: AssetDataPolars):
+        categories = [
+            'other', 'industrials', 'healthcare', 'technology', 'utilities', 
+            'financial-services', 'basic-materials', 'real-estate', 
+            'consumer-defensive', 'energy', 'communication-services', 
+            'consumer-cyclical'
+        ]
+
+        # Create a mapping dictionary
+        category_to_num = {category: idx for idx, category in enumerate(categories)}
+        
+        return [category_to_num.get(asset.about.get('sectorKey','other'),0)]
+    
+    def __USHolidays(self):
+        country_holidays = holidays.CountryHoliday('US')
+        for y in range(self.trainStartDate.year-1, self.valEndDate.year+2):
+            country_holidays.get(f"{y}")
+        return sorted(country_holidays.keys())
+        
+    def getSeasonalFeatures(self, timestamp: pd.Timestamp, country: str = 'US') -> dict:
         """
         Extracts comprehensive date-related features for a given pd.Timestamp.
-
         Parameters:
             timestamp (pd.Timestamp): The date to extract features from.
             country (str): The country code for holiday determination (default: 'US').
-
         Returns:
             dict: A dictionary containing the extracted date features.
         """
         if not isinstance(timestamp, pd.Timestamp):
             raise ValueError("The input must be a pandas Timestamp object.")
-
         # Ensure timestamp is timezone-aware (if not already)
         timestamp = timestamp.tz_localize('UTC') if timestamp.tz is None else timestamp
-
-        # Define holidays for the given country
-        country_holidays = holidays.CountryHoliday(country)
-        holiday_dates = sorted(country_holidays.keys())
-
+        tstz = timestamp.tz
+        holiday_dates = self.USHolidays
+        
         # General date-related features
-        features = {
-            "year": timestamp.year,
-            "month": timestamp.month,
-            "day": timestamp.day,
-            "day_of_week": timestamp.dayofweek,  # Monday=0, Sunday=6
-            "day_name": timestamp.day_name(),
-            "is_weekend": timestamp.dayofweek >= 5,  # True if Saturday or Sunday
-            "is_holiday": timestamp in country_holidays,
-            "holiday_name": country_holidays.get(timestamp, None),  # Name of the holiday if it's a holiday
-            "quarter": timestamp.quarter,
-            "week_of_year": timestamp.isocalendar()[1],  # Week number of the year
-            "is_month_start": timestamp.is_month_start,
-            "is_month_end": timestamp.is_month_end,
-            "is_year_start": timestamp.is_year_start,
-            "is_year_end": timestamp.is_year_end,
+        features_names = {
+            "month",
+            "day",
+            "day_of_week",  # Monday=0, Sunday=6
+            #"day_name": timestamp.day_name(),
+            #"is_weekend": timestamp.dayofweek >= 5,  # True if Saturday or Sunday
+            #"is_holiday": timestamp in country_holidays,
+            #"holiday_name": country_holidays.get(timestamp, None),  # Name of the holiday if it's a holiday
+            "quarter",
+            "week_of_year",  # Week number of the year
+            "is_month_start",
+            "is_month_end",
+            #"is_year_start": timestamp.is_year_start,
+            #"is_year_end": timestamp.is_year_end,
+            "days_to_next_holiday",
+            "days_since_last_holiday",
+            "season",  # 1: Winter, 2: Spring, 3: Summer, 4: Fall
+            "week_part",
         }
-
-        # Additional features
-        features.update({
-            "days_to_next_holiday": (
-                min((h - timestamp).days for h in holiday_dates if h >= timestamp)
-                if holiday_dates else None
-            ),
-            "days_since_last_holiday": (
-                min((timestamp - h).days for h in holiday_dates if h <= timestamp)
-                if holiday_dates else None
-            ),
-            "season": timestamp.month % 12 // 3 + 1,  # 1: Winter, 2: Spring, 3: Summer, 4: Fall
-            "is_trading_day": timestamp.dayofweek < 5 and timestamp not in country_holidays,  # Example; adjust for real calendars
-            "week_part": (
-                "early" if timestamp.dayofweek < 2 
-                else "mid" if timestamp.dayofweek < 4 
-                else "late"
-            )
-        })
-
+        # General date-related features
+        features = [timestamp.month,
+                    timestamp.day,
+                    timestamp.dayofweek,  # Monday=0, Sunday=6
+                    #"day_name": timestamp.day_name(),
+                    #"is_weekend": timestamp.dayofweek >= 5,  # True if Saturday or Sunday
+                    #"is_holiday": timestamp in country_holidays,
+                    #"holiday_name": country_holidays.get(timestamp, None),  # Name of the holiday if it's a holiday
+                    timestamp.quarter,
+                    timestamp.isocalendar()[1],  # Week number of the year
+                    timestamp.is_month_start,
+                    timestamp.is_month_end,
+                    #"is_year_start": timestamp.is_year_start,
+                    #"is_year_end": timestamp.is_year_end,
+                    np.min([(pd.Timestamp(h, tz=tstz) - timestamp).days for h in holiday_dates if pd.Timestamp(h, tz=tstz) >= timestamp]),
+                    np.min([(timestamp - pd.Timestamp(h, tz=tstz)).days for h in holiday_dates if pd.Timestamp(h, tz=tstz) <= timestamp]),
+                    timestamp.month % 12 // 3 + 1,  # 1: Winter, 2: Spring, 3: Summer, 4: Fall
+                    (0 if timestamp.dayofweek < 2 else 1 if timestamp.dayofweek < 4 else 2),
+        ]
         return features
     
     def getFeaturesAndTarget(self, asset: AssetDataPolars, pricesArray: pl.Series, asset_taExt: pd.DataFrame, date: pd.Timestamp):
         aidx = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
 
         m = self.monthsHorizon
-        if (aidx - m * self.idxLengthOneMonth)<0:
+        numTimesteps = self.timesteps
+        if (aidx - m * self.idxLengthOneMonth-1-numTimesteps)<0:
             print("Warning! Asset History does not span far enough.")
         if (aidx + self.daysAfterPrediction)>len(pricesArray):
             print("Warning! Future price does not exist in asset.")
-
-        pastPrices = pricesArray.slice(aidx-m * self.idxLengthOneMonth, m * self.idxLengthOneMonth +1).to_numpy()
-        pastPricesScaled = pastPrices/pastPrices[-1]
+            
         futurePrices = pricesArray.slice((aidx+self.daysAfterPrediction),1).to_numpy()
-        futurePricesScaled = futurePrices/pastPrices[-1]
-        
-        taRow = asset_taExt.iloc[aidx, :].values.tolist()
-        country = asset.about.get('country','United States')
-
+        futurePricesScaled = futurePrices/pricesArray.item(aidx)
         features = []
-        
-        #Fourier Features
-        fourierFeatures = self.getFourierFeaturesFromPrice(pastPricesScaled, 
-                                             multFactor=self.multFactor, 
-                                             fouriercutoff=self.fouriercutoff,
-                                             includeLastPrice = False)
-        features.extend(fourierFeatures)
-        
-        #TA Features
-        taFeatures = self.getTAFeatures(taRow)
-        features.extend(taFeatures)
-        
-        #Seasonal Events Features
-        seasFeatures = self.getSeasonalFeatures(date, country)
-        features.extend(seasFeatures)
+        features_timeseries = []
+        for ts in range(1,numTimesteps+1):
+            timestepIdx = numTimesteps - ts
+            aidxTs = aidx - timestepIdx
+            featuresTs = []
+            
+            pastPricesExt = pricesArray.slice(aidxTs - m*self.idxLengthOneMonth - 1, m * self.idxLengthOneMonth + 2).to_numpy()
+            pastPrices = pastPricesExt[1:]
+            pastPrices_log = np.log(pastPrices)
+            pastPricesDiff = np.diff(pastPricesExt)
+            pastPricesDiff = np.clip(pastPricesDiff, -1e3, 1e3)
+            pastPricesDiff_exp = np.exp(pastPricesDiff)-1.0
+            pastPricesDiff_exp = np.clip(pastPricesDiff_exp, -1e3, 1e3)
+            pastReturns = pastPricesExt[1:] / pastPricesExt[:-1]
+            pastReturns = np.clip(pastReturns, -1e3, 1e3)
+            pastReturns_log = np.exp(pastReturns-1.0)
+            pastReturns_log = np.clip(pastReturns_log, -1e3, 1e3)
+            pastPricesScaled = pastPrices/pastPrices[-1]
+
+            taRow = asset_taExt.iloc[aidxTs, :].values.tolist()
+            country = pycountry.countries.lookup(asset.about.get('country','United States')).alpha_2
+
+            #Mathematical Features
+            mathFeatures = [pastPrices[-1], pastPrices_log[-1], pastPricesDiff[-1], pastPricesDiff_exp[-1], pastReturns[-1], pastReturns_log[-1]]
+            featuresTs.extend(mathFeatures)
+
+            #Fourier Features
+            fourierFeatures = self.getFourierFeaturesFromPrice(pastPrices, 
+                                                 multFactor=self.multFactor, 
+                                                 fouriercutoff=self.fouriercutoff)
+            featuresTs.extend(fourierFeatures)
+            fourierFeatures_log = self.getFourierFeaturesFromPrice(pastPrices_log, 
+                                                 multFactor=self.multFactor, 
+                                                 fouriercutoff=self.fouriercutoff)
+            featuresTs.extend(fourierFeatures_log)
+            fourierDiffFeatures = self.getFourierFeaturesFromPrice([0] + pastPricesDiff + [0], 
+                                                 multFactor=self.multFactor, 
+                                                 fouriercutoff=self.fouriercutoff)
+            featuresTs.extend(fourierDiffFeatures[1:]) #first element would be 0
+            fourierDiffFeatures_exp = self.getFourierFeaturesFromPrice([0] + pastPricesDiff_exp + [0], 
+                                                 multFactor=self.multFactor, 
+                                                 fouriercutoff=self.fouriercutoff)
+            featuresTs.extend(fourierDiffFeatures_exp[1:]) #first element would be 0
+            fourierReturnFeatures = self.getFourierFeaturesFromPrice([1.0] + pastReturns + [1.0], 
+                                                 multFactor=self.multFactor, 
+                                                 fouriercutoff=self.fouriercutoff)
+            featuresTs.extend(fourierReturnFeatures[1:]) #first element would be 0
+            fourierReturnFeatures_log = self.getFourierFeaturesFromPrice([1.0] + pastReturns_log + [1.0], 
+                                                 multFactor=self.multFactor, 
+                                                 fouriercutoff=self.fouriercutoff)
+            featuresTs.extend(fourierReturnFeatures_log[1:]) #first element would be 0
+
+            #TA Features
+            taFeatures = self.getTAFeatures(taRow)
+            featuresTs.extend(taFeatures)
+
+            #Categorical Informations
+            catFeatures = self.getCategoryFeatures(asset)
+            featuresTs.extend(catFeatures)
+
+            #Seasonal Events Features
+            seasFeatures = self.getSeasonalFeatures(date, country)
+            featuresTs.extend(seasFeatures)
+            
+            features.extend(featuresTs)
+            features_timeseries.append(featuresTs)
         
         target = self.getTargetFromPrice(futurePricesScaled-1, self.classificationInterval)
         target = target[0]
 
-        return features, target, pastPrices/pastPrices[-1], futurePrices/pastPrices[-1]
+        return features, target, features_timeseries, futurePrices/pastPrices[-1]
 
     def prepareData(self):
         Xtrain = []
@@ -255,13 +324,14 @@ class NextDayML(IML):
         ytestPrice = []
         XvalPrice = []
         yvalPrice = []
-        lenClassInterval = len(self.classificationInterval)
         processedCounter=0
 
         if self.trainStartDate == None \
              or self.trainEndDate == None \
              or self.testStartDate == None:
             raise ValueError("Data collection time is not defined.")
+        
+        self.USHolidays = self.__USHolidays()
 
         #Main Loop
         for ticker, asset in self.__assets.items():
@@ -272,6 +342,7 @@ class NextDayML(IML):
             processedCounter += 1
             
             # Technical Analysis extension
+            # This might lead to leakage if the ta process 'future' data
             asset_taExt = add_all_ta_features(asset.shareprice.to_pandas(), open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True)
 
             # Prepare Dates
@@ -325,15 +396,17 @@ class NextDayML(IML):
                 yvalPrice.append(targetTimeSeries)
 
         self.X_train = np.array(Xtrain)
-        self.y_train = np.array(ytrain).astype(int)+lenClassInterval
+        self.y_train = np.array(ytrain).astype(int)
         self.X_test = np.array(Xtest)
-        self.y_test = np.array(ytest).astype(int)+lenClassInterval
+        self.y_test = np.array(ytest).astype(int)
         self.X_val = np.array(Xval)
-        self.y_val = np.array(yval).astype(int)+lenClassInterval
+        self.y_val = np.array(yval).astype(int)
         self.X_train_timeseries = np.array(XtrainPrice)
         self.y_train_timeseries = np.array(ytrainPrice)
         self.X_test_timeseries = np.array(XtestPrice)
         self.y_test_timeseries = np.array(ytestPrice)
+        self.X_val_timeseries = np.array(XvalPrice)
+        self.y_val_timeseries = np.array(yvalPrice).astype(int)
 
         self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
         self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
@@ -375,7 +448,7 @@ class NextDayML(IML):
 
         else:
             # Prepare classification features
-            features = self.getFeaturesFromPrice(
+            features, _, _, _ = self.getFeaturesAndTarget(
                 pastPrices=priceArray / priceArray[-1], 
                 multFactor=self.multFactor, 
                 fouriercutoff=self.fouriercutoff,
