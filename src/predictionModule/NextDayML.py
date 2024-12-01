@@ -32,8 +32,8 @@ class NextDayML(IML):
         'multFactor': 8,
         'daysAfterPrediction': 1,
         'monthsHorizon': 13,
-        'timesteps': 25,
-        'classificationInterval': [0.0045], 
+        'timesteps': 5,
+        'classificationInterval': [-0.0045, 0.0045], 
     }
 
     def __init__(self, assets: Dict[str, AssetDataPolars], 
@@ -134,7 +134,7 @@ class NextDayML(IML):
     def getTargetFromPrice(futureReturn: np.array, sorted_array: list[float]) -> list[float]:
         """
         Args:
-            futureReturn (np.array): array of returns. (Ought to be around 1)
+            futureReturn (np.array): array of returns. (Ought to be around 0)
             sorted_array (list[float]): sorted list of floats. (Ought to be centered at 0)
 
         Returns:
@@ -236,8 +236,9 @@ class NextDayML(IML):
         if (aidx + self.daysAfterPrediction)>len(pricesArray):
             print("Warning! Future price does not exist in asset.")
             
-        futurePrices = pricesArray.slice((aidx+self.daysAfterPrediction),1).to_numpy()
-        futurePricesScaled = futurePrices/pricesArray.item(aidx)
+        curPrices = pricesArray.item(aidx)
+        futurePrices = np.array([pricesArray.item(aidx+self.daysAfterPrediction)])
+        futurePricesScaled = futurePrices/curPrices
         features = []
         features_timeseries = []
         for ts in range(1,numTimesteps+1):
@@ -253,16 +254,16 @@ class NextDayML(IML):
             pastPricesDiff_exp = np.exp(pastPricesDiff)-1.0
             pastPricesDiff_exp = np.clip(pastPricesDiff_exp, -1e3, 1e3)
             pastReturns = pastPricesExt[1:] / pastPricesExt[:-1]
-            pastReturns = np.clip(pastReturns, -1e3, 1e3)
-            pastReturns_log = np.exp(pastReturns-1.0)
+            pastReturns = np.clip(pastReturns, 1e-5, 1e5)
+            pastReturns_log = np.log(pastReturns)
             pastReturns_log = np.clip(pastReturns_log, -1e3, 1e3)
-            pastPricesScaled = pastPrices/pastPrices[-1]
+            pastPricesScaled = pastPrices/curPrices
 
             taRow = asset_taExt.iloc[aidxTs, :].values.tolist()
             country = pycountry.countries.lookup(asset.about.get('country','United States')).alpha_2
 
             #Mathematical Features
-            mathFeatures = [pastPrices[-1], pastPrices_log[-1], pastPricesDiff[-1], pastPricesDiff_exp[-1], pastReturns[-1], pastReturns_log[-1]]
+            mathFeatures = [pastPrices[-1], pastPrices_log[-1], pastPricesDiff[-1], pastPricesDiff_exp[-1], pastReturns[-1], pastReturns_log[-1], pastPricesScaled[-1]]
             featuresTs.extend(mathFeatures)
 
             #Fourier Features
@@ -274,14 +275,14 @@ class NextDayML(IML):
                                                  multFactor=self.multFactor, 
                                                  fouriercutoff=self.fouriercutoff)
             featuresTs.extend(fourierFeatures_log)
-            fourierDiffFeatures = self.getFourierFeaturesFromPrice([0] + pastPricesDiff + [0], 
-                                                 multFactor=self.multFactor, 
-                                                 fouriercutoff=self.fouriercutoff)
-            featuresTs.extend(fourierDiffFeatures[1:]) #first element would be 0
-            fourierDiffFeatures_exp = self.getFourierFeaturesFromPrice([0] + pastPricesDiff_exp + [0], 
-                                                 multFactor=self.multFactor, 
-                                                 fouriercutoff=self.fouriercutoff)
-            featuresTs.extend(fourierDiffFeatures_exp[1:]) #first element would be 0
+            #fourierDiffFeatures = self.getFourierFeaturesFromPrice([0] + pastPricesDiff + [0], 
+            #                                     multFactor=self.multFactor, 
+            #                                     fouriercutoff=self.fouriercutoff)
+            #featuresTs.extend(fourierDiffFeatures[1:]) #first element would be 0
+            #fourierDiffFeatures_exp = self.getFourierFeaturesFromPrice([0] + pastPricesDiff_exp + [0], 
+            #                                     multFactor=self.multFactor, 
+            #                                     fouriercutoff=self.fouriercutoff)
+            #featuresTs.extend(fourierDiffFeatures_exp[1:]) #first element would be 0
             fourierReturnFeatures = self.getFourierFeaturesFromPrice([1.0] + pastReturns + [1.0], 
                                                  multFactor=self.multFactor, 
                                                  fouriercutoff=self.fouriercutoff)
@@ -309,7 +310,7 @@ class NextDayML(IML):
         target = self.getTargetFromPrice(futurePricesScaled-1, self.classificationInterval)
         target = target[0]
 
-        return features, target, features_timeseries, futurePrices/pastPrices[-1]
+        return features, target, features_timeseries, futurePrices
 
     def prepareData(self):
         Xtrain = []

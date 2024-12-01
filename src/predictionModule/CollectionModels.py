@@ -115,11 +115,10 @@ class CollectionModels():
     @staticmethod
     def NextDayML_saveData(assetspl: Dict[str, AssetDataPolars], save_name:str):
         params = {
-            'spareDatesRatio': 0.07,
+            'spareDatesRatio': 0.1,
             'daysAfterPrediction': 1,
             'monthsHorizon': 13,
-            'timesteps': 25,
-            'spareDatesRatio': 0.5,
+            'timesteps': 5,
         }
         
         startTrainDate=pd.Timestamp(year=2011, month=9, day=4, tz='UTC')

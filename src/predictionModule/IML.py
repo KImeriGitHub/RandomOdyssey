@@ -10,6 +10,7 @@ from typing import Dict
 from tensorflow.keras.models import load_model, Sequential
 from tensorflow.keras import layers, models
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import accuracy_score, log_loss
 from sklearn.preprocessing import MinMaxScaler
 
@@ -348,10 +349,11 @@ class IML(ABC):
             lgbm_params = {
                 'n_estimators': 500,
                 'learning_rate': 0.01,
-                'max_depth': 5,
+                'max_depth': 8,
                 'num_leaves': 32,
                 'colsample_bytree': 0.1,
-                'early_stopping_rounds': 100
+                'subsample': 0.8,
+                'early_stopping_round': 100
             }
         self.metadata['LGBMModel_params'] = lgbm_params
 
@@ -456,7 +458,7 @@ class IML(ABC):
         # Reshape the data to (num_samples, timesteps, features)
         X_train_scaled = X_train_scaled_flat.reshape(num_samples, timesteps, num_features)
         X_test_scaled = X_test_scaled_flat.reshape(X_test.shape[0], timesteps, num_features)  
-              
+        
         # Define LSTM parameters
         if lstm_params is None:
             lstm_params = {
@@ -468,9 +470,17 @@ class IML(ABC):
                 'loss': 'mean_absolute_error',
                 'metrics': ['mae'],
                 'epochs': 20,
-                'batch_size': 128
+                'batch_size': 128,
+                'early_stopping_round': 50
             }
         self.metadata['LSTMModel_params'] = lstm_params
+
+        # Define callbacks
+        early_stop = EarlyStopping(
+            monitor='val_loss',
+            patience=lstm_params['early_stopping_round'],
+            restore_best_weights=True
+        )
         
         # Initialize and compile LSTM model
         self.LSTMModel = models.Sequential([
@@ -486,11 +496,12 @@ class IML(ABC):
 
         # Train the model
         history = self.LSTMModel.fit(
-            X_train,
-            y_train, 
+            X_train_scaled,
+            y_train_scaled, 
             batch_size = lstm_params['batch_size'], 
             epochs = lstm_params['epochs'], 
-            validation_data=(X_test, y_test),
+            validation_data=(X_test_scaled, y_test_scaled),
+            callbacks=[early_stop],
             verbose=1
         )
         
@@ -498,7 +509,7 @@ class IML(ABC):
             self.saveLSTMModel(name_model_path, name_model_name)
 
         # Evaluate the model
-        test_loss, test_mae  = self.LSTMModel.evaluate(X_test, y_test, verbose=0)
+        test_loss, test_mae  = self.LSTMModel.evaluate(X_test_scaled, y_test_scaled, verbose=0)
         self.metadata['LSTMModel_loss'] = test_loss
         self.metadata['LSTMModel_mae'] = test_mae
         print(f'\nTest MAE: {test_mae:.4f}')
