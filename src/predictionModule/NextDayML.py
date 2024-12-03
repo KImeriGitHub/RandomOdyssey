@@ -11,14 +11,15 @@ from dataclasses import dataclass
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 from sklearn.utils import shuffle
-from ta import add_all_ta_features
 import holidays
 import pycountry
-from sympy import isprime
+from sklearn.preprocessing import MinMaxScaler
 
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
+
+from src.mathTools.TAIndicators import TAIndicators
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 from src.mathTools.RandomProjectionClassifier import RandomProjectionClassifier as rpc
 from src.predictionModule.IML import IML
@@ -73,60 +74,15 @@ class NextDayML(IML):
         self.metadata['NextDayML_params'] = self.params
 
     @staticmethod
-    def getFourierFeaturesFromPrice(pastPrices: np.array, multFactor: int = 8, fouriercutoff: int = 25) -> list[float]:
-        """
-        Args:
-            pastPrices (np.array): slice of prices
-            multFactor (int, optional): adds that many points in between. Defaults to 8.
-            fouriercutoff (int, optional): from all fourier coeffs cutoff that many. Defaults to 25.
-
-        Raises:
-            ValueError: if pastPrices invalid
-            Warning: if fouriercutoff too high
-
-        Returns:
-            list[float]: features: first one is average increase, then cos coeffs, then sin coeffs
-        """
-        n = len(pastPrices)
-        if n==1:
-            raise ValueError("Input to getFeatureFromPrice are invalid.")
-        if n==2:
-            return pastPrices
+    def getFourierFeaturesFromPrice(pastPrices: np.array, multFactor: int, fouriercutoff: int) -> list[float]:
+        relDiffPerStep, res_cos, res_sin = SeriesExpansion.getFourierInterpCoeff(pastPrices, multFactor, fouriercutoff)
         
-        x = np.arange(n)
-        fx0: float = pastPrices[0]
-        fxend: float = pastPrices[n-1]
-        yfit = fx0 + (fxend-fx0)*(x/(n-1))
-        skewedPrices = pastPrices-yfit
+        resarr, rsme = SeriesExpansion.getFourierInterpFunct(res_cos, res_sin, pastPrices)
         
-        fourierInput = np.concatenate((skewedPrices,np.flipud(-skewedPrices[:(n-1)])))
-        cs = CubicSpline(np.arange(len(fourierInput)), fourierInput, bc_type='periodic')
-        fourierInputSpline = cs(np.linspace(0, len(fourierInput)-1, 1 + (len(fourierInput) - 1) * multFactor))
-        fourierInputSmooth = gaussian_filter1d(fourierInputSpline, sigma=np.max([multFactor//4,1]), mode = "wrap")
-        res_cos, res_sin = SeriesExpansion.getFourierConst(fourierInputSmooth)
-        res_cos=res_cos.T.real.flatten().tolist()
-        res_sin=res_sin.T.real.flatten().tolist()
-
-        if len(res_cos) < fouriercutoff:
-            raise Warning("fouriercutoff is bigger than the array itself.")
-
         features = []
-        features.append((1-fx0/fxend)/(n-1)) if abs(fxend)>1e-10 else features.append(0)
-        endIdx = np.min([len(res_cos), fouriercutoff])
-        features.extend(res_cos[1:endIdx])
-        features.extend(res_sin[1:endIdx])
-        
-        # Add fourier approximation error to the features
-        N = len(fourierInputSmooth)
-        t = np.linspace(-np.pi, np.pi, N, endpoint=False)
-        f_reconstructed = np.zeros(N)
-        for n in range(0,endIdx):
-            f_reconstructed += res_cos[n] * np.cos(n * t) + res_sin[n] * np.sin(n * t)
-        # Calculate the mean squared error between the original and reconstructed functions
-        absErrorVector = np.abs(fourierInputSmooth - f_reconstructed) / 2.0
-        features.append(np.mean(absErrorVector ** 2)) # squared mean error
-        features.append(np.mean(absErrorVector)) # absolute mean error
-        features.append(np.sqrt(np.mean(absErrorVector))) # root absolute mean error
+        features.extend(res_cos[1:])
+        features.extend(res_sin[1:])
+        features.append(rsme)
         
         return features
     
@@ -145,23 +101,30 @@ class NextDayML(IML):
 
         return indices
     
-    def getTAFeatures(self, row:list):
-        features = row[1:]
-        features = np.clip(features, -1e16, 1e16)
+    def getTAFeatures(self, priceClose: float, priceAdjClose: float, taRow_rel:list, taRow_minmax:list):
+        features = [val/priceClose*priceAdjClose for val in taRow_rel]
+        features.extend([val*priceAdjClose for val in taRow_minmax])
+        features = np.clip(features, -1e10, 1e10)
         return features
     
-    def getCategoryFeatures(self, asset: AssetDataPolars):
+    def getCategoryFeatures(self, asset: AssetDataPolars, doScaling = False):
         categories = [
             'other', 'industrials', 'healthcare', 'technology', 'utilities', 
             'financial-services', 'basic-materials', 'real-estate', 
             'consumer-defensive', 'energy', 'communication-services', 
             'consumer-cyclical'
         ]
+        num_cat = float(len(categories))
 
         # Create a mapping dictionary
         category_to_num = {category: idx for idx, category in enumerate(categories)}
         
-        return [category_to_num.get(asset.about.get('sectorKey','other'),0)]
+        res = [category_to_num.get(asset.about.get('sectorKey','other'),0)] 
+        
+        if doScaling:
+            res = [val / num_cat for val in category_to_num]
+        
+        return res
     
     def __USHolidays(self):
         country_holidays = holidays.CountryHoliday('US')
@@ -221,12 +184,17 @@ class NextDayML(IML):
                     #"is_year_end": timestamp.is_year_end,
                     np.min([(pd.Timestamp(h, tz=tstz) - timestamp).days for h in holiday_dates if pd.Timestamp(h, tz=tstz) >= timestamp]),
                     np.min([(timestamp - pd.Timestamp(h, tz=tstz)).days for h in holiday_dates if pd.Timestamp(h, tz=tstz) <= timestamp]),
-                    timestamp.month % 12 // 3 + 1,  # 1: Winter, 2: Spring, 3: Summer, 4: Fall
+                    (timestamp.month % 12 // 3 + 1),  # 1: Winter, 2: Spring, 3: Summer, 4: Fall
                     (0 if timestamp.dayofweek < 2 else 1 if timestamp.dayofweek < 4 else 2),
         ]
-        return features
+        
+        scalingFactorArray = np.array([1/12.0, 1/31.0, 1/6.0, 1/4.0, 1/52.0, 1.0, 1.0, 1/90.0, 1/90.0, 1/4.0, 1/2.0])
+        
+        features_scaled = list(np.array(features) * scalingFactorArray)
+        
+        return features_scaled
     
-    def getFeaturesAndTarget(self, asset: AssetDataPolars, pricesArray: pl.Series, asset_taExt: pd.DataFrame, date: pd.Timestamp):
+    def getFeaturesAndTarget(self, asset: AssetDataPolars, pricesArray: pl.Series, asset_TA_relativeColumns: pd.DataFrame, asset_TA_minmaxed: pd.DataFrame, date: pd.Timestamp):
         aidx = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
 
         m = self.monthsHorizon
@@ -237,8 +205,10 @@ class NextDayML(IML):
             print("Warning! Future price does not exist in asset.")
             
         curPrices = pricesArray.item(aidx)
-        futurePrices = np.array([pricesArray.item(aidx+self.daysAfterPrediction)])
-        futurePricesScaled = futurePrices/curPrices
+        futurePrices = pricesArray.slice(aidx+self.daysAfterPrediction,5).to_numpy()
+        futureMeanPrice = futurePrices.mean()
+        futureMeanPriceScaled = futureMeanPrice/curPrices
+        
         features = []
         features_timeseries = []
         for ts in range(1,numTimesteps+1):
@@ -248,7 +218,7 @@ class NextDayML(IML):
             
             pastPricesExt = pricesArray.slice(aidxTs - m*self.idxLengthOneMonth - 1, m * self.idxLengthOneMonth + 2).to_numpy()
             pastPrices = pastPricesExt[1:]
-            pastPrices_log = np.log(pastPrices)
+            pastPrices_log = np.log(pastPrices)/np.log(pastPrices[-1])*pastPrices[-1]
             pastPricesDiff = np.diff(pastPricesExt)
             pastPricesDiff = np.clip(pastPricesDiff, -1e3, 1e3)
             pastPricesDiff_exp = np.exp(pastPricesDiff)-1.0
@@ -257,49 +227,44 @@ class NextDayML(IML):
             pastReturns = np.clip(pastReturns, 1e-5, 1e5)
             pastReturns_log = np.log(pastReturns)
             pastReturns_log = np.clip(pastReturns_log, -1e3, 1e3)
-            pastPricesScaled = pastPrices/curPrices
+            pastPricesScaled = pastPrices/pastPrices[-1]
 
-            taRow = asset_taExt.iloc[aidxTs, :].values.tolist()
+            taRow_rel = asset_TA_relativeColumns.iloc[aidxTs, :].values.tolist()
+            taRow_minmax = asset_TA_minmaxed.iloc[aidxTs, :].values.tolist()
+            closePrice = asset_TA_relativeColumns['Close'].iloc[aidxTs]
             country = pycountry.countries.lookup(asset.about.get('country','United States')).alpha_2
 
             #Mathematical Features
-            mathFeatures = [pastPrices[-1], pastPrices_log[-1], pastPricesDiff[-1], pastPricesDiff_exp[-1], pastReturns[-1], pastReturns_log[-1], pastPricesScaled[-1]]
+            mathFeatures = [pastPrices[-1], pastPrices_log[-1], pastPricesDiff[-1], pastPricesDiff_exp[-1], pastReturns[-1], pastReturns_log[-1]]
             featuresTs.extend(mathFeatures)
 
             #Fourier Features
-            fourierFeatures = self.getFourierFeaturesFromPrice(pastPrices, 
-                                                 multFactor=self.multFactor, 
-                                                 fouriercutoff=self.fouriercutoff)
-            featuresTs.extend(fourierFeatures)
-            fourierFeatures_log = self.getFourierFeaturesFromPrice(pastPrices_log, 
-                                                 multFactor=self.multFactor, 
-                                                 fouriercutoff=self.fouriercutoff)
-            featuresTs.extend(fourierFeatures_log)
-            #fourierDiffFeatures = self.getFourierFeaturesFromPrice([0] + pastPricesDiff + [0], 
-            #                                     multFactor=self.multFactor, 
-            #                                     fouriercutoff=self.fouriercutoff)
-            #featuresTs.extend(fourierDiffFeatures[1:]) #first element would be 0
-            #fourierDiffFeatures_exp = self.getFourierFeaturesFromPrice([0] + pastPricesDiff_exp + [0], 
-            #                                     multFactor=self.multFactor, 
-            #                                     fouriercutoff=self.fouriercutoff)
-            #featuresTs.extend(fourierDiffFeatures_exp[1:]) #first element would be 0
-            fourierReturnFeatures = self.getFourierFeaturesFromPrice([1.0] + pastReturns + [1.0], 
-                                                 multFactor=self.multFactor, 
-                                                 fouriercutoff=self.fouriercutoff)
-            featuresTs.extend(fourierReturnFeatures[1:]) #first element would be 0
-            fourierReturnFeatures_log = self.getFourierFeaturesFromPrice([1.0] + pastReturns_log + [1.0], 
-                                                 multFactor=self.multFactor, 
-                                                 fouriercutoff=self.fouriercutoff)
-            featuresTs.extend(fourierReturnFeatures_log[1:]) #first element would be 0
+            fourierFeatures = self.getFourierFeaturesFromPrice(pastPrices, self.multFactor, self.fouriercutoff)
+            featuresTs.extend(fourierFeatures) 
+            
+            fourierFeatures_log = self.getFourierFeaturesFromPrice(pastPrices_log, self.multFactor, self.fouriercutoff)
+            featuresTs.extend(fourierFeatures_log) 
+            
+            #fourierDiffFeatures = self.getFourierFeaturesFromPrice([0] + pastPricesDiff + [0], self.multFactor, self.fouriercutoff)
+            #featuresTs.extend(fourierDiffFeatures[1:]) 
+            
+            #fourierDiffFeatures_exp = self.getFourierFeaturesFromPrice([0] + pastPricesDiff_exp + [0], self.multFactor, self.fouriercutoff)
+            #featuresTs.extend(fourierDiffFeatures_exp[1:]) 
+            
+            fourierReturnFeatures = self.getFourierFeaturesFromPrice([1.0] + pastReturns + [1.0], self.multFactor, self.fouriercutoff)
+            featuresTs.extend(fourierReturnFeatures) 
+            
+            fourierReturnFeatures_log = self.getFourierFeaturesFromPrice([1.0] + pastReturns_log + [1.0], self.multFactor, self.fouriercutoff)
+            featuresTs.extend(fourierReturnFeatures_log) 
 
             #TA Features
-            taFeatures = self.getTAFeatures(taRow)
+            taFeatures = self.getTAFeatures(closePrice, pastPrices[-1], taRow_rel,taRow_minmax)
             featuresTs.extend(taFeatures)
 
             #Categorical Informations
             catFeatures = self.getCategoryFeatures(asset)
             featuresTs.extend(catFeatures)
-
+            
             #Seasonal Events Features
             seasFeatures = self.getSeasonalFeatures(date, country)
             featuresTs.extend(seasFeatures)
@@ -307,10 +272,10 @@ class NextDayML(IML):
             features.extend(featuresTs)
             features_timeseries.append(featuresTs)
         
-        target = self.getTargetFromPrice(futurePricesScaled-1, self.classificationInterval)
+        target = self.getTargetFromPrice([futureMeanPriceScaled-1], self.classificationInterval)
         target = target[0]
 
-        return features, target, features_timeseries, futurePrices
+        return features, target, features_timeseries, futureMeanPrice
 
     def prepareData(self):
         Xtrain = []
@@ -344,7 +309,9 @@ class NextDayML(IML):
             
             # Technical Analysis extension
             # This might lead to leakage if the ta process 'future' data
-            asset_taExt = add_all_ta_features(asset.shareprice.to_pandas(), open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True)
+            taindic = TAIndicators(asset.shareprice)
+            asset_TA_relativeColumns = taindic.get_relativeColumns()
+            asset_TA_minmaxed = taindic.scale_MinMax()
 
             # Prepare Dates
             #TRAIN
@@ -371,7 +338,7 @@ class NextDayML(IML):
 
             # Prepare Train Data
             for date in spare_datesTrain:
-                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, asset_taExt, date)
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, asset_TA_relativeColumns, asset_TA_minmaxed, date)
 
                 Xtrain.append(features)
                 ytrain.append(target)
@@ -380,7 +347,7 @@ class NextDayML(IML):
 
             #Prepare Test Data
             for date in spare_datesTest:
-                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, asset_taExt, date)
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, asset_TA_relativeColumns, asset_TA_minmaxed, date)
 
                 Xtest.append(features)
                 ytest.append(target)
@@ -389,7 +356,7 @@ class NextDayML(IML):
 
             #Prepare Val Data
             for date in spare_datesVal:
-                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, asset_taExt, date)
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, pricesArray, asset_TA_relativeColumns, asset_TA_minmaxed, date)
 
                 Xval.append(features)
                 yval.append(target)

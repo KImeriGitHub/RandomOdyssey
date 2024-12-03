@@ -115,10 +115,10 @@ class CollectionModels():
     @staticmethod
     def NextDayML_saveData(assetspl: Dict[str, AssetDataPolars], save_name:str):
         params = {
-            'spareDatesRatio': 0.1,
+            'spareDatesRatio': 0.5,
             'daysAfterPrediction': 1,
             'monthsHorizon': 13,
-            'timesteps': 5,
+            'timesteps': 7,
         }
         
         startTrainDate=pd.Timestamp(year=2011, month=9, day=4, tz='UTC')
@@ -193,15 +193,16 @@ class CollectionModels():
         nextDayML.load_data('src/predictionModule/bin', loadup_name)
         
         lstm_params = {
-            'units': 128,
-            'dropout': 0.2,
+            'units': 256,
+            'dropout': 0.1,
             'dense_units': 64,
             'activation': 'relu',
             'optimizer': 'adam',
             'loss': 'mean_absolute_error',
             'metrics': ['mae'],
-            'epochs': 20,
-            'batch_size': 128
+            'epochs': 1000,
+            'batch_size': 256,
+            'early_stopping_round':50,
         }
 
         nextDayML.traintestLSTMModel(lstm_params, name_model_name=loadup_name+"_lstmModel", name_model_path="src/predictionModule/bin")
