@@ -205,7 +205,7 @@ class NextDayML(IML):
             print("Warning! Future price does not exist in asset.")
             
         curPrices = pricesArray.item(aidx)
-        futurePrices = pricesArray.slice(aidx+self.daysAfterPrediction,5).to_numpy()
+        futurePrices = pricesArray.slice(aidx+self.daysAfterPrediction,10).to_numpy()
         futureMeanPrice = futurePrices.mean()
         futureMeanPriceScaled = futureMeanPrice/curPrices
         
@@ -275,7 +275,7 @@ class NextDayML(IML):
         target = self.getTargetFromPrice([futureMeanPriceScaled-1], self.classificationInterval)
         target = target[0]
 
-        return features, target, features_timeseries, futureMeanPrice
+        return features, target, features_timeseries, [futureMeanPrice]
 
     def prepareData(self):
         Xtrain = []
@@ -374,7 +374,7 @@ class NextDayML(IML):
         self.X_test_timeseries = np.array(XtestPrice)
         self.y_test_timeseries = np.array(ytestPrice)
         self.X_val_timeseries = np.array(XvalPrice)
-        self.y_val_timeseries = np.array(yvalPrice).astype(int)
+        self.y_val_timeseries = np.array(yvalPrice)
 
         self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
         self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
