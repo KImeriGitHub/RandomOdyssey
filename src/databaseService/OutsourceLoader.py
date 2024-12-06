@@ -107,7 +107,7 @@ class OutsourceLoader:
                 random_value = np.random.normal(mean, sigma)
 
                 # Assign the random value to the missing date
-                s.iloc[idx] = random_value
+                s.iloc[idx] = random_value if random_value>0 else mean
             else:
                 # If only one neighbor is available, fill with that price
                 if prev_idx >= 0:
