@@ -218,14 +218,15 @@ class NextDayML(IML):
             
             pastPricesExt = pricesArray.slice(aidxTs - m*self.idxLengthOneMonth - 1, m * self.idxLengthOneMonth + 2).to_numpy()
             pastPrices = pastPricesExt[1:]
-            pastPrices_log = np.log(pastPrices)/np.log(pastPrices[-1])*pastPrices[-1]
+            clipedPastPrices = np.clip(pastPrices, 1e-10, 1e10) #Adj Close can be negative
+            pastPrices_log = np.log(clipedPastPrices+1)/np.log(clipedPastPrices[-1]+1)*clipedPastPrices[-1]
             pastPricesDiff = np.diff(pastPricesExt)
             pastPricesDiff = np.clip(pastPricesDiff, -1e3, 1e3)
             pastPricesDiff_exp = np.exp(pastPricesDiff)-1.0
             pastPricesDiff_exp = np.clip(pastPricesDiff_exp, -1e3, 1e3)
             pastReturns = pastPricesExt[1:] / pastPricesExt[:-1]
             pastReturns = np.clip(pastReturns, 1e-5, 1e5)
-            pastReturns_log = np.log(pastReturns)
+            pastReturns_log = np.log(pastReturns)+1.0
             pastReturns_log = np.clip(pastReturns_log, -1e3, 1e3)
             pastPricesScaled = pastPrices/pastPrices[-1]
 
@@ -240,22 +241,10 @@ class NextDayML(IML):
 
             #Fourier Features
             fourierFeatures = self.getFourierFeaturesFromPrice(pastPrices, self.multFactor, self.fouriercutoff)
-            featuresTs.extend(fourierFeatures) 
-            
-            fourierFeatures_log = self.getFourierFeaturesFromPrice(pastPrices_log, self.multFactor, self.fouriercutoff)
-            featuresTs.extend(fourierFeatures_log) 
-            
-            #fourierDiffFeatures = self.getFourierFeaturesFromPrice([0] + pastPricesDiff + [0], self.multFactor, self.fouriercutoff)
-            #featuresTs.extend(fourierDiffFeatures[1:]) 
-            
-            #fourierDiffFeatures_exp = self.getFourierFeaturesFromPrice([0] + pastPricesDiff_exp + [0], self.multFactor, self.fouriercutoff)
-            #featuresTs.extend(fourierDiffFeatures_exp[1:]) 
+            featuresTs.extend(fourierFeatures)
             
             fourierReturnFeatures = self.getFourierFeaturesFromPrice([1.0] + pastReturns + [1.0], self.multFactor, self.fouriercutoff)
             featuresTs.extend(fourierReturnFeatures) 
-            
-            fourierReturnFeatures_log = self.getFourierFeaturesFromPrice([1.0] + pastReturns_log + [1.0], self.multFactor, self.fouriercutoff)
-            featuresTs.extend(fourierReturnFeatures_log) 
 
             #TA Features
             taFeatures = self.getTAFeatures(closePrice, pastPrices[-1], taRow_rel,taRow_minmax)
