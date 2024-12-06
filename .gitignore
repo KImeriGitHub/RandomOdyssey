@@ -7,6 +7,9 @@ venv
 src/database/*
 !src/database/.gitignore
 
+secrets/*
+!secrets/.gitignore
+
 src/stockGroups/bin/*
 !src/stockGroups/bin/__init__.py
 
