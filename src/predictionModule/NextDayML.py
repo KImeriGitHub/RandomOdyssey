@@ -233,7 +233,7 @@ class NextDayML(IML):
             taRow_rel = asset_TA_relativeColumns.iloc[aidxTs, :].values.tolist()
             taRow_minmax = asset_TA_minmaxed.iloc[aidxTs, :].values.tolist()
             closePrice = asset_TA_relativeColumns['Close'].iloc[aidxTs]
-            country = pycountry.countries.lookup(asset.about.get('country','United States')).alpha_2
+            country = 'US' #pycountry.countries.lookup(asset.about.get('country','United States')).alpha_2 #Needs to be checked for all possible tickers. doesnt work for turkey
 
             #Mathematical Features
             mathFeatures = [pastPrices[-1], pastPrices_log[-1], pastPricesDiff[-1], pastPricesDiff_exp[-1], pastReturns[-1], pastReturns_log[-1]]
