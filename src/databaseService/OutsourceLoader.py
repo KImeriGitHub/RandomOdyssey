@@ -129,14 +129,14 @@ class OutsourceLoader:
         financials_quar = pd.merge(earnings_quar, income_statement_quar, on="fiscalDateEnding", how="outer")
         financials_quar.merge(balance_sheet_quar, on="fiscalDateEnding", how="outer")
         financials_quar.merge(cashFlow_quar, on="fiscalDateEnding", how="outer")
-        financials_quar['fiscalDateEnding'] = pd.to_datetime(financials_quar['fiscalDateEnding'])
+        financials_quar['fiscalDateEnding'] = pd.to_datetime(financials_quar['fiscalDateEnding'], utc=True)
         financials_quar = financials_quar.sort_values(by='fiscalDateEnding')
-        financials_quar['reportedDate'] = pd.to_datetime(financials_quar['reportedDate'])
+        financials_quar['reportedDate'] = pd.to_datetime(financials_quar['reportedDate'], utc=True)
         
         financials_an = pd.merge(earnings_an, income_statement_an, on="fiscalDateEnding", how="outer")
         financials_an.merge(balance_sheet_an, on="fiscalDateEnding", how="outer")
         financials_an.merge(cashFlow_an, on="fiscalDateEnding", how="outer")
-        financials_an['fiscalDateEnding'] = pd.to_datetime(financials_an['fiscalDateEnding'])
+        financials_an['fiscalDateEnding'] = pd.to_datetime(financials_an['fiscalDateEnding'], utc=True)
         financials_an = financials_an.sort_values(by='fiscalDateEnding')
         
         assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quar)

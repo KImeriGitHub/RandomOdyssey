@@ -86,20 +86,20 @@ class DataFrameTimeOperationsPandas:
 class DataFrameTimeOperationsPolars:
     def __init__(self, df: pl.DataFrame):
         self.df = df
-        index = self.df['Date']
+        self.index = self.df['Date']
+        if self.index.dtype.time_zone is None:
+            self.index = self.index.dt.replace_time_zone("UTC")
         # Check if index is datetime
-        is_sorted = index.is_sorted()
+        is_sorted = self.index.is_sorted()
 
     def getIndex(self, targetDate: pd.Timestamp, timeDelta: pd.Timedelta = pd.Timedelta(days=0.5)) -> int:
-        index = self.df["Date"]
-
-        lenIndex = len(index)
+        lenIndex = len(self.index)
 
         left, right = 0, lenIndex - 1
 
         while left <= right:
             mid = (left + right) // 2
-            currentDate = index[mid]
+            currentDate = self.index[mid]
 
             # Check if the difference is within the delta
             if abs(currentDate - targetDate) <= timeDelta:
@@ -115,7 +115,7 @@ class DataFrameTimeOperationsPolars:
     
     def getNextLowerIndex(self, targetDate: pd.Timestamp) -> int:
         # Get the index of dates
-        dateIndex = self.df['Date']
+        dateIndex = self.index
 
         # Check boundary conditions
         if targetDate < dateIndex[0]:
