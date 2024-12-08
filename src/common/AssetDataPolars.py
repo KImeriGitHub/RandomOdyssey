@@ -13,12 +13,13 @@ class AssetDataPolars:
     dividends: pl.DataFrame = None
     splits: pl.DataFrame = None
 
+    # Adj Close has No NAN Values and maybe extra dates than Close price
     adjClosePrice: pl.DataFrame = None
 
     #General Information about the asset in dict format
     about: Dict = None
+    sector: str = ""
 
     #financials
-    revenue: pl.DataFrame = None
-    EBITDA: pl.DataFrame= None
-    basicEPS: pl.DataFrame = None
+    financials_quarterly: pl.DataFrame = None
+    financials_annually: pl.DataFrame = None

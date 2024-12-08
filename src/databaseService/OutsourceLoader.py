@@ -2,24 +2,35 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import warnings
+import requests
+from alpha_vantage.timeseries import TimeSeries
+from alpha_vantage.fundamentaldata import FundamentalData
 
 from src.common.AssetData import AssetData
 from src.common.AssetDataService import AssetDataService
-
+from src.databaseService.CleanData import CleanData
 
 class OutsourceLoader:
-    outsourceOperator: str  # only yfinance supported
+    outsourceOperator: str  # 'yfinance' or 'alpha_vantage'
+    apiKey: str = None     # For alpha_vantage
 
-    def __init__(self, outsourceOperator: str):
+    def __init__(self, outsourceOperator: str, api_key: str = None):
         self.outsourceOperator = outsourceOperator
-        
-        if self.outsourceOperator != "yfinance":
-            raise NotImplementedError("Only yfinance supported as of now.")
+
+        if self.outsourceOperator not in ["yfinance", "alphaVantage"]:
+            raise NotImplementedError(f"Operator '{self.outsourceOperator}' not supported.")
+
+        if self.outsourceOperator == "alphaVantage" and api_key is None:
+            raise ValueError("API key is required for Alpha Vantage.")
+
+        self.apiKey = api_key
     
     def load(self, ticker: str) -> AssetData:
         assetData: AssetData = AssetDataService.defaultInstance()
         if self.outsourceOperator == "yfinance":
             self._load_from_yfinance(assetData, ticker)
+        elif self.outsourceOperator == "alphaVantage":
+            self._load_from_alpha_vantage(assetData, ticker)
         
         return assetData
 
@@ -36,6 +47,8 @@ class OutsourceLoader:
 
         try:
             assetData.about = stock.info
+            assetData.sector = assetData.about.get('sectorKey','other')
+            
         except:
             warnings.warn("Failed to retrieve INFO for ticker: " + tickerHandle)
 
@@ -48,72 +61,97 @@ class OutsourceLoader:
             assetData.splits = stock.splits
 
             assetData.adjClosePrice = assetData.shareprice["Adj Close"]
-            self._fill_NAN_to_BDays(assetData.adjClosePrice)
+            CleanData.fill_NAN_to_BusinessDays(assetData.adjClosePrice)
         else:
             raise ValueError("Failed to retrieve Price History for ticker: " + tickerHandle)
 
         try:
-            fullFinancials = stock.quarterly_financials
-            fullFinancials = fullFinancials.T
-            fullFinancials.index.name = 'Date'
-            fullFinancials.index = pd.to_datetime(fullFinancials.index)
+            fullFinancials_qu = stock.quarterly_financials
+            fullFinancials_qu = fullFinancials_qu.T
+            fullFinancials_qu.index.name = 'Date'
+            fullFinancials_qu.index = pd.to_datetime(fullFinancials_qu.index)
+            
+            fullFinancials_an = stock.financials
+            fullFinancials_an = fullFinancials_an.T
+            fullFinancials_an.index.name = 'Date'
+            fullFinancials_an.index = pd.to_datetime(fullFinancials_an.index)
 
-            assetData.revenue = fullFinancials["Total Revenue"]
-            assetData.EBITDA = fullFinancials["EBITDA"]
-            assetData.basicEPS = fullFinancials["Basic EPS"]
+            assetData.financials_quarterly = fullFinancials_qu.iloc[::-1].reset_index()
+            assetData.financials_annually = fullFinancials_an.iloc[::-1].reset_index()
         except:
             warnings.warn("Failed to retrieve Financial Data for ticker: " + tickerHandle)
+            
+    def _load_from_alpha_vantage(self, assetData: AssetData, tickerHandle: str):
+        # Initialize Alpha Vantage API clients
+        ts = TimeSeries(key=self.apiKey, output_format='pandas')
+        fd = FundamentalData(key=self.apiKey, output_format='pandas')
 
-    def _fill_NAN_to_BDays(self, s: pd.Series):
-        # PRE: s has index as dates. They are sorted.
-        # POST: Completes the dates to business days
-        #   Adds to nan values a normal random number with mean of the neighbouring prices and sigma half their difference.
+        try:
+            fullSharePrice, _ = ts.get_daily_adjusted(symbol=tickerHandle, outputsize='full')
+            income_statement_an, _ = fd.get_income_statement_annual(symbol=tickerHandle)
+            balance_sheet_an, _ = fd.get_balance_sheet_annual(symbol=tickerHandle)
+            cashFlow_an, _ = fd.get_cash_flow_annual(symbol=tickerHandle)
+            earnings_an, _ = fd.get_earnings_annual(symbol=tickerHandle)
+            income_statement_quar, _ = fd.get_income_statement_quarterly(symbol=tickerHandle)
+            balance_sheet_quar, _ = fd.get_balance_sheet_quarterly(symbol=tickerHandle)
+            cashFlow_quar, _ = fd.get_cash_flow_quarterly(symbol=tickerHandle)
+            earnings_quar, _ = fd.get_earnings_quarterly(symbol=tickerHandle)
+            company_overview, _ = fd.get_company_overview(symbol=tickerHandle)
+        except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+            # Log the error or pass as required
+            print(f"API call failed for {tickerHandle} due to error: {str(e)}")
+            pass
+            
+        assetData.ticker = company_overview["Symbol"].iloc[0]    
+        assetData.isin = ""
+        
+        # Configure time series data
+        fullSharePrice = fullSharePrice.iloc[::-1] #flip upside down
+        fullSharePrice.rename(columns={
+            '1. open': 'Open',
+            '2. high': 'High',
+            '3. low': 'Low',
+            '4. close': 'Close',
+            '5. adjusted close': 'Adj Close',
+            '6. volume': 'Volume',
+            '7. dividend amount': 'Dividends',
+            '8. split coefficient': 'Splits'
+        }, inplace=True)
+        fullSharePrice.index.name = 'Date'
+        assetData.shareprice = fullSharePrice[['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']]
+        assetData.volume = assetData.shareprice['Volume']
+        assetData.adjClosePrice = assetData.shareprice['Adj Close']
+        assetData.dividends = fullSharePrice['Dividends']
+        assetData.splits = fullSharePrice['Splits']
+        CleanData.fill_NAN_to_BusinessDays(assetData.adjClosePrice)
 
-        # Ensure the index is a DateTimeIndex
-        s.index = pd.to_datetime(s.index)
+        # Configure fundamental data
+        financials_quar = pd.merge(earnings_quar, income_statement_quar, on="fiscalDateEnding", how="outer")
+        financials_quar.merge(balance_sheet_quar, on="fiscalDateEnding", how="outer")
+        financials_quar.merge(cashFlow_quar, on="fiscalDateEnding", how="outer")
+        financials_quar['fiscalDateEnding'] = pd.to_datetime(financials_quar['fiscalDateEnding'])
+        financials_quar = financials_quar.sort_values(by='fiscalDateEnding')
+        financials_quar['reportedDate'] = pd.to_datetime(financials_quar['reportedDate'])
+        
+        financials_an = pd.merge(earnings_an, income_statement_an, on="fiscalDateEnding", how="outer")
+        financials_an.merge(balance_sheet_an, on="fiscalDateEnding", how="outer")
+        financials_an.merge(cashFlow_an, on="fiscalDateEnding", how="outer")
+        financials_an['fiscalDateEnding'] = pd.to_datetime(financials_an['fiscalDateEnding'])
+        financials_an = financials_an.sort_values(by='fiscalDateEnding')
+        
+        assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quar)
+        assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_an)
 
-        # Generate a date range covering all business days between the earliest and latest dates
-        date_range = pd.bdate_range(start=s.index.min(), end=s.index.max())
-
-        # Reindex the series to include all business days
-        s = s.reindex(date_range)
-
-        # Initialize a list to store indices of missing values
-        missing_indices = s[s.isna()].index
-
-        # Iterate over the missing dates to fill them
-        for date in missing_indices:
-            # Get the position of the current missing date
-            idx = s.index.get_loc(date)
-
-            # Find previous valid price
-            prev_idx = idx - 1
-            while prev_idx >= 0 and pd.isna(s.iloc[prev_idx]):
-                prev_idx -= 1
-
-            # Find next valid price
-            next_idx = idx + 1
-            while next_idx < len(s) and pd.isna(s.iloc[next_idx]):
-                next_idx += 1
-
-            # If both previous and next prices are found
-            if prev_idx >= 0 and next_idx < len(s):
-                prev_price = s.iloc[prev_idx]
-                next_price = s.iloc[next_idx]
-                mean = (prev_price + next_price) / 2
-                sigma = abs(next_price - prev_price) / 2
-
-                # Generate a random value from the normal distribution
-                random_value = np.random.normal(mean, sigma)
-
-                # Assign the random value to the missing date
-                s.iloc[idx] = random_value if random_value>0 else mean
-            else:
-                # If only one neighbor is available, fill with that price
-                if prev_idx >= 0:
-                    s.iloc[idx] = s.iloc[prev_idx]
-                elif next_idx < len(s):
-                    s.iloc[idx] = s.iloc[next_idx]
-                else:
-                    # If neither neighbor is available, leave as 0
-                    s.iloc[idx] = 0
+        # Configure company overview
+        assetData.about = company_overview.to_dict(orient='records')[0]
+        catDict = {
+            'OTHER': 'other', 
+            'MANUFACTURING':'industrials', 
+            'LIFE SCIENCES': 'healthcare', 
+            'TECHNOLOGY': 'technology', 
+            'FINANCE ': 'financial-services', 
+            'REAL ESTATE & CONSTRUCTION':'real-estate', 
+            'ENERGY & TRANSPORTATION': 'energy', 
+            'TRADE & SERVICES ': 'consumer-cyclical', 
+        }
+        assetData.sector = catDict[company_overview["Sector"].iloc[0]]

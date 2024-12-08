@@ -17,3 +17,5 @@ yfinance==0.2.49
 ta==0.11.0
 pycountry
 shap
+alpha_vantage==3.0.0
+requests
