@@ -88,21 +88,12 @@ class OutsourceLoader:
 
         try:
             fullSharePrice, _ = ts.get_daily_adjusted(symbol=tickerHandle, outputsize='full')
-            income_statement_an, _ = fd.get_income_statement_annual(symbol=tickerHandle)
-            balance_sheet_an, _ = fd.get_balance_sheet_annual(symbol=tickerHandle)
-            cashFlow_an, _ = fd.get_cash_flow_annual(symbol=tickerHandle)
-            earnings_an, _ = fd.get_earnings_annual(symbol=tickerHandle)
-            income_statement_quar, _ = fd.get_income_statement_quarterly(symbol=tickerHandle)
-            balance_sheet_quar, _ = fd.get_balance_sheet_quarterly(symbol=tickerHandle)
-            cashFlow_quar, _ = fd.get_cash_flow_quarterly(symbol=tickerHandle)
-            earnings_quar, _ = fd.get_earnings_quarterly(symbol=tickerHandle)
-            company_overview, _ = fd.get_company_overview(symbol=tickerHandle)
         except (requests.exceptions.RequestException, ValueError, KeyError) as e:
             # Log the error or pass as required
-            print(f"API call failed for {tickerHandle} due to error: {str(e)}")
-            pass
+            print(f"API call get_daily_adjusted failed for {tickerHandle} error: {str(e)}")
+            raise requests.exceptions.RequestException
             
-        assetData.ticker = company_overview["Symbol"].iloc[0]    
+        assetData.ticker = tickerHandle  
         assetData.isin = ""
         
         # Configure time series data
@@ -124,34 +115,53 @@ class OutsourceLoader:
         assetData.dividends = fullSharePrice['Dividends']
         assetData.splits = fullSharePrice['Splits']
         CleanData.fill_NAN_to_BusinessDays(assetData.adjClosePrice)
-
-        # Configure fundamental data
-        financials_quar = pd.merge(earnings_quar, income_statement_quar, on="fiscalDateEnding", how="outer")
-        financials_quar.merge(balance_sheet_quar, on="fiscalDateEnding", how="outer")
-        financials_quar.merge(cashFlow_quar, on="fiscalDateEnding", how="outer")
-        financials_quar['fiscalDateEnding'] = pd.to_datetime(financials_quar['fiscalDateEnding'], utc=True)
-        financials_quar = financials_quar.sort_values(by='fiscalDateEnding')
-        financials_quar['reportedDate'] = pd.to_datetime(financials_quar['reportedDate'], utc=True)
         
-        financials_an = pd.merge(earnings_an, income_statement_an, on="fiscalDateEnding", how="outer")
-        financials_an.merge(balance_sheet_an, on="fiscalDateEnding", how="outer")
-        financials_an.merge(cashFlow_an, on="fiscalDateEnding", how="outer")
-        financials_an['fiscalDateEnding'] = pd.to_datetime(financials_an['fiscalDateEnding'], utc=True)
-        financials_an = financials_an.sort_values(by='fiscalDateEnding')
-        
-        assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quar)
-        assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_an)
-
         # Configure company overview
-        assetData.about = company_overview.to_dict(orient='records')[0]
-        catDict = {
-            'OTHER': 'other', 
-            'MANUFACTURING':'industrials', 
-            'LIFE SCIENCES': 'healthcare', 
-            'TECHNOLOGY': 'technology', 
-            'FINANCE ': 'financial-services', 
-            'REAL ESTATE & CONSTRUCTION':'real-estate', 
-            'ENERGY & TRANSPORTATION': 'energy', 
-            'TRADE & SERVICES ': 'consumer-cyclical', 
-        }
-        assetData.sector = catDict[company_overview["Sector"].iloc[0]]
+        try:
+            company_overview, _ = fd.get_company_overview(symbol=tickerHandle)
+            
+            assetData.about = company_overview.to_dict(orient='records')[0]
+            catDict = {
+                'OTHER': 'other', 
+                'MANUFACTURING':'industrials', 
+                'LIFE SCIENCES': 'healthcare', 
+                'TECHNOLOGY': 'technology', 
+                'FINANCE': 'financial-services', 
+                'REAL ESTATE & CONSTRUCTION':'real-estate', 
+                'ENERGY & TRANSPORTATION': 'energy', 
+                'TRADE & SERVICES': 'consumer-cyclical', 
+            }
+            assetData.sector = catDict[company_overview["Sector"].iloc[0]]
+        except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+            # Log the error or pass as required
+            print(f"API call company_overview failed for {tickerHandle}: {str(e)}")
+        
+        # Configure fundamental data
+        try:
+            income_statement_an, _ = fd.get_income_statement_annual(symbol=tickerHandle)
+            balance_sheet_an, _ = fd.get_balance_sheet_annual(symbol=tickerHandle)
+            cashFlow_an, _ = fd.get_cash_flow_annual(symbol=tickerHandle)
+            earnings_an, _ = fd.get_earnings_annual(symbol=tickerHandle)
+            income_statement_quar, _ = fd.get_income_statement_quarterly(symbol=tickerHandle)
+            balance_sheet_quar, _ = fd.get_balance_sheet_quarterly(symbol=tickerHandle)
+            cashFlow_quar, _ = fd.get_cash_flow_quarterly(symbol=tickerHandle)
+            earnings_quar, _ = fd.get_earnings_quarterly(symbol=tickerHandle)
+            
+            financials_quar = pd.merge(earnings_quar, income_statement_quar, on="fiscalDateEnding", how="outer")
+            financials_quar.merge(balance_sheet_quar, on="fiscalDateEnding", how="outer")
+            financials_quar.merge(cashFlow_quar, on="fiscalDateEnding", how="outer")
+            financials_quar['fiscalDateEnding'] = pd.to_datetime(financials_quar['fiscalDateEnding'], utc=True)
+            financials_quar = financials_quar.sort_values(by='fiscalDateEnding')
+            financials_quar['reportedDate'] = pd.to_datetime(financials_quar['reportedDate'], utc=True)
+
+            financials_an = pd.merge(earnings_an, income_statement_an, on="fiscalDateEnding", how="outer")
+            financials_an.merge(balance_sheet_an, on="fiscalDateEnding", how="outer")
+            financials_an.merge(cashFlow_an, on="fiscalDateEnding", how="outer")
+            financials_an['fiscalDateEnding'] = pd.to_datetime(financials_an['fiscalDateEnding'], utc=True)
+            financials_an = financials_an.sort_values(by='fiscalDateEnding')
+
+            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quar)
+            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_an)
+        except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+            # Log the error or pass as required
+            print(f"API call fundametal data failed for {tickerHandle} due to error: {str(e)}")
