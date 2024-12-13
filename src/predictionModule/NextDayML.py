@@ -5,23 +5,15 @@ import bisect
 import holidays
 from typing import Dict, List
 import xgboost as xgb
-from scipy.interpolate import CubicSpline
-from scipy.ndimage import gaussian_filter1d
-from dataclasses import dataclass
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, log_loss
 from sklearn.utils import shuffle
-import holidays
 import pycountry
 from sklearn.preprocessing import MinMaxScaler
 
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
-
 from src.mathTools.TAIndicators import TAIndicators
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
-from src.mathTools.RandomProjectionClassifier import RandomProjectionClassifier as rpc
 from src.predictionModule.IML import IML
 
 class NextDayML(IML):
