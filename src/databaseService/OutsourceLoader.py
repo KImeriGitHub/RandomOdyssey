@@ -9,6 +9,7 @@ from alpha_vantage.fundamentaldata import FundamentalData
 from src.common.AssetData import AssetData
 from src.common.AssetDataService import AssetDataService
 from src.databaseService.CleanData import CleanData
+from src.databaseService.Parser import Parser_AV
 
 class OutsourceLoader:
     outsourceOperator: str  # 'yfinance' or 'alpha_vantage'
@@ -138,30 +139,29 @@ class OutsourceLoader:
         
         # Configure fundamental data
         try:
-            income_statement_an, _ = fd.get_income_statement_annual(symbol=tickerHandle)
-            balance_sheet_an, _ = fd.get_balance_sheet_annual(symbol=tickerHandle)
-            cashFlow_an, _ = fd.get_cash_flow_annual(symbol=tickerHandle)
-            earnings_an, _ = fd.get_earnings_annual(symbol=tickerHandle)
-            income_statement_quar, _ = fd.get_income_statement_quarterly(symbol=tickerHandle)
-            balance_sheet_quar, _ = fd.get_balance_sheet_quarterly(symbol=tickerHandle)
-            cashFlow_quar, _ = fd.get_cash_flow_quarterly(symbol=tickerHandle)
-            earnings_quar, _ = fd.get_earnings_quarterly(symbol=tickerHandle)
+            url = 'https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol='+tickerHandle+'&apikey='+self.apiKey
+            incStatementData = requests.get(url).json()
+            url = 'https://www.alphavantage.co/query?function=CASH_FLOW&symbol='+tickerHandle+'&apikey='+self.apiKey
+            cashFlowData = requests.get(url).json()
+            url = 'https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol='+tickerHandle+'&apikey='+self.apiKey
+            balanceSheetData = requests.get(url).json()
+            url = 'https://www.alphavantage.co/query?function=EARNINGS&symbol='+tickerHandle+'&apikey='+self.apiKey
+            earningsData = requests.get(url).json()
             
-            financials_quar = pd.merge(earnings_quar, income_statement_quar, on="fiscalDateEnding", how="outer")
-            financials_quar.merge(balance_sheet_quar, on="fiscalDateEnding", how="outer")
-            financials_quar.merge(cashFlow_quar, on="fiscalDateEnding", how="outer")
-            financials_quar['fiscalDateEnding'] = pd.to_datetime(financials_quar['fiscalDateEnding'], utc=True)
-            financials_quar = financials_quar.sort_values(by='fiscalDateEnding')
-            financials_quar['reportedDate'] = pd.to_datetime(financials_quar['reportedDate'], utc=True)
+            if incStatementData=={} or cashFlowData == {} or balanceSheetData == {} or earningsData == {}:
+                raise ImportError(f"Empty Financial Data")
+            
+            parser = Parser_AV(
+                incStatementData=incStatementData, 
+                cashFlowData=cashFlowData, 
+                balanceSheetData=balanceSheetData, 
+                earningsData=earningsData)
+            
+            financials_annually, financials_quarterly = parser.to_pandas()
 
-            financials_an = pd.merge(earnings_an, income_statement_an, on="fiscalDateEnding", how="outer")
-            financials_an.merge(balance_sheet_an, on="fiscalDateEnding", how="outer")
-            financials_an.merge(cashFlow_an, on="fiscalDateEnding", how="outer")
-            financials_an['fiscalDateEnding'] = pd.to_datetime(financials_an['fiscalDateEnding'], utc=True)
-            financials_an = financials_an.sort_values(by='fiscalDateEnding')
-
-            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quar)
-            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_an)
-        except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quarterly)
+            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually)
+            
+        except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required
             print(f"API call fundametal data failed for {tickerHandle} due to error: {str(e)}")

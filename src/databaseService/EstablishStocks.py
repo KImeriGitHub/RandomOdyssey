@@ -57,7 +57,10 @@ class EstablishStocks:
                 print(f"Got Stock data for {ticker}.")
                 allTickersYamlList.append(asset.ticker)
                 tEnd = time.time()
-                time.sleep(max(8.5 - (tEnd-tStart),0)) # due to max api calls (only alpha vantage)
+                if self.operator == "alphaVantage":
+                    time.sleep(max(8.5 - (tEnd-tStart),0)) # due to max api calls
+                if self.operator == "yfinance":
+                    time.sleep(max(2 - (tEnd-tStart),0))
             except:
                 print(f"EXCEPTION. Stock data for {ticker} not retrievable.")
         
