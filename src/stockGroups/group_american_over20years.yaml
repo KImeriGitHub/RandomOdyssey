@@ -27,7 +27,6 @@
 - ALK
 - AIN
 - ALB
-- AA
 - ALX
 - ARE
 - ATI
@@ -66,6 +65,7 @@
 - AIV
 - AIT
 - ATR
+- WTR
 - ABR
 - MT
 - ADM
@@ -82,6 +82,7 @@
 - AZN
 - T
 - ATO
+- AUO
 - ALV
 - AN
 - AZO
@@ -94,7 +95,6 @@
 - AZZ
 - MCI
 - BMI
-- BKR
 - BANC
 - BBVA
 - BBD
@@ -110,6 +110,7 @@
 - BCS
 - B
 - BAX
+- BFR
 - BCE
 - BZH
 - BDX
@@ -175,15 +176,16 @@
 - CNC
 - CNP
 - CPF
+- CTL
 - GIB
 - CRL
 - SCHW
 - CHE
 - CPK
 - CVX
-- CGA
 - CYD
 - CHH
+- CBK
 - CB
 - CHT
 - CHD
@@ -220,7 +222,6 @@
 - CNX
 - ED
 - STZ
-- CVG
 - COO
 - CLB
 - GLW
@@ -279,6 +280,7 @@
 - EME
 - EMR
 - ENB
+- ENR
 - ENS
 - E
 - ENLC
@@ -308,6 +310,7 @@
 - AGM
 - FRT
 - FSS
+- FII
 - FMN
 - FDX
 - FIS
@@ -360,7 +363,6 @@
 - GGB
 - GTY
 - GIL
-- GLT
 - GSK
 - GHI
 - GPN
@@ -387,6 +389,7 @@
 - THG
 - HOG
 - HMY
+- HRS
 - HHS
 - HIG
 - HVT
@@ -410,6 +413,7 @@
 - HON
 - HMN
 - HRL
+- HPT
 - HST
 - HOV
 - HSBC
@@ -424,7 +428,6 @@
 - IFN
 - INFY
 - ING
-- ISP
 - INGR
 - NSP
 - IHG
@@ -452,6 +455,7 @@
 - ITT
 - SJM
 - JBL
+- JEC
 - JHX
 - JOF
 - BTO
@@ -499,7 +503,7 @@
 - LII
 - LXP
 - LPL
-- LIN
+- LTM
 - LNC
 - LNN
 - LAD
@@ -519,7 +523,6 @@
 - MTW
 - MAN
 - MFC
-- MRO
 - MCS
 - MPX
 - HZO
@@ -586,6 +589,7 @@
 - NBR
 - NC
 - NFG
+- NGG
 - NHI
 - NOV
 - NPK
@@ -595,7 +599,6 @@
 - NTZ
 - NNI
 - NJR
-- NYCB
 - NYT
 - NWL
 - NEU
@@ -637,7 +640,6 @@
 - OPK
 - OPY
 - ORCL
-- ORAN
 - IX
 - ORA
 - OSK
@@ -737,6 +739,7 @@
 - SA
 - SEE
 - SRE
+- SNH
 - SXT
 - SCI
 - SHW
@@ -756,13 +759,13 @@
 - SQM
 - SAH
 - SON
+- SNE
 - SOR
 - SO
 - SCCO
 - LUV
 - SWX
 - SPE
-- SPB
 - JOE
 - SMP
 - SXI
@@ -834,7 +837,6 @@
 - TRI
 - THO
 - TDW
-- TIMB
 - TKR
 - TWI
 - TJX
@@ -864,7 +866,6 @@
 - TYL
 - TSN
 - UHAL
-- UBS
 - UDR
 - UGI
 - UGP
@@ -894,6 +895,7 @@
 - VFC
 - EGY
 - MTN
+- VAL
 - VALE
 - VLO
 - VHI
@@ -950,7 +952,6 @@
 - WT
 - WOLF
 - WWW
-- WDS
 - WF
 - WKC
 - WOR
@@ -964,7 +965,6 @@
 - BRK-B
 - ADBE
 - GOOGL
-- GOOG
 - AMZN
 - AMD
 - AEP
@@ -977,7 +977,6 @@
 - AZN
 - ADSK
 - ADP
-- BKR
 - BIIB
 - BKNG
 - CDNS
@@ -1003,7 +1002,6 @@
 - ISRG
 - KLAC
 - LRCX
-- LIN
 - MAR
 - MRVL
 - MCHP
@@ -1044,7 +1042,6 @@
 - EQIX
 - ERIE
 - EG
-- EVRG
 - ES
 - EXPD
 - FFIV
@@ -1055,7 +1052,7 @@
 - HAS
 - HSIC
 - HOLX
-- HUBB
+- HWM
 - HBAN
 - INCY
 - JBHT
@@ -1064,11 +1061,12 @@
 - LHX
 - LKQ
 - MKTX
-- MTCH
+- MPWR
 - NDAQ
 - NTAP
 - NDSN
 - NTRS
+- 'TRUE'
 - POOL
 - PTC
 - RTX
@@ -1083,11 +1081,9 @@
 - TSCO
 - TRMB
 - VRSN
-- VTRS
 - WRB
 - GWW
 - WBA
 - WDC
-- WTW
 - WYNN
 - ZBRA

@@ -5,7 +5,7 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.common.AssetDataService import AssetDataService
 from typing import Dict
 
-assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
+assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_american_over20years")
 #assets = {}
 #tickers = ['GOOGL', 'AAPL', 'MSFT']
 #for ticker in tickers:
@@ -24,5 +24,5 @@ if __name__ == "__main__":
     
     CollectionModels.NextDayML_saveData(assetspl = assetspl, save_name = binaries_name)
     #CollectionModels.NextDayML_loadupData_xgb(assetspl=assetspl, loadup_name = binaries_name)
-    #CollectionModels.NextDayML_loadupData_lgbm(assetspl=assetspl, loadup_name = binaries_name)
+    CollectionModels.NextDayML_loadupData_lgbm(assetspl=assetspl, loadup_name = binaries_name)
     CollectionModels.NextDayML_loadupData_LSTM(assetspl=assetspl, loadup_name = binaries_name)

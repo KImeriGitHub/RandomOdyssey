@@ -110,6 +110,8 @@ class OutsourceLoader:
             '8. split coefficient': 'Splits'
         }, inplace=True)
         fullSharePrice.index.name = 'Date'
+        #Add utc on the date
+        fullSharePrice.index = fullSharePrice.index.tz_localize('UTC')
         assetData.shareprice = fullSharePrice[['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']]
         assetData.volume = assetData.shareprice['Volume']
         assetData.adjClosePrice = assetData.shareprice['Adj Close']
