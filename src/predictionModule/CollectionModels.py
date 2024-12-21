@@ -115,13 +115,13 @@ class CollectionModels():
     @staticmethod
     def NextDayML_saveData(assetspl: Dict[str, AssetDataPolars], save_name:str):
         params = {
-            'spareDatesRatio': 0.4,
+            'spareDatesRatio': 0.1,
             'daysAfterPrediction': 1,
             'monthsHorizon': 13,
-            'timesteps': 13,
+            'timesteps': 9,
         }
         
-        startTrainDate=pd.Timestamp(year=2011, month=9, day=4, tz='UTC')
+        startTrainDate=pd.Timestamp(year=2012, month=9, day=4, tz='UTC')
         endTrainDate=pd.Timestamp(year=2015, month=2, day=4, tz='UTC')
         startTestDate=pd.Timestamp(year=2015, month=2, day=5, tz='UTC')
         endTestDate=pd.Timestamp(year=2016, month=2, day=11, tz="UTC")
@@ -183,8 +183,8 @@ class CollectionModels():
         print(nextDayML.metadata)
         nextDayML.save_data('src/predictionModule/bin', loadup_name)
         
-        ModelAnalyzer(nextDayML).plot_label_distribution()
-        ModelAnalyzer(nextDayML).plot_feature_importance()
+        #ModelAnalyzer(nextDayML).plot_label_distribution()
+        #ModelAnalyzer(nextDayML).plot_feature_importance()
         
     @staticmethod
     def NextDayML_loadupData_LSTM(assetspl: Dict[str, AssetDataPolars], loadup_name: str):

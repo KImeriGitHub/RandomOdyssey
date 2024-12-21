@@ -38,3 +38,8 @@ class FeatureMain():
         self.timesteps = self.params['timesteps'] 
         
         featureFourier = FeatureFourierCoeff(asset)
+
+        
+        # NOTE: Implement someground feature like price and revenue without scaling
+        # TODO: Ranking maybe
+        # TODO: LAG

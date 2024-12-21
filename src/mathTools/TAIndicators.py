@@ -85,7 +85,7 @@ class TAIndicators():
         scaled_data = scaler.fit_transform(self.tadata[columns_to_scale])
         tadata_minmax = pd.DataFrame(scaled_data, columns=columns_to_scale)
         
-        return tadata_minmax
+        return tadata_minmax, columns_to_scale
         
     def get_relativeColumns(self) -> pd.DataFrame:
         """
@@ -106,4 +106,4 @@ class TAIndicators():
         if not columns_to_return:
             raise ValueError("No columns available to return.")
 
-        return self.tadata[columns_to_return]
+        return self.tadata[columns_to_return], columns_to_return
