@@ -158,7 +158,17 @@ class FeatureFinancialData():
         
     def __extendToFinancialMetrics(self):
         # Extend the shareprice table with the financial data
-        self.finMetric = self.asset.shareprice.select("Date")
+        self.finMetric = self.asset.shareprice
+
+        self.finMetric = self.finMetric.with_columns([
+            self.fin_quar['reportedEPS'].gather(pl.col('q_idx')).alias('reportedEPS'),
+            self.fin_quar['estimatedEPS'].gather(pl.col('q_idx')).alias('estimatedEPS'),
+            (pl.col("Close") / pl.col("reportedEPS")).alias("trailing_pe_ratio"),
+            (pl.col("Close") / pl.col("estimatedEPS")).alias("forward_pe_ratio"),
+        ])
+
+        for date in self.finMetric["Date"]:
+
         
     
     def getFeatureNames(self) -> list[str]:
