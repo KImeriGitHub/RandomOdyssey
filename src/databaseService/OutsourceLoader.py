@@ -116,9 +116,7 @@ class OutsourceLoader:
         assetData.volume = assetData.shareprice['Volume']
         assetData.adjClosePrice = assetData.shareprice['Adj Close']
         assetData.dividends = fullSharePrice['Dividends']
-        assetData.dividends = assetData.dividends[assetData.dividends['Dividends'] != 0.0]
         assetData.splits = fullSharePrice['Splits']
-        assetData.splits = assetData.splits[assetData.splits['Splits'] != 1.0]
         CleanData.fill_NAN_to_BusinessDays(assetData.adjClosePrice)
         
         # Configure company overview
