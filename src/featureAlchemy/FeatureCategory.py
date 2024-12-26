@@ -41,6 +41,6 @@ class FeatureCategory():
         sector = self.asset.sector
         
         # Create a one-hot encoding where the category matches the sector
-        features = np.array([1 if category == sector else 0 for category in self.cat])
+        features = np.array([1.0 if category == sector else 0.0 for category in self.cat])
         
         return features*scaleToNiveau

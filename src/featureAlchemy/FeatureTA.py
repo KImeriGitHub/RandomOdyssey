@@ -1,55 +1,50 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import Dict
+from typing import Dict, List
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 from src.mathTools.TAIndicators import TAIndicators
 
 class FeatureTA():
-    # Class-level default parameters
-    DEFAULT_PARAMS = {
-        'idxLengthOneMonth': 21,
-        'fouriercutoff': 15,
-        'multFactor': 8,
-        'monthsHorizon': 12,
-    }
     
-    def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, params: dict = None):
-        self.startDate = startDate
-        self.endDate = endDate
+    def __init__(self, asset: AssetDataPolars, lagList: List[int] = []):
         self.asset = asset
-        
-        # Update default parameters with any provided parameters
-        self.params = self.DEFAULT_PARAMS
-        if params is not None:
-            self.params.update(params)
-
-        self.idxLengthOneMonth = self.params['idxLengthOneMonth']
-        self.fouriercutoff = self.params['fouriercutoff']
-        self.multFactor = self.params['multFactor']
-        self.monthsHorizon = self.params['monthsHorizon']
-        
+        self.lagList = lagList
         self.taindic = TAIndicators(asset.shareprice)
-        self.TA_relativeColumns, self.relColumnNames = self.taindic.get_relativeColumns()
-        self.TA_minmaxed, self.minmaxColumnNames = self.taindic.scale_MinMax()  # TODO: possible data leakage
+        self.ColumnToUse = self.taindic.getTAColumnNames()
     
     def getFeatureNames(self) -> list[str]:
-        return self.relColumnNames + self.minmaxColumnNames
+        res_raw = [f"FeatureTA_{col}" for col in self.ColumnToUse]
+        
+        res_lag = []
+        for lag in self.lagList:
+            for col in self.ColumnToUse:
+                res_lag.append(f'FeatureTA_{col}_lag_m{lag}')
+        
+        return res_raw + res_lag
     
-    def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = -1):
-        if idx<0:
+    def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None):
+        if idx is None:
             idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+            
+        if idx - max(self.lagList, default=0) < 0:
+            raise ValueError("Not enough data to calculate TA features")
         
-        taRow_rel = self.TA_relativeColumns.iloc[idx, :].values.to_numpy()
-        taRow_minmax = self.TA_minmaxed.iloc[idx, :].values.to_numpy()
+        curClose = self.asset.shareprice['Close'].item(idx)
+        curVol = self.asset.shareprice['Volume'].item(idx)
         
-        niveau = self.TA_relativeColumns['Close'].iloc(idx)
-        scalingfactor = scaleToNiveau/niveau
+        curTAdf = self.taindic.getReScaledDataFrame(curClose, curVol)
+        curTAdf = curTAdf.select(self.ColumnToUse)
         
-        features = np.concatenate((taRow_rel * scalingfactor, taRow_minmax*scaleToNiveau))
-        if np.maximum(np.abs(features-scaleToNiveau))>1e5:
-            raise NotImplementedError()    #TODO: solve in debug
+        niveau = 1.0
+        scalingfactor = scaleToNiveau / niveau
         
-        return features
+        features = np.array(curTAdf.row(idx))
+        
+        for lag in self.lagList:
+            lagIdx = idx - lag
+            features = np.concatenate([features, np.array(curTAdf.row(lagIdx))])
+        
+        return features * scalingfactor

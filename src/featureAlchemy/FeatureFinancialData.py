@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import Dict
+from typing import List
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
@@ -70,121 +70,268 @@ class FeatureFinancialData():
         'cashflowFromInvestment',
     ]
     
+    catav_quar_lag = [
+        'reportedEPS',
+        'estimatedEPS',
+        'surprise',
+        'surprisePercentage',
+        'grossProfit',
+        'ebit',
+        'ebitda',
+        'totalAssets',
+        'totalCurrentLiabilities',
+        'totalShareholderEquity',
+        'operatingCashflow',
+        'profitLoss',
+    ]
+    
+    catav_ann_lag = [
+        'grossProfit',
+        'ebit',
+        'ebitda',
+        'totalAssets',
+        'totalCurrentLiabilities',
+        'totalShareholderEquity',
+        'operatingCashflow',
+        'profitLoss',
+    ]
+    
     catav_binary = [
         'reportTime', #0 for pre and 1 for post
     ]
     
-    def __init__(self, asset: AssetDataPolars):
+    def __init__(self, asset: AssetDataPolars, lagList: List[int] = []):
         self.asset = asset
-        
-        self.cat = self.cat_alphavantage if self.operator == "alphavantage" else self.cat_yfinance
         
         self.fin_quar = self.asset.financials_quarterly
         self.fin_ann = self.asset.financials_annually
         
-        self.__operateOnFinData()
-        self.__operateOnPriceData()
+        self.num_quar_lag = 8   # number of lags to consider for quarterly data
+        self.num_ann_lag = 2    # number of lags to consider for annual data
         
-        # NOTE: divide surpricePercentage by 100
-        # NOTE: fill in None strings with 0
-        # Note: PE RATIO
+        self.__operateOnFinData()
+        self.__operateOnFinData_lag()
+        self.__operateOnPriceData()
+        self.__operateOnPriceData_lag(lagList)
+        self.__configureColumns(lagList)
+        
+        #make sure that some categories are in other categories
+        assert all(item in self.catav_quar for item in self.catav_binary)
+        assert all(item in self.catav_quar for item in self.catav_quar_lag)
+        assert all(item in self.catav_ann for item in self.catav_ann_lag)
+        
+        assert all(item in self.fin_quar.columns for item in self.columns_toFeature_rank)
+        assert all(item in self.fin_quar.columns for item in self.columns_toFeature_quar)
+        assert all(item in self.fin_ann.columns for item in self.columns_toFeature_ann)
+        assert all(item in self.asset.shareprice.columns for item in self.columns_toFeature_metrics)
         
     def __operateOnFinData(self):
-        columns_notToDivide = ["fiscalDateEnding", 'reportedDate','totalRevenue', 'reportedEPS','estimatedEPS','surprise','surprisePercentage','reportTime']
-        columns_ann_toDivide = [item for item in self.catav_ann if item not in columns_notToDivide]
-        columns_quar_toDivide = [item for item in self.catav_quar if item not in columns_notToDivide]
+        columns_notToDivide = [
+            "fiscalDateEnding", 'reportedDate','totalRevenue', 
+            'reportedEPS','estimatedEPS','surprise',
+            'surprisePercentage','reportTime'
+        ]
+        columns_ann_toDivide = [c for c in self.catav_ann if c not in columns_notToDivide]
+        columns_quar_toDivide = [c for c in self.catav_quar if c not in columns_notToDivide]
         
-        # Divide all numeric columns by "totalRevenue", handling missing values safely
-        self.fin_ann = self.fin_ann.with_columns(
-            [
-                (pl.col(col) / pl.col("totalRevenue")).alias(col)
-                for col in columns_ann_toDivide
-                if self.fin_ann[col].dtype.is_numeric() and col != "totalRevenue"
-            ]
-        )
+        # Drop duplicate years in fin_ann, keep first entry
+        if "fiscalDateEnding" in self.fin_ann.columns:
+            self.fin_ann = (
+                self.fin_ann
+                .with_columns(pl.col("fiscalDateEnding").dt.year().alias("year"))
+                .unique(subset=["year"], keep="first")
+                .drop("year")
+                .sort("fiscalDateEnding")
+            )
         
-        self.fin_quar = self.fin_quar.with_columns(
-            [
-                (pl.col(col) / pl.col("totalRevenue")).alias(col)
-                for col in columns_quar_toDivide
-                if self.fin_quar[col].dtype.is_numeric() and col != "totalRevenue"
-            ]
-        )
+        # Scale numeric columns by totalRevenue in a single pass
+        self.fin_ann = self.fin_ann.with_columns([
+            pl.when(pl.col("totalRevenue").is_not_null() & pl.col(col).is_not_null())
+              .then(pl.col(col) / pl.col("totalRevenue"))
+              .otherwise(None)
+              .alias(col)
+            for col in columns_ann_toDivide
+            if self.fin_ann.schema[col].is_numeric()
+        ])
+        
+        self.fin_quar = self.fin_quar.with_columns([
+            pl.when(pl.col("totalRevenue").is_not_null() & pl.col(col).is_not_null())
+              .then(pl.col(col) / pl.col("totalRevenue"))
+              .otherwise(None)
+              .alias(col)
+            for col in columns_quar_toDivide
+            if self.fin_quar.schema[col].is_numeric()
+        ])
         
         # divide surprisePercentage by 1000
-        self.fin_quar = self.fin_quar.with_columns(
+        if "surprisePercentage" in self.fin_quar.columns:
+            self.fin_quar = self.fin_quar.with_columns(
                 (pl.col("surprisePercentage") / 1000.0).alias("surprisePercentage")
+            )
+        
+        # keep totalRevenue as a ranking feature and scale down
+        self.fin_ann = self.fin_ann.with_columns(
+            (pl.col("totalRevenue").log().fill_nan(0.0) / 100.0).alias("totalRevenue_RANK")
+        )
+        self.fin_quar = self.fin_quar.with_columns(
+            (pl.col("totalRevenue").log().fill_nan(0.0) / 100.0).alias("totalRevenue_RANK")
         )
         
-        # Convert catav_binary from binary string to 0 and 1
-        for col in self.catav_binary:
-            # Get unique values in the column nan values are discarded
-            unique_values = self.fin_quar[col].unique().drop_nulls().to_list() 
-            if len(unique_values) == 2:
-                self.fin_quar = self.fin_quar.with_columns(
-                    pl.when(pl.col(col).is_null()).then(None).  # Preserve NaN values
-                    when(pl.col(col) == unique_values[0]).then(0).otherwise(1).alias(col)
-                )
-                
-        # If there are two entries in fiscalDateEnding in fin_ann that are in the same year, keep the first one
-        self.fin_ann = (
-            self.fin_ann.with_columns(pl.col("fiscalDateEnding").dt.year().alias("year"))
-            .unique(subset=["year"], keep="first")
-            .drop("year")
-            .sort("fiscalDateEnding")
+        # Operate on catav_binary 
+        unique_strings = (
+            self.fin_quar
+                .select(pl.col("reportTime"))
+                .unique()
+                .drop_nulls()
+                .to_series()
+                .to_list()
         )
+        allowed_values = {"pre-market", "post-market"}
+        if not all(string_name in allowed_values for string_name in unique_strings):
+            print(f"Column {"reportTime"} contains values other than 'pre-market' and 'post-market'.")
+
+        self.fin_quar = self.fin_quar.with_columns(
+            pl.when(pl.col("reportTime").is_null())
+              .then(None)
+              .when(pl.col("reportTime") == "pre-market")
+              .then(0).otherwise(1)
+              .alias("reportTime")
+        )
+    
+    def __operateOnFinData_lag(self):  
+        for lag in range(1, self.num_quar_lag+1):
+            self.fin_quar = self.fin_quar.with_columns([
+                pl.col(col).shift(lag).alias(f"{col}_lag_qm{lag}")
+                for col in self.catav_quar_lag
+            ]).with_columns([
+                (pl.col(col) / pl.col(col).shift(lag)).alias(f"{col}_lagquot_qm{lag}")
+                for col in self.catav_quar_lag
+            ])
             
+        for lag in range(1, self.num_ann_lag+1):
+            self.fin_ann = self.fin_ann.with_columns([
+                pl.col(col).shift(lag).alias(f"{col}_lag_qm{lag}")
+                for col in self.catav_ann_lag
+            ]).with_columns([
+                (pl.col(col) / pl.col(col).shift(lag)).alias(f"{col}_lagquot_qm{lag}")
+                for col in self.catav_ann_lag
+            ])
                 
     def __operateOnPriceData(self):
-        # Add row indices to the fin_quar and fin_ann tables
-        fin_quar2 = (self.fin_quar
+        metricsColumns_quar = ["reportedEPS", "estimatedEPS", "reportedDate"]
+        metricsColumns_ann = []
+        
+        # Configure joining dataframe
+        fin_quar_join = (self.fin_quar
             .with_row_count("q_idx")
             .rename({"fiscalDateEnding": "Date"})
-            .select(["Date", "q_idx"])
+            .select(["Date", "q_idx"] + metricsColumns_quar)
         )
 
-        fin_ann2 = (self.fin_ann
+        fin_ann_join = (self.fin_ann
             .with_row_count("a_idx")
             .rename({"fiscalDateEnding": "Date"})
-            .select(["Date", "a_idx"])
+            .select(["Date", "a_idx"] + metricsColumns_ann)
         )
 
         # Asof join only the indices
-        self.asset.shareprice = (
-            self.asset.shareprice
-            .join_asof(fin_quar2, on="Date", strategy="backward")
-            .join_asof(fin_ann2, on="Date", strategy="backward")
+        if "q_idx" not in self.asset.shareprice.columns:
+            self.asset.shareprice = (
+                self.asset.shareprice.join_asof(fin_quar_join, on="Date", strategy="backward")
+            )
+        if "a_idx" not in self.asset.shareprice.columns:
+            self.asset.shareprice = (
+                self.asset.shareprice.join_asof(fin_ann_join, on="Date", strategy="backward")
+            )
+        
+        self.asset.shareprice = self.asset.shareprice.with_columns([
+            pl.when(pl.col("reportedEPS") <= 1e-10)
+              .then(None)  # or another placeholder value
+              .otherwise( (pl.col("Adj Close") / pl.col("reportedEPS")).log() )
+              .alias("log_trailing_pe_ratio"),
+
+            pl.when(pl.col("estimatedEPS") <= 1e-10)
+              .then(None)
+              .otherwise( (pl.col("Adj Close") / pl.col("estimatedEPS")).log() )
+              .alias("log_forward_pe_ratio"),
+        ])
+        
+        # add the difference of days to the reportedDate (max 30 days)
+        self.asset.shareprice = self.asset.shareprice.with_columns(
+            (pl.col("reportedDate") - pl.col("Date")).dt.total_days().alias("daysToReport")
+        )
+        self.asset.shareprice = self.asset.shareprice.with_columns(
+            (pl.col("daysToReport").clip(0,30)/30.0).alias("daysToReport")
         )
         
-    def __extendToFinancialMetrics(self):
-        # Extend the shareprice table with the financial data
-        self.finMetric = self.asset.shareprice
-
-        self.finMetric = self.finMetric.with_columns([
-            self.fin_quar['reportedEPS'].gather(pl.col('q_idx')).alias('reportedEPS'),
-            self.fin_quar['estimatedEPS'].gather(pl.col('q_idx')).alias('estimatedEPS'),
-            (pl.col("Close") / pl.col("reportedEPS")).alias("trailing_pe_ratio"),
-            (pl.col("Close") / pl.col("estimatedEPS")).alias("forward_pe_ratio"),
-        ])
-
-        for date in self.finMetric["Date"]:
-
+    def __operateOnPriceData_lag(self, lagList: List[int] = []):
+        #add lagged metrics
+        columns_toLag = ["log_trailing_pe_ratio", "log_forward_pe_ratio", 'daysToReport']
+        for lag in lagList:
+            self.asset.shareprice = self.asset.shareprice.with_columns([
+                pl.col(col).shift(lag).alias(f"{col}_lag_m{lag}")
+                for col in columns_toLag
+            ])
+            self.asset.shareprice = self.asset.shareprice.with_columns([
+                (pl.col(col)/pl.col(col).shift(lag)).alias(f"{col}_lagquot_m{lag}")
+                for col in columns_toLag if col != 'daysToReport'
+            ])
         
+    def __configureColumns(self, lagList: List[int] = []):
+        columns_notToAdd = ["fiscalDateEnding", 'reportedDate', 'totalRevenue']
+        self.columns_toFeature_rank = ["totalRevenue_RANK"]
+        self.columns_toFeature_quar = [c for c in self.catav_quar if c not in columns_notToAdd]
+        self.columns_toFeature_ann = [c for c in self.catav_ann if c not in columns_notToAdd]
+        
+        for lag in range(1, self.num_quar_lag+1):
+            self.columns_toFeature_quar += (
+                [val + '_lag_qm' + str(lag) for val in self.catav_quar_lag] +
+                [val + '_lagquot_qm' + str(lag) for val in self.catav_quar_lag]
+            )
+        for lag in range(1, self.num_ann_lag+1):
+            self.columns_toFeature_ann += (
+                [val + '_lag_qm' + str(lag) for val in self.catav_ann_lag] +
+                [val + '_lagquot_qm' + str(lag) for val in self.catav_ann_lag]
+            )
+        
+        self.columns_toFeature_metrics = ["log_trailing_pe_ratio", "log_forward_pe_ratio", 'daysToReport']
+        for col in self.columns_toFeature_metrics.copy():
+            for lag in lagList:
+                self.columns_toFeature_metrics.append(f"{col}_lag_m{lag}")
+                self.columns_toFeature_metrics.append(f"{col}_lagquot_m{lag}") if col != 'daysToReport' else None
     
     def getFeatureNames(self) -> list[str]:
-        features_names = ["FinData_" + val for val in self.cat]
-            
-        #TODO
+        features_names = []
+        features_names += ["FinData_rank_" + val for val in self.columns_toFeature_rank]
+        features_names += ["FinData_quar_" + val for val in self.columns_toFeature_quar]
+        features_names += ["FinData_ann_" + val for val in self.columns_toFeature_ann]
+        features_names += ["FinData_metrics_" + val for val in self.columns_toFeature_metrics]
         
         return features_names
     
-    def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = -1):
-        if idx<0:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+    def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
+        """
+        Retrieve a feature vector for a given date and multiply by `scaleToNiveau`.
+        """
+        # Find shareprice index if idx not provided
+        if idx is None:
+            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date) + 1
         
-        #Todo
+        # Get corresponding row indexes
+        q_idx = self.asset.shareprice["q_idx"][idx]
+        a_idx = self.asset.shareprice["a_idx"][idx]
         
-        # Create a one-hot encoding where the category matches the sector
-        features = np.array([1 if category == sector else 0 for category in self.cat])
+        features_rank = list(self.fin_quar[self.columns_toFeature_rank].row(q_idx))
+        features_quar = list(self.fin_quar[self.columns_toFeature_quar].row(q_idx))
+        features_ann = list(self.fin_ann[self.columns_toFeature_ann].row(a_idx))
+        features_metrics = list(self.asset.shareprice[self.columns_toFeature_metrics].row(idx))
+                
+        features = np.array(
+            features_rank +
+            features_quar +
+            features_ann +
+            features_metrics
+        )
         
-        return features*scaleToNiveau
+        features = np.nan_to_num(features.astype(float), nan=0.0, posinf=0.0, neginf=0.0)
+        return features * scaleToNiveau

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import Dict
+from typing import Dict, List
 import holidays
 
 from src.common.AssetDataPolars import AssetDataPolars
@@ -13,22 +13,21 @@ class FeatureSeasonal():
         'monthsHorizon': 12,
     }
     
-    def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, params: dict = None):
-        self.startDate = startDate
+    def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = [], params: dict = None):
+        self.startDate = startDate-pd.Timedelta(days=min(lagList, default=0))
         self.endDate = endDate
         self.asset = asset
+        self.lagList = lagList
         
         # Update default parameters with any provided parameters
-        self.params = self.DEFAULT_PARAMS
-        if params is not None:
-            self.params.update(params)
+        self.params = {**self.DEFAULT_PARAMS, **(params or {})}
 
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.monthsHorizon = self.params['monthsHorizon']
         
-        self.holidate_dates = self.__USHolidays()
+        self.holidate_dates: list[pd.Timestamp] = self.__USHolidays()
         
-    def __USHolidays(self):
+    def __USHolidays(self) -> list[pd.Timestamp]:
         country_holidays = holidays.CountryHoliday('US')
         for y in range(self.startDate.year-1, self.endDate.year+2):
             country_holidays.get(f"{y}")
@@ -51,6 +50,22 @@ class FeatureSeasonal():
             "Seasonal_days_to_next_holiday",
             "Seasonal_days_since_last_holiday",
         ]
+        
+        for lag in self.lagList:
+            features_names.extend([
+                f"Seasonal_month_lag_m{lag}",
+                f"Seasonal_day_lag_m{lag}",
+                f"Seasonal_day_of_week_lag_m{lag}",
+                f"Seasonal_quarter_lag_m{lag}",
+                f"Seasonal_week_of_year_lag_m{lag}",
+                f"Seasonal_is_month_start_lag_m{lag}",
+                f"Seasonal_is_month_end_lag_m{lag}",
+                f"Seasonal_is_year_start_lag_m{lag}",
+                f"Seasonal_is_year_end_lag_m{lag}",
+                f"Seasonal_week_part_lag_m{lag}",
+                f"Seasonal_days_to_next_holiday_lag_m{lag}",
+                f"Seasonal_days_since_last_holiday_lag_m{lag}",
+            ])
             
         return features_names
     
@@ -83,9 +98,28 @@ class FeatureSeasonal():
         ])
         
         unifyingFactorArray = np.array([1/11.0, 1/(date.days_in_month-1), 1/6.0, 1/3.0, 1/51.0, 1.0, 1.0, 1.0, 1.0, 1/2.0, 1/90.0, 1/90.0])
+        features_raw = features_raw * unifyingFactorArray
         
-        features = features_raw * unifyingFactorArray * scaleToNiveau
+        for lag in self.lagList:
+            date_lag = date - pd.Timedelta(days=lag)
+            features_raw_lag = np.array([
+                date_lag.month-1,
+                date_lag.day-1,
+                date_lag.dayofweek,  # Monday=0, Sunday=6
+                date_lag.quarter-1,
+                date_lag.isocalendar()[1]-1,  # Week number of the year
+                date_lag.is_month_start,
+                date_lag.is_month_end,
+                date_lag.is_year_start,
+                date_lag.is_year_end,
+                (0 if date_lag.dayofweek < 2 else 1 if date_lag.dayofweek < 4 else 2),
+                np.max([np.min([(h - date_lag).days for h in self.holidate_dates if h >= date_lag]),90]),
+                np.max([np.min([(date_lag - h).days for h in self.holidate_dates if h <= date_lag]),90]),
+            ])
+            
+            features_raw = np.concatenate([features_raw, features_raw_lag * unifyingFactorArray])
         
+        features = features_raw * scaleToNiveau
         return features
     
     
