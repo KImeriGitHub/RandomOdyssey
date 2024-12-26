@@ -12,20 +12,18 @@ class GroupSnP500FinanTo2011(IGroup):
   def checkAsset(self, asset: AssetData) -> bool:
     if asset.financials_quarterly is None:
       return False
-    
-    if asset.financials_quarterly.columns.__contains__('fiscalDateEnding'):
-      columnName = 'fiscalDateEnding'
-    elif asset.financials_quarterly.columns.__contains__('Date'): 
-      columnName = 'Date'
-    else:
+    if not asset.financials_quarterly.columns.__contains__('fiscalDateEnding'):
       return False
+    if asset.financials_quarterly["reportedEPS"].tail(4*15).isnull().sum() > 0:
+      return False
+    
+    columnName = 'fiscalDateEnding'
     
     adf: pd.DataFrame = asset.shareprice
     first_date: pd.Timestamp = adf.index.min()
     max_date: pd.Timestamp = adf.index.max()
     current_date: pd.Timestamp = pd.Timestamp.now(tz=adf.index.tz)
-    df_year = asset.financials_quarterly[asset.financials_quarterly[columnName].dt.year == 2011]
+    #df_year = asset.financials_quarterly[asset.financials_quarterly[columnName].dt.year == 2011]
     return ((current_date - first_date).days >= 20 * 366.0) \
       and (self.snp500tickers.__contains__(asset.ticker)) \
-      and ((current_date - max_date).days < 60) \
-      and df_year.notna().all(axis=1).all()
+      and ((current_date - max_date).days < 60) 
