@@ -7,6 +7,15 @@ class CleanData():
     
     @staticmethod
     def financial_fiscalDateIncongruence(fin: pd.DataFrame, daysDiscrep: int = 10) -> pd.DataFrame:
+        """Combine rows of a financial DataFrame that have fiscalDateEnding within daysDiscrep of each other.
+
+        Args:
+            fin (pd.DataFrame): A financial DataFrame with a 'fiscalDateEnding' column.
+            daysDiscrep (int, optional): The maximum number of days that two fiscalDateEnding values can differ by to be combined. Defaults to 10.
+
+        Returns:
+            pd.DataFrame: The financial DataFrame with rows combined where fiscalDateEnding values are within daysDiscrep of each other.
+        """
         # Sort by the fiscal date
         fin = fin.sort_values('fiscalDateEnding').reset_index(drop=True)
 
@@ -56,6 +65,16 @@ class CleanData():
         res_df.columns = fin.columns
         
         return res_df
+    
+    @staticmethod
+    def financial_dropDuplicateYears(fin: pd.DataFrame) -> pd.DataFrame:
+        # Drop duplicate years in fin_ann, keep first entry
+        if "fiscalDateEnding" in fin.columns:
+            fin["year"] = fin["fiscalDateEnding"].dt.year
+            fin = fin.drop_duplicates(subset="year", keep="first").drop(columns="year")
+        
+        return fin
+            
     
     @staticmethod
     def fill_NAN_to_BusinessDays(s: pd.Series):

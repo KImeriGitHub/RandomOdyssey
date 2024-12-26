@@ -116,7 +116,9 @@ class OutsourceLoader:
         assetData.volume = assetData.shareprice['Volume']
         assetData.adjClosePrice = assetData.shareprice['Adj Close']
         assetData.dividends = fullSharePrice['Dividends']
+        assetData.dividends = assetData.dividends[assetData.dividends['Dividends'] != 0.0]
         assetData.splits = fullSharePrice['Splits']
+        assetData.splits = assetData.splits[assetData.splits['Splits'] != 1.0]
         CleanData.fill_NAN_to_BusinessDays(assetData.adjClosePrice)
         
         # Configure company overview
@@ -163,6 +165,8 @@ class OutsourceLoader:
 
             assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quarterly)
             assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually)
+            
+            assetData.financials_annually = CleanData.financial_dropDuplicateYears(financials_annually)
             
         except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required
