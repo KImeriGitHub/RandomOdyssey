@@ -107,9 +107,9 @@ class SeriesExpansion():
             raise Warning("fouriercutoff is bigger than the array itself.")
 
         endIdx = np.min([len(res_cos), fouriercutoff])
-        relDiffPerStep = (1-fx0/fxend)/(n-1)
+        diffPerStep = (fxend-fx0)/(n-1)
 
-        return relDiffPerStep, res_cos[:endIdx], res_sin[:endIdx]
+        return diffPerStep, res_cos[:endIdx], res_sin[:endIdx]
         
     
     @staticmethod
