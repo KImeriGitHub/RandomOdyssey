@@ -121,12 +121,12 @@ class CollectionModels():
             'timesteps': 9,
         }
         
-        startTrainDate=pd.Timestamp(year=2012, month=9, day=4, tz='UTC')
-        endTrainDate=pd.Timestamp(year=2015, month=2, day=4, tz='UTC')
-        startTestDate=pd.Timestamp(year=2015, month=2, day=5, tz='UTC')
-        endTestDate=pd.Timestamp(year=2016, month=2, day=11, tz="UTC")
-        startValDate=pd.Timestamp(year=2016, month=2, day=12, tz="UTC")
-        endValDate=pd.Timestamp(year=2016, month=2, day=19, tz="UTC")
+        startTrainDate=pd.Timestamp(year=2015, month=9, day=4, tz='UTC')
+        endTrainDate=pd.Timestamp(year=2017, month=2, day=4, tz='UTC')
+        startTestDate=pd.Timestamp(year=2017, month=2, day=5, tz='UTC')
+        endTestDate=pd.Timestamp(year=2018, month=2, day=11, tz="UTC")
+        startValDate=pd.Timestamp(year=2018, month=2, day=12, tz="UTC")
+        endValDate=pd.Timestamp(year=2018, month=2, day=19, tz="UTC")
         nextDayML = NextDayML(assetspl, 
                  trainStartDate = startTrainDate,
                  trainEndDate = endTrainDate,
