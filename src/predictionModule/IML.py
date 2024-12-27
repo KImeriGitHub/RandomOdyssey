@@ -257,8 +257,8 @@ class IML(ABC):
         self.metadata['XGBoostModel_log_loss_val'] = test_loss_val
         self.metadata['XGBoostModel_accuracy_test'] = test_acc_test
         self.metadata['XGBoostModel_log_loss_test'] = test_loss_test
-        print(f'\nVal accuracy: {test_acc_val:.4f}')
-        print(f'\nTest accuracy: {test_acc_test:.4f}')
+        print(f'Val accuracy: {test_acc_val:.4f}')
+        print(f'Test accuracy: {test_acc_test:.4f}')
         print(f'Val log loss: {test_loss_val:.4f}')
         print(f'Test log loss: {test_loss_test:.4f}')
 
@@ -327,14 +327,14 @@ class IML(ABC):
         
         val_loss, val_acc = self.CNNModel.evaluate(X_val, y_cat_val, verbose=0)
         test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
-            
+        
         self.metadata['CNNModel_accuracy_val'] = val_acc
         self.metadata['CNNModel_log_loss_val'] = val_loss
         self.metadata['CNNModel_accuracy_test'] = test_acc
         self.metadata['CNNModel_log_loss_test'] = test_loss
         
-        print(f'\nVal accuracy: {val_acc:.4f}')
-        print(f'\nTest accuracy: {test_acc:.4f}')
+        print(f'Val accuracy: {val_acc:.4f}')
+        print(f'Test accuracy: {test_acc:.4f}')
         print(f'Val log loss: {val_loss:.4f}')
         print(f'Test log loss: {test_loss:.4f}')
 
@@ -387,8 +387,8 @@ class IML(ABC):
         self.metadata['LGBMModel_log_loss_val'] = test_loss_val
         self.metadata['LGBMModel_accuracy_test'] = test_acc_test
         self.metadata['LGBMModel_log_loss_test'] = test_loss_test
-        print(f'\nVal accuracy: {test_acc_val:.4f}')
-        print(f'\nTest accuracy: {test_acc_test:.4f}')
+        print(f'Val accuracy: {test_acc_val:.4f}')
+        print(f'Test accuracy: {test_acc_test:.4f}')
         print(f'Val log loss: {test_loss_val:.4f}')
         print(f'Test log loss: {test_loss_test:.4f}')
 
@@ -438,9 +438,9 @@ class IML(ABC):
         self.metadata['RPModel_g'] = self.RPModel.g
         self.metadata['RPModel_accuracy_val'] = val_acc
         self.metadata['RPModel_accuracy_test'] = test_acc
-        print(f'\nBalance Parameter g: {self.RPModel.g:.4f}')
-        print(f'\nTest accuracy: {test_acc:.4f}')
-        print(f'\nVal accuracy: {val_acc:.4f}')
+        print(f'Balance Parameter g: {self.RPModel.g:.4f}')
+        print(f'Test accuracy: {test_acc:.4f}')
+        print(f'Val accuracy: {val_acc:.4f}')
     
     def traintestLSTMModel(self, lstm_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:
@@ -520,5 +520,5 @@ class IML(ABC):
         test_loss, test_mae  = self.LSTMModel.evaluate(X_test_scaled, y_test_scaled, verbose=0)
         self.metadata['LSTMModel_loss'] = test_loss
         self.metadata['LSTMModel_mae'] = test_mae
-        print(f'\nTest MAE: {test_mae:.4f}')
+        print(f'Test MAE: {test_mae:.4f}')
         print(f'Test Loss (MSE): {test_loss:.4f}')
