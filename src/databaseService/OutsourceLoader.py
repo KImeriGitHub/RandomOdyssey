@@ -165,6 +165,7 @@ class OutsourceLoader:
             assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually)
             
             assetData.financials_annually = CleanData.financial_dropDuplicateYears(financials_annually)
+            assetData.financials_annually = CleanData.financial_dropLastRow(financials_annually)
             
         except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required

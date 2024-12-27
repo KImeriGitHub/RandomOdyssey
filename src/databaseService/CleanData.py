@@ -74,6 +74,13 @@ class CleanData():
             fin = fin.drop_duplicates(subset="year", keep="first").drop(columns="year")
         
         return fin
+    
+    @staticmethod
+    def financial_dropLastRow(fin: pd.DataFrame, factor_nulls: float = 0.5) -> pd.DataFrame:
+        #if the last row has more null than half of the entries, drop it
+        if fin.iloc[-1].isnull().sum() > int(len(fin.columns)*factor_nulls):
+            fin = fin.iloc[:-1]
+        return fin
             
     
     @staticmethod
