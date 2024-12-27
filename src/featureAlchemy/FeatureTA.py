@@ -9,10 +9,20 @@ from src.mathTools.TAIndicators import TAIndicators
 
 class FeatureTA():
     
-    def __init__(self, asset: AssetDataPolars, lagList: List[int] = []):
+    def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = []):
         self.asset = asset
+        self.startDate = startDate
+        self.endDate = endDate
         self.lagList = lagList
-        self.taindic = TAIndicators(asset.shareprice)
+        
+        self.buffer = 21*12+10  # 12 months + 10 days (see also rolling buffer in TAIndicators)
+        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.startDate)+1 - max(self.lagList, default=0) - self.buffer
+        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1 + self.buffer
+        
+        if self.startIdx < 0:
+            raise ValueError("Start Date is too old or lag too long.")
+        
+        self.taindic = TAIndicators(asset.shareprice.slice(self.startIdx, self.endIdx - self.startIdx + 1))
         self.ColumnToUse = self.taindic.getTAColumnNames()
     
     def getFeatureNames(self) -> list[str]:
@@ -29,8 +39,8 @@ class FeatureTA():
         if idx is None:
             idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
             
-        if idx - max(self.lagList, default=0) < 0:
-            raise ValueError("Not enough data to calculate TA features")
+        if idx  < self.startIdx:
+            raise ValueError("Date is too old.")
         
         curClose = self.asset.shareprice['Close'].item(idx)
         curVol = self.asset.shareprice['Volume'].item(idx)
@@ -41,10 +51,11 @@ class FeatureTA():
         niveau = 1.0
         scalingfactor = scaleToNiveau / niveau
         
-        features = np.array(curTAdf.row(idx))
+        idx_adj = idx - self.startIdx
+        features = np.array(curTAdf.row(idx_adj))
         
         for lag in self.lagList:
-            lagIdx = idx - lag
-            features = np.concatenate([features, np.array(curTAdf.row(lagIdx))])
+            lagIdx_adj = idx_adj - lag
+            features = np.concatenate([features, np.array(curTAdf.row(lagIdx_adj))])
         
         return features * scalingfactor

@@ -153,6 +153,8 @@ class TAIndicators():
         assert all([col in self.tadata_columns for col in self.tacolumns_AsIs]) , f"Missing columns: {set(self.tacolumns_AsIs) - set(self.tadata_columns)}"
         assert all([col in self.tadata_columns for col in self.tacolumns_ScaledToClose]) , f"Missing columns: {set(self.tacolumns_ScaledToClose) - set(self.tadata_columns)}"
         
+        self.rollingbuffer = 21*12  # for calculating the rolling max
+        
         all_ta_columns = (
             self.tacolumns_ScaledToClose + 
             self.tacolumns_ScaledSpecial + 
@@ -202,9 +204,9 @@ class TAIndicators():
             [sigmoid_expression(pl.col(col), scale=10.0).alias(col) for col in sigmoid_10_scale]
         )
         self.tadata = self.tadata.with_columns([
-            (pl.col("volume_obv") / pl.col("volume_obv").rolling_max(21*12)).alias("volume_obv"),
-            (pl.col("volume_fi") / pl.col("volume_fi").rolling_max(21*12)).alias("volume_fi"),
-            (pl.col("volume_vpt") / pl.col("volume_vpt").rolling_max(21*12)).alias("volume_vpt"),
+            (pl.col("volume_obv") / pl.col("volume_obv").rolling_max(self.rollingbuffer)).alias("volume_obv"),
+            (pl.col("volume_fi") / pl.col("volume_fi").rolling_max(self.rollingbuffer)).alias("volume_fi"),
+            (pl.col("volume_vpt") / pl.col("volume_vpt").rolling_max(self.rollingbuffer)).alias("volume_vpt"),
             #Preprocessing trend_trix
             pl.when(pl.col("row_idx") < 5).then(0).otherwise(pl.col("trend_trix")).alias("trend_trix"),
         ])

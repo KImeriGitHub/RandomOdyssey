@@ -30,13 +30,15 @@ class FeatureMain():
                  endDate:pd.Timestamp, 
                  lagList: List[int],
                  timeLagList = [],
-                 params: dict = None):
+                 params: dict = None,
+                 enableTimeSeries = True):
         
         self.asset = asset
         self.startDate = startDate
         self.endDate = endDate
         self.lagList = lagList
         self.timeLagList = timeLagList
+        self.enableTimeSeries = enableTimeSeries
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -53,14 +55,15 @@ class FeatureMain():
         self.featFourierCoeff = FeatureFourierCoeff(asset, self.startDate, self.endDate, self.lagList, self.params)
         self.featFinancialData = FeatureFinancialData(asset, self.lagList)
         self.featSeasonal = FeatureSeasonal(asset, self.startDate, self.endDate, self.lagList, self.params)
-        self.featTA = FeatureTA(asset, self.lagList)
+        self.featTA = FeatureTA(asset, self.startDate, self.endDate, self.lagList)
         
-        self.featCategory_timelag = self.featCategory
-        self.featMathematical_timelag = FeatureMathematical(asset, self.timeLagList)
-        self.featFourierCoeff_timelag = FeatureFourierCoeff(asset, self.startDate, self.endDate, self.timeLagList, self.params)
-        self.featFinancialData_timelag = FeatureFinancialData(asset, self.timeLagList)
-        self.featSeasonal_timelag = FeatureSeasonal(asset, self.startDate, self.endDate, self.timeLagList, self.params)
-        self.featTA_timelag = FeatureTA(asset, self.timeLagList)
+        if self.enableTimeSeries:
+            self.featCategory_timelag = self.featCategory
+            self.featMathematical_timelag = FeatureMathematical(asset, self.timeLagList) 
+            self.featFourierCoeff_timelag = FeatureFourierCoeff(asset, self.startDate, self.endDate, self.timeLagList, self.params) 
+            self.featFinancialData_timelag = FeatureFinancialData(asset, self.timeLagList) 
+            self.featSeasonal_timelag = FeatureSeasonal(asset, self.startDate, self.endDate, self.timeLagList, self.params) 
+            self.featTA_timelag = FeatureTA(asset, self.startDate, self.endDate, self.timeLagList) 
 
     def getFeatureNames(self) -> list[str]:
         return (
@@ -73,6 +76,9 @@ class FeatureMain():
         )
         
     def getTimeFeatureNames(self) -> list[str]:
+        if not self.enableTimeSeries:
+            return []
+        
         return (
             self.featCategory.getFeatureNames()+
             self.featMathematical.getFeatureNames()+
@@ -100,6 +106,9 @@ class FeatureMain():
     def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
         if idx is None:
             idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+            
+        if not self.enableTimeSeries:
+            return np.array([])
         
         # Get features of timeseries: a matrix where each row is a feature vector of a time step
         featureMatrix = np.zeros((self.timesteps, len(self.getFeatureNames())))
@@ -108,11 +117,11 @@ class FeatureMain():
         for idx_t in range(idx-self.timesteps+1, idx+1):
             niveau = self.asset.adjClosePrice['AdjClose'].item(idx_t)
             timefeatures = self.featCategory.apply(niveau)
-            timefeatures = np.concatenate((timefeatures, self.featSeasonal.apply(date, niveau)))
-            timefeatures = np.concatenate((timefeatures, self.featMathematical.apply(date, niveau, idx_t)))
-            timefeatures = np.concatenate((timefeatures, self.featFourierCoeff.apply(date, niveau, idx_t)))
-            timefeatures = np.concatenate((timefeatures, self.featFinancialData.apply(date, niveau, idx_t)))
-            timefeatures = np.concatenate((timefeatures, self.featTA.apply(date, niveau, idx_t)))
+            timefeatures = np.concatenate((timefeatures, self.featSeasonal_timelag.apply(date, niveau)))
+            timefeatures = np.concatenate((timefeatures, self.featMathematical_timelag.apply(date, niveau, idx_t)))
+            timefeatures = np.concatenate((timefeatures, self.featFourierCoeff_timelag.apply(date, niveau, idx_t)))
+            timefeatures = np.concatenate((timefeatures, self.featFinancialData_timelag.apply(date, niveau, idx_t)))
+            timefeatures = np.concatenate((timefeatures, self.featTA_timelag.apply(date, niveau, idx_t)))
             
             featureMatrix[idx_t-idx+self.timesteps-1,:] = timefeatures
             

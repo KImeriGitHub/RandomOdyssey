@@ -245,13 +245,13 @@ class FeatureFinancialData():
             )
         
         self.asset.shareprice = self.asset.shareprice.with_columns([
-            pl.when(pl.col("reportedEPS") <= 1e-10)
-              .then(None)  # or another placeholder value
+            pl.when(pl.col("reportedEPS") <= 1e-5)
+              .then(1e-5)
               .otherwise( (pl.col("Adj Close") / pl.col("reportedEPS")).log() )
               .alias("log_trailing_pe_ratio"),
 
-            pl.when(pl.col("estimatedEPS") <= 1e-10)
-              .then(None)
+            pl.when(pl.col("estimatedEPS") <= 1e-5)
+              .then(1e-5)
               .otherwise( (pl.col("Adj Close") / pl.col("estimatedEPS")).log() )
               .alias("log_forward_pe_ratio"),
         ])
