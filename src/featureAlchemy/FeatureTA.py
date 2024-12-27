@@ -45,6 +45,8 @@ class FeatureTA():
         curClose = self.asset.shareprice['Close'].item(idx)
         curVol = self.asset.shareprice['Volume'].item(idx)
         
+        curVol = 1 if ~(curVol >= 1) else curVol
+        
         curTAdf = self.taindic.getReScaledDataFrame(curClose, curVol)
         curTAdf = curTAdf.select(self.ColumnToUse)
         
