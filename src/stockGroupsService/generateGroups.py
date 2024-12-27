@@ -8,6 +8,7 @@ from src.stockGroupsService.GroupSnP500Over20Years import GroupSnP500Over20Years
 from src.stockGroupsService.GroupSnP500NAS100Over20Years import GroupSnP500NAS100Over20Years
 from src.stockGroupsService.GroupSnP500FinanTo2011 import GroupSnP500FinanTo2011
 from src.stockGroupsService.GroupDebug import GroupDebug
+from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
 
 def generateGroups():
     dbPath = "src/database"
@@ -23,6 +24,7 @@ def generateGroups():
         GroupSnP500NAS100Over20Years(),
         GroupSnP500FinanTo2011(),
         GroupDebug(),
+        GroupFinanTo2011(),
     ]
 
     manager = GroupManager(databasePath=dbPath, stockGroupPath=groupPath, groupClasses = groupClasses)
