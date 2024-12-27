@@ -6,7 +6,7 @@ import xgboost as xgb
 import lightgbm as lgb
 import joblib
 import pickle
-from typing import Dict
+from typing import Dict, List
 from tensorflow.keras.models import load_model, Sequential
 from tensorflow.keras import layers, models
 from tensorflow.keras.utils import to_categorical
@@ -44,6 +44,7 @@ class IML(ABC):
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
         self.metadata: Dict = {}
+        self.featureColumnNames: List = []
 
         self.dataIsPrepared = False
 
@@ -168,7 +169,8 @@ class IML(ABC):
             'testEndDate': self.testEndDate,
             'valStartDate': self.valStartDate,
             'valEndDate': self.valEndDate,
-            'metadata': self.metadata
+            'metadata': self.metadata,
+            'featureColumnNames': self.featureColumnNames
         }
         with open(filePath, 'wb') as f:
             pickle.dump(data, f)
@@ -201,6 +203,7 @@ class IML(ABC):
         self.valStartDate = data.get('valStartDate', None)
         self.valEndDate = data.get('valEndDate', None)
         self.metadata = data.get('metadata', {})
+        self.featureColumnNames = data.get('featureColumnNames', [])
         print(f'Data and metadata loaded from {filePath}')
         self.dataIsPrepared = True
         return self.metadata
@@ -209,12 +212,12 @@ class IML(ABC):
         if not self.dataIsPrepared:
             self.prepareData()
 
-        # Split the data
-        X_train = self.X_train
-        X_test = self.X_test
+        # The data
+        X_train = pd.DataFrame(self.X_train, columns=self.featureColumnNames)
+        X_test = pd.DataFrame(self.X_test, columns=self.featureColumnNames)
         y_train = self.y_train
         y_test = self.y_test
-        X_val = self.X_val
+        X_val = pd.DataFrame(self.X_val, columns=self.featureColumnNames)
         y_val = self.y_val
 
         # Define XGBoost parameters if not provided
@@ -239,24 +242,25 @@ class IML(ABC):
         if name_model_path != "" and name_model_name != "":
             self.saveXGBoostModel(name_model_path, name_model_name)
 
-        # Make predictions
-        if X_val.size != 0:
-            y_pred = self.XGBoostModel.predict(X_val)
-            y_pred_proba = self.XGBoostModel.predict_proba(X_val)
-            
-            test_acc = accuracy_score(y_val, y_pred)
-            test_loss = log_loss(y_val, y_pred_proba)
-        else:
-            y_pred = self.XGBoostModel.predict(X_test)
-            y_pred_proba = self.XGBoostModel.predict_proba(X_test)
+        # Make predictions and evaluate the model
+        y_pred_val = self.XGBoostModel.predict(X_val)
+        y_pred_proba_val = self.XGBoostModel.predict_proba(X_val)
+        test_acc_val = accuracy_score(y_val, y_pred_val)
+        test_loss_val = log_loss(y_val, y_pred_proba_val)
+        
+        y_pred_test = self.XGBoostModel.predict(X_test)
+        y_pred_proba_test = self.XGBoostModel.predict_proba(X_test)
+        test_acc_test = accuracy_score(y_test, y_pred_test)
+        test_loss_test = log_loss(y_test, y_pred_proba_test)
 
-            test_acc = accuracy_score(y_test, y_pred)
-            test_loss = log_loss(y_test, y_pred_proba)
-
-        self.metadata['XGBoostModel_accuracy'] = test_acc
-        self.metadata['XGBoostModel_log_loss'] = test_loss
-        print(f'\nTest accuracy: {test_acc:.4f}')
-        print(f'Test log loss: {test_loss:.4f}')
+        self.metadata['XGBoostModel_accuracy_val'] = test_acc_val
+        self.metadata['XGBoostModel_log_loss_val'] = test_loss_val
+        self.metadata['XGBoostModel_accuracy_test'] = test_acc_test
+        self.metadata['XGBoostModel_log_loss_test'] = test_loss_test
+        print(f'\nVal accuracy: {test_acc_val:.4f}')
+        print(f'\nTest accuracy: {test_acc_test:.4f}')
+        print(f'Val log loss: {test_loss_val:.4f}')
+        print(f'Test log loss: {test_loss_test:.4f}')
 
     def traintestCNNModel(self, cnn_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:
@@ -321,14 +325,17 @@ class IML(ABC):
         if name_model_path != "" and name_model_name != "":
             self.saveCNNModel(name_model_path, name_model_name)
         
-        if X_val.size != 0:
-            test_loss, test_acc = self.CNNModel.evaluate(X_val, y_cat_val, verbose=0)
-        else:
-            test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
+        val_loss, val_acc = self.CNNModel.evaluate(X_val, y_cat_val, verbose=0)
+        test_loss, test_acc = self.CNNModel.evaluate(X_test, y_cat_test, verbose=0)
             
-        self.metadata['CNNModel_accuracy'] = test_acc
-        self.metadata['CNNModel_log_loss'] = test_loss
+        self.metadata['CNNModel_accuracy_val'] = val_acc
+        self.metadata['CNNModel_log_loss_val'] = val_loss
+        self.metadata['CNNModel_accuracy_test'] = test_acc
+        self.metadata['CNNModel_log_loss_test'] = test_loss
+        
+        print(f'\nVal accuracy: {val_acc:.4f}')
         print(f'\nTest accuracy: {test_acc:.4f}')
+        print(f'Val log loss: {val_loss:.4f}')
         print(f'Test log loss: {test_loss:.4f}')
 
     def traintestLGBMModel(self, lgbm_params=None, name_model_path:str = "", name_model_name: str = ""):
@@ -336,11 +343,11 @@ class IML(ABC):
             self.prepareData()
 
         # Split the data
-        X_train = self.X_train
-        X_test = self.X_test
+        X_train = pd.DataFrame(self.X_train, columns=self.featureColumnNames)
+        X_test = pd.DataFrame(self.X_test, columns=self.featureColumnNames)
         y_train = self.y_train
         y_test = self.y_test
-        X_val = self.X_val
+        X_val = pd.DataFrame(self.X_val, columns=self.featureColumnNames)
         y_val = self.y_val
 
         # Define XGBoost parameters if not provided
@@ -353,36 +360,37 @@ class IML(ABC):
                 'num_leaves': 32,
                 'colsample_bytree': 0.1,
                 'subsample': 0.8,
-                'early_stopping_round': 100
+                'early_stopping_round': 100,
+                'verbosity': 0
             }
         self.metadata['LGBMModel_params'] = lgbm_params
 
         # Initialize and train LGBM model
         self.LGBMModel = lgb.LGBMClassifier(**lgbm_params)
         self.LGBMModel.fit(X_train, y_train,
-                        eval_set=[(self.X_test, self.y_test)])
+                        eval_set=[(self.X_val, self.y_val)])
         
         if name_model_path != "" and name_model_name != "":
             self.saveLGBMModel(name_model_path, name_model_name)
 
-        # Make predictions
-        if X_val.size != 0:
-            y_pred = self.LGBMModel.predict(X_val)
-            y_pred_proba = self.LGBMModel.predict_proba(X_val)
-            
-            test_acc = accuracy_score(y_val, y_pred)
-            test_loss = log_loss(y_val, y_pred_proba)
-        else:
-            y_pred = self.LGBMModel.predict(X_test)
-            y_pred_proba = self.LGBMModel.predict_proba(X_test)
+        y_pred_val = self.LGBMModel.predict(X_val)
+        y_pred_proba_val = self.LGBMModel.predict_proba(X_val)
+        test_acc_val = accuracy_score(y_val, y_pred_val)
+        test_loss_val = log_loss(y_val, y_pred_proba_val)
+        
+        y_pred_test = self.LGBMModel.predict(X_test)
+        y_pred_proba_test = self.LGBMModel.predict_proba(X_test)
+        test_acc_test = accuracy_score(y_test, y_pred_test)
+        test_loss_test = log_loss(y_test, y_pred_proba_test)
 
-            test_acc = accuracy_score(y_test, y_pred)
-            test_loss = log_loss(y_test, y_pred_proba)
-
-        self.metadata['LGBMModel_accuracy'] = test_acc
-        self.metadata['LGBMModel_log_loss'] = test_loss
-        print(f'\nTest accuracy: {test_acc:.4f}')
-        print(f'Test log loss: {test_loss:.4f}')
+        self.metadata['LGBMModel_accuracy_val'] = test_acc_val
+        self.metadata['LGBMModel_log_loss_val'] = test_loss_val
+        self.metadata['LGBMModel_accuracy_test'] = test_acc_test
+        self.metadata['LGBMModel_log_loss_test'] = test_loss_test
+        print(f'\nVal accuracy: {test_acc_val:.4f}')
+        print(f'\nTest accuracy: {test_acc_test:.4f}')
+        print(f'Val log loss: {test_loss_val:.4f}')
+        print(f'Test log loss: {test_loss_test:.4f}')
 
     def traintestRPModel(self, rp_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:
@@ -424,15 +432,15 @@ class IML(ABC):
         if name_model_path != "" and name_model_name != "":
             self.saveRPModel(name_model_path, name_model_name)
         
-        if X_val.size != 0:
-            test_acc = self.RPModel.compute_accuracy(g=self.RPModel.g, Y_test = y_val, X_test=X_val)
-        else:
-            test_acc = self.RPModel.compute_accuracy(g=self.RPModel.g, Y_test = y_test, X_test=X_test)
+        val_acc = self.RPModel.compute_accuracy(g=self.RPModel.g, Y_test = y_val, X_test=X_val)
+        test_acc = self.RPModel.compute_accuracy(g=self.RPModel.g, Y_test = y_test, X_test=X_test)
             
         self.metadata['RPModel_g'] = self.RPModel.g
-        self.metadata['RPModel_accuracy'] = test_acc
+        self.metadata['RPModel_accuracy_val'] = val_acc
+        self.metadata['RPModel_accuracy_test'] = test_acc
         print(f'\nBalance Parameter g: {self.RPModel.g:.4f}')
         print(f'\nTest accuracy: {test_acc:.4f}')
+        print(f'\nVal accuracy: {val_acc:.4f}')
     
     def traintestLSTMModel(self, lstm_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:

@@ -23,7 +23,7 @@ class NextDayML(IML):
         'idxLengthOneMonth': 21,
         'fouriercutoff': 5,
         'spareDatesRatio': 0.5,
-        'multFactor': 8,
+        'multFactor': 6,
         'daysAfterPrediction': 1,
         'monthsHorizon': 13,
         'timesteps': 5,
@@ -33,20 +33,25 @@ class NextDayML(IML):
     def __init__(self, assets: Dict[str, AssetDataPolars], 
                  trainStartDate: pd.Timestamp = None, 
                  trainEndDate: pd.Timestamp = None,
-                 testStartDate: pd.Timestamp = None, 
-                 testEndDate: pd.Timestamp = None,
                  valStartDate: pd.Timestamp = None, 
                  valEndDate: pd.Timestamp = None,
-                 params: dict = None):
+                 testStartDate: pd.Timestamp = None, 
+                 testEndDate: pd.Timestamp = None,
+                 params: dict = None,
+                 enableTimeSeries = True):
         super().__init__()
         self.__assets: Dict[str, AssetDataPolars] = assets
 
         self.trainStartDate: pd.Timestamp = trainStartDate
         self.trainEndDate: pd.Timestamp = trainEndDate
-        self.testStartDate: pd.Timestamp = testStartDate
-        self.testEndDate: pd.Timestamp = testEndDate
         self.valStartDate: pd.Timestamp = valStartDate
         self.valEndDate: pd.Timestamp = valEndDate
+        self.testStartDate: pd.Timestamp = testStartDate
+        self.testEndDate: pd.Timestamp = testEndDate
+        
+        self.enableTimeSeries = enableTimeSeries
+        self.lagList = [1,2,3,5,10,21,63,121,210]
+        self.featureColumnNames = []
         
         # Update default parameters with any provided parameters
         self.params = self.DEFAULT_PARAMS
@@ -88,7 +93,7 @@ class NextDayML(IML):
         numTimesteps = self.timesteps
         if (aidx - m * self.idxLengthOneMonth-1-numTimesteps)<0:
             print("Warning! Asset History does not span far enough.")
-            
+        
         curPrices = asset.adjClosePrice["AdjClose"].item(aidx)
         futurePrices = asset.adjClosePrice["AdjClose"].slice(aidx+self.daysAfterPrediction,10).to_numpy()
         futureMeanPrice = futurePrices.mean()
@@ -137,33 +142,42 @@ class NextDayML(IML):
                 'monthsHorizon': self.monthsHorizon,
                 'timesteps': self.timesteps,
             }
-            featureMain = FeatureMain(asset, self.trainStartDate, self.valEndDate, lagList=[1,2,3,5,10,21,63,121,210], params=params)
+            featureMain = FeatureMain(
+                asset, 
+                self.trainStartDate, 
+                self.valEndDate, 
+                lagList = self.lagList, 
+                params=params,
+                enableTimeSeries = self.enableTimeSeries
+            )
+            
+            if self.featureColumnNames == []:
+                self.featureColumnNames = featureMain.getFeatureNames()
+            elif self.featureColumnNames != featureMain.getFeatureNames():
+                raise ValueError("Feature column names are not consistent across assets.")
 
             # Prepare Dates
-            #TRAIN
-            datesTrain = pd.date_range(self.trainStartDate, self.trainEndDate, freq='B') # 'B' for business days
-            spare_datesTrain = pd.DatetimeIndex(np.random.choice(datesTrain, size=int(len(datesTrain)*self.spareDatesRatio), replace=False)) 
-            #TEST
-            if self.testEndDate is None:
-                datesTest = pd.date_range(self.testStartDate, self.testStartDate + pd.Timedelta(days=5), freq='B')
-                spare_datesTest = [datesTest[0]]
-            else:
-                datesTest = pd.date_range(self.testStartDate, self.testEndDate, freq='B') # 'B' for business days
-                spare_datesTest = pd.DatetimeIndex(np.random.choice(datesTest, size=np.max([int(len(datesTest)*self.spareDatesRatio),1]), replace=False))
-            # VALIDATION
-            if self.valStartDate is None:
-                spare_datesVal = []
-            elif self.valEndDate is None:
-                datesVal = pd.date_range(self.valStartDate, self.valStartDate + pd.Timedelta(days=5), freq='B')
-                spare_datesVal = [datesVal[0]]
-            else:
-                datesVal = pd.date_range(self.valStartDate, self.valEndDate, freq='B') # 'B' for business days
-                spare_datesVal = pd.DatetimeIndex(np.random.choice(datesVal, size=np.max([int(len(datesVal)*self.spareDatesRatio),1]), replace=False))
-        
-            pricesArray = asset.adjClosePrice['AdjClose']
+            def _sample_spare_dates(start_date, end_date, ratio=0.1, fallback_days=5):
+                """Return a DatetimeIndex of randomly sampled spare dates."""
+                if start_date is None:
+                    # No dates
+                    return pd.DatetimeIndex([])
+
+                if end_date is None:
+                    # Fallback range if end_date isn't provided
+                    date_range = pd.date_range(start_date, start_date + pd.Timedelta(days=fallback_days), freq='B')
+                    return pd.DatetimeIndex([date_range[0]])
+
+                date_range = pd.date_range(start_date, end_date, freq='B')
+                n_samples = max(int(len(date_range) * ratio), 1)
+                return pd.DatetimeIndex(np.random.choice(date_range, n_samples, replace=False))
+            
+            spare_dates_train = _sample_spare_dates(self.trainStartDate, self.trainEndDate, self.spareDatesRatio)
+            spare_dates_val   = _sample_spare_dates(self.valStartDate,   self.valEndDate,   self.spareDatesRatio)
+            spare_dates_test  = _sample_spare_dates(self.testStartDate,  self.testEndDate,  self.spareDatesRatio)
 
             # Prepare Train Data
-            for date in spare_datesTrain:
+            for date in spare_dates_train:
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
 
                 Xtrain.append(features)
@@ -171,23 +185,23 @@ class NextDayML(IML):
                 XtrainPrice.append(featuresTimeSeries)
                 ytrainPrice.append(targetTimeSeries)
 
-            #Prepare Test Data
-            for date in spare_datesTest:
-                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
-
-                Xtest.append(features)
-                ytest.append(target)
-                XtestPrice.append(featuresTimeSeries)
-                ytestPrice.append(targetTimeSeries)
-
             #Prepare Val Data
-            for date in spare_datesVal:
+            for date in spare_dates_val:
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
 
                 Xval.append(features)
                 yval.append(target)
                 XvalPrice.append(featuresTimeSeries)
                 yvalPrice.append(targetTimeSeries)
+
+            #Prepare Test Data
+            for date in spare_dates_test:
+                features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
+
+                Xtest.append(features)
+                ytest.append(target)
+                XtestPrice.append(featuresTimeSeries)
+                ytestPrice.append(targetTimeSeries)
 
         self.X_train = np.array(Xtrain)
         self.y_train = np.array(ytrain).astype(int)
@@ -204,11 +218,13 @@ class NextDayML(IML):
 
         self.X_train, self.y_train = shuffle(self.X_train, self.y_train)
         self.X_test, self.y_test = shuffle(self.X_test, self.y_test)
+        self.X_val, self.y_val = shuffle(self.X_val, self.y_val)
+        
+        self.X_val_timeseries, self.y_val_timeseries = shuffle(self.X_val_timeseries, self.y_val_timeseries)
         self.X_train_timeseries, self.y_train_timeseries = shuffle(self.X_train_timeseries, self.y_train_timeseries)
         self.X_test_timeseries, self.y_test_timeseries = shuffle(self.X_test_timeseries, self.y_test_timeseries)
         
         self.dataIsPrepared = True
-
 
     def predictNextPrices(self, priceArray: np.ndarray, isRegression: bool = False):
         if len(priceArray) < self.monthsHorizon * self.idxLengthOneMonth -1:

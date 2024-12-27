@@ -115,26 +115,28 @@ class CollectionModels():
     @staticmethod
     def NextDayML_saveData(assetspl: Dict[str, AssetDataPolars], save_name:str):
         params = {
-            'spareDatesRatio': 0.1,
-            'daysAfterPrediction': 1,
-            'monthsHorizon': 13,
-            'timesteps': 9,
+            'spareDatesRatio': 0.6,
+            'daysAfterPrediction': 21,
+            'monthsHorizon': 6,
+            'timesteps': 5,
+            'classificationInterval': [0], 
         }
         
         startTrainDate=pd.Timestamp(year=2015, month=9, day=4, tz='UTC')
-        endTrainDate=pd.Timestamp(year=2017, month=2, day=4, tz='UTC')
-        startTestDate=pd.Timestamp(year=2017, month=2, day=5, tz='UTC')
-        endTestDate=pd.Timestamp(year=2018, month=2, day=11, tz="UTC")
-        startValDate=pd.Timestamp(year=2018, month=2, day=12, tz="UTC")
-        endValDate=pd.Timestamp(year=2018, month=2, day=19, tz="UTC")
+        endTrainDate=pd.Timestamp(year=2018, month=2, day=4, tz='UTC')
+        startValDate=pd.Timestamp(year=2017, month=2, day=4, tz="UTC")
+        endValDate=pd.Timestamp(year=2018, month=2, day=4, tz="UTC")
+        startTestDate=pd.Timestamp(year=2018, month=2, day=5, tz='UTC')
+        endTestDate=pd.Timestamp(year=2018, month=4, day=11, tz="UTC")
         nextDayML = NextDayML(assetspl, 
                  trainStartDate = startTrainDate,
                  trainEndDate = endTrainDate,
-                 testStartDate = startTestDate,
-                 testEndDate = endTestDate,
                  valStartDate = startValDate,
                  valEndDate = endValDate,
-                 params = params)
+                 testStartDate = startTestDate,
+                 testEndDate = endTestDate,
+                 params = params,
+                 enableTimeSeries = False)
 
         nextDayML.prepareData()
 

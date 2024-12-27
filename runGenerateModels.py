@@ -5,7 +5,7 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.common.AssetDataService import AssetDataService
 from typing import Dict
 
-assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_finanTo2011")
+assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_finanTo2011")
 #assets = {}
 #tickers = ['GOOGL', 'AAPL', 'MSFT']
 #for ticker in tickers:
@@ -16,7 +16,7 @@ for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
 
 if __name__ == "__main__":
-    binaries_name = "NextDayML_debug_test2015"
+    binaries_name = "NextDayML_debug_test2015_nextmonth"
     #CollectionModels.fourierML_saveData(assetspl=assetspl, save_name = binaries_name)
     #CollectionModels.fourierML_loadupData_xgb(assetspl=assetspl, loadup_name = binaries_name)
     #CollectionModels.fourierML_loadupData_rp(assetspl=assetspl, loadup_name = binaries_name)
