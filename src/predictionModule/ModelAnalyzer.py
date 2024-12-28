@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+import pandas as pd
 from collections import Counter
 import xgboost as xgb
 from typing import Optional
@@ -54,6 +55,23 @@ class ModelAnalyzer:
         print(f"Sum of squared percentages: {percentage_sum_sq:.4f}")
         return percentage_sum_sq
     
+    @staticmethod
+    def print_label_distribution(*arrays):
+        """
+        Print the distribution of one or more label arrays.
+
+        Parameters:
+            *arrays (np.ndarray): One or more arrays of labels.
+        """
+        for idx, arr in enumerate(arrays, start=1):
+            unique_vals, counts = np.unique(arr, return_counts=True)
+            total = counts.sum()
+            print(f"Distribution for Array {idx}:")
+            for val, count in zip(unique_vals, counts):
+                freq = count / total
+                print(f"  Label {val}: Count = {count}, Frequency = {freq:.2f}")
+            print()
+
     @staticmethod 
     def print_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_pred_proba: np.ndarray = None):
         """
@@ -95,6 +113,24 @@ class ModelAnalyzer:
 
             print(f"  Class {cls}:")
             print(f"    TPR: {TPR:.2f}, FPR: {FPR:.2f}, TNR: {TNR:.2f}, FNR: {FNR:.2f}") 
+
+    @staticmethod
+    def print_feature_importance_LGBM(model: IML, n_feature: int = 50):
+        importances = model.LGBMModel.feature_importances_
+        
+        feature_importances = pd.DataFrame({
+            'Feature': model.featureColumnNames,
+            'Importance': importances
+        })
+        feature_importances.sort_values(by='Importance', ascending=False, inplace=True)
+        top_n = min(n_feature, feature_importances.shape[0])
+        top_features = feature_importances.head(top_n).reset_index(drop=True)
+        top_features.index += 1  # Start ranking at 1
+        top_features.index.name = 'Rank'
+        top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
+        print(f"Top {top_n} Feature Importances:")
+        print(top_features.to_string())
+
 
     def plot_per_class_accuracy(self, y_val: np.ndarray, y_pred: np.ndarray, test_acc: float, test_loss: float):
         """
