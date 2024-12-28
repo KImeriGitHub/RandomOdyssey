@@ -30,10 +30,11 @@ class FeatureFourierCoeff():
         self.multFactor = self.params['multFactor']
         self.monthsHorizon = self.params['monthsHorizon']
         
-        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.startDate)+1 - max(self.lagList, default=0)
-        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1
+        self.buffer = 21*12+10
+        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.startDate)+1 - max(self.lagList, default=0)-self.buffer
+        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1+self.buffer
         
-        assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth, "Start index is negative."
+        assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth+self.buffer, "Start index is negative."
         
         self.PricesPreMatrix = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1 + (self.fouriercutoff-1) + (self.fouriercutoff-1)))
         self.ReturnPreMatrix = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1 + (self.fouriercutoff-1) + (self.fouriercutoff-1)))
