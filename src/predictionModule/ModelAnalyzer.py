@@ -2,14 +2,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from collections import Counter
-from sklearn.metrics import accuracy_score, log_loss
 import xgboost as xgb
 from typing import Optional
-
+from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
 from src.predictionModule.IML import IML
 
 class ModelAnalyzer:
-    def __init__(self, module):
+    def __init__(self, module = None):
         """
         Initialize the ModelAnalyzer with a trained model instance.
 
@@ -54,6 +53,48 @@ class ModelAnalyzer:
         percentage_sum_sq = np.sum(np.array(percentages) ** 2)
         print(f"Sum of squared percentages: {percentage_sum_sq:.4f}")
         return percentage_sum_sq
+    
+    @staticmethod 
+    def print_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_pred_proba: np.ndarray = None):
+        """
+        Print per-class accuracy, overall accuracy, log loss, and TPR, FPR, TNR, FNR for each class.
+
+        Parameters:
+            y_true (np.ndarray): True labels.
+            y_pred (np.ndarray): Predicted labels.
+            y_pred_proba (np.ndarray, optional): Predicted probabilities.
+        """
+        classes = np.unique(y_true)
+        cm:np.array = confusion_matrix(y_true, y_pred, labels=classes)
+        per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
+
+        print("Per-class Accuracy:")
+        for cls, acc in zip(classes, per_class_accuracy):
+            print(f"  Class {cls}: {acc:.2f}")
+
+        overall_acc = accuracy_score(y_true, y_pred)
+        print(f"\nOverall Accuracy: {overall_acc:.2f}")
+
+        if y_pred_proba is not None:
+            ll = log_loss(y_true, y_pred_proba)
+            print(f"Log Loss: {ll:.4f}")
+        else:
+            print("Log Loss: Not provided.")
+
+        print("\nMetrics per Class:")
+        for i, cls in enumerate(classes):
+            TP = cm[i, i]
+            FN = cm[i].sum() - TP
+            FP = cm[:, i].sum() - TP
+            TN = cm.sum() - (TP + FP + FN)
+
+            TPR = TP / (TP + FN) if (TP + FN) else 0
+            FPR = FP / (FP + TN) if (FP + TN) else 0
+            TNR = TN / (TN + FP) if (TN + FP) else 0
+            FNR = FN / (FN + TP) if (FN + TP) else 0
+
+            print(f"  Class {cls}:")
+            print(f"    TPR: {TPR:.2f}, FPR: {FPR:.2f}, TNR: {TNR:.2f}, FNR: {FNR:.2f}") 
 
     def plot_per_class_accuracy(self, y_val: np.ndarray, y_pred: np.ndarray, test_acc: float, test_loss: float):
         """

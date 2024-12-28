@@ -31,23 +31,17 @@ class NextDayML(IML):
     }
 
     def __init__(self, assets: Dict[str, AssetDataPolars], 
-                 trainStartDate: pd.Timestamp = None, 
-                 trainEndDate: pd.Timestamp = None,
-                 valStartDate: pd.Timestamp = None, 
-                 valEndDate: pd.Timestamp = None,
-                 testStartDate: pd.Timestamp = None, 
-                 testEndDate: pd.Timestamp = None,
+                 trainDates: pd.DatetimeIndex = None,
+                 valDates: pd.DatetimeIndex = None,
+                 testDates: pd.DatetimeIndex = None,
                  params: dict = None,
                  enableTimeSeries = True):
         super().__init__()
         self.__assets: Dict[str, AssetDataPolars] = assets
 
-        self.trainStartDate: pd.Timestamp = trainStartDate
-        self.trainEndDate: pd.Timestamp = trainEndDate
-        self.valStartDate: pd.Timestamp = valStartDate
-        self.valEndDate: pd.Timestamp = valEndDate
-        self.testStartDate: pd.Timestamp = testStartDate
-        self.testEndDate: pd.Timestamp = testEndDate
+        self.trainDates: pd.DatetimeIndex = trainDates
+        self.valDates: pd.DatetimeIndex = valDates
+        self.testDates: pd.DatetimeIndex = testDates
         
         self.enableTimeSeries = enableTimeSeries
         self.lagList = [1,2,3,5,10,21,63,121,210]
@@ -144,8 +138,8 @@ class NextDayML(IML):
             }
             featureMain = FeatureMain(
                 asset, 
-                self.trainStartDate, 
-                self.valEndDate, 
+                min([self.trainDates.min(),self.valDates.min(),self.testDates.min()]), 
+                max([self.trainDates.max(),self.valDates.max(),self.testDates.max()]),
                 lagList = self.lagList, 
                 params=params,
                 enableTimeSeries = self.enableTimeSeries
@@ -156,28 +150,8 @@ class NextDayML(IML):
             elif self.featureColumnNames != featureMain.getFeatureNames():
                 raise ValueError("Feature column names are not consistent across assets.")
 
-            # Prepare Dates
-            def _sample_spare_dates(start_date, end_date, ratio=0.1, fallback_days=5):
-                """Return a DatetimeIndex of randomly sampled spare dates."""
-                if start_date is None:
-                    # No dates
-                    return pd.DatetimeIndex([])
-
-                if end_date is None:
-                    # Fallback range if end_date isn't provided
-                    date_range = pd.date_range(start_date, start_date + pd.Timedelta(days=fallback_days), freq='B')
-                    return pd.DatetimeIndex([date_range[0]])
-
-                date_range = pd.date_range(start_date, end_date, freq='B')
-                n_samples = max(int(len(date_range) * ratio), 1)
-                return pd.DatetimeIndex(np.random.choice(date_range, n_samples, replace=False))
-            
-            spare_dates_train = _sample_spare_dates(self.trainStartDate, self.trainEndDate, self.spareDatesRatio)
-            spare_dates_val   = _sample_spare_dates(self.valStartDate,   self.valEndDate,   self.spareDatesRatio)
-            spare_dates_test  = _sample_spare_dates(self.testStartDate,  self.testEndDate,  self.spareDatesRatio)
-
             # Prepare Train Data
-            for date in spare_dates_train:
+            for date in self.trainDates:
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
 
                 Xtrain.append(features)
@@ -186,7 +160,7 @@ class NextDayML(IML):
                 ytrainPrice.append(targetTimeSeries)
 
             #Prepare Val Data
-            for date in spare_dates_val:
+            for date in self.valDates:
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
 
                 Xval.append(features)
@@ -195,7 +169,7 @@ class NextDayML(IML):
                 yvalPrice.append(targetTimeSeries)
 
             #Prepare Test Data
-            for date in spare_dates_test:
+            for date in self.testDates:
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date)
 
                 Xtest.append(features)
