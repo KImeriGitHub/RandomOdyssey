@@ -12,10 +12,17 @@ class GroupSnP500FinanTo2011(IGroup):
   def checkAsset(self, asset: AssetData) -> bool:
     if asset.financials_quarterly is None:
       return False
+    if asset.financials_annually is None:
+      return False
     if not asset.financials_quarterly.columns.__contains__('fiscalDateEnding'):
       return False
-    if len(asset.financials_quarterly) > 4*15 and \
-      asset.financials_quarterly["reportedEPS"].tail(4*15).isnull().sum() > 0:
+    if not asset.financials_annually.columns.__contains__('fiscalDateEnding'):
+      return False
+    if len(asset.financials_annually) < 4: # Annual data is quite unattainable
+      return False
+    if len(asset.financials_quarterly) < 4*14:
+      return False
+    if asset.financials_quarterly["reportedEPS"].tail(4*15).isnull().sum() > 0:
       return False
     
     adf: pd.DataFrame = asset.shareprice

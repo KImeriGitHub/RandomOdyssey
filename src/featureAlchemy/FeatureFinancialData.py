@@ -188,7 +188,7 @@ class FeatureFinancialData():
         )
         allowed_values = {"pre-market", "post-market"}
         if not all(string_name in allowed_values for string_name in unique_strings):
-            print(f"Column {"reportTime"} contains values other than 'pre-market' and 'post-market'.")
+            print(f"Column reportTime contains values other than 'pre-market' and 'post-market'.")
 
         self.fin_quar = self.fin_quar.with_columns(
             pl.when(pl.col("reportTime").is_null())

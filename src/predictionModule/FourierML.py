@@ -17,6 +17,9 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as 
 from src.mathTools.RandomProjectionClassifier import RandomProjectionClassifier as rpc
 from src.predictionModule.IML import IML
 
+#############
+# DEPRECATED
+#############
 class FourierML(IML):
     # Class-level default parameters
     DEFAULT_PARAMS = {
