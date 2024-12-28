@@ -116,9 +116,9 @@ class NextDayML(IML):
         yvalPrice = []
         processedCounter=0
 
-        if self.trainStartDate == None \
-             or self.trainEndDate == None \
-             or self.testStartDate == None:
+        if self.trainDates is None \
+             or self.valDates is None \
+             or self.testDates is None:
             raise ValueError("Data collection time is not defined.")
 
         #Main Loop

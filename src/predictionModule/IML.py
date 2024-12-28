@@ -245,22 +245,22 @@ class IML(ABC):
         # Make predictions and evaluate the model
         y_pred_val = self.XGBoostModel.predict(X_val)
         y_pred_proba_val = self.XGBoostModel.predict_proba(X_val)
-        test_acc_val = accuracy_score(y_val, y_pred_val)
-        test_loss_val = log_loss(y_val, y_pred_proba_val)
+        val_acc = accuracy_score(y_val, y_pred_val)
+        val_loss = log_loss(y_val, y_pred_proba_val)
         
         y_pred_test = self.XGBoostModel.predict(X_test)
         y_pred_proba_test = self.XGBoostModel.predict_proba(X_test)
-        test_acc_test = accuracy_score(y_test, y_pred_test)
-        test_loss_test = log_loss(y_test, y_pred_proba_test)
+        test_acc = accuracy_score(y_test, y_pred_test)
+        test_loss = log_loss(y_test, y_pred_proba_test)
 
-        self.metadata['XGBoostModel_accuracy_val'] = test_acc_val
-        self.metadata['XGBoostModel_log_loss_val'] = test_loss_val
-        self.metadata['XGBoostModel_accuracy_test'] = test_acc_test
-        self.metadata['XGBoostModel_log_loss_test'] = test_loss_test
-        print(f'Val accuracy: {test_acc_val:.4f}')
-        print(f'Test accuracy: {test_acc_test:.4f}')
-        print(f'Val log loss: {test_loss_val:.4f}')
-        print(f'Test log loss: {test_loss_test:.4f}')
+        self.metadata['XGBoostModel_accuracy_val'] = val_acc
+        self.metadata['XGBoostModel_log_loss_val'] = val_loss
+        self.metadata['XGBoostModel_accuracy_test'] = test_acc
+        self.metadata['XGBoostModel_log_loss_test'] = test_loss
+        print(f'Val accuracy: {val_acc:.4f}')
+        print(f'Val log loss: {val_loss:.4f}')
+        print(f'Test accuracy: {test_acc:.4f}')
+        print(f'Test log loss: {test_loss:.4f}')
 
     def traintestCNNModel(self, cnn_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:
@@ -334,8 +334,8 @@ class IML(ABC):
         self.metadata['CNNModel_log_loss_test'] = test_loss
         
         print(f'Val accuracy: {val_acc:.4f}')
-        print(f'Test accuracy: {test_acc:.4f}')
         print(f'Val log loss: {val_loss:.4f}')
+        print(f'Test accuracy: {test_acc:.4f}')
         print(f'Test log loss: {test_loss:.4f}')
 
     def traintestLGBMModel(self, lgbm_params=None, name_model_path:str = "", name_model_name: str = ""):
@@ -375,22 +375,22 @@ class IML(ABC):
 
         y_pred_val = self.LGBMModel.predict(X_val)
         y_pred_proba_val = self.LGBMModel.predict_proba(X_val)
-        test_acc_val = accuracy_score(y_val, y_pred_val)
-        test_loss_val = log_loss(y_val, y_pred_proba_val)
+        val_acc = accuracy_score(y_val, y_pred_val)
+        val_loss = log_loss(y_val, y_pred_proba_val)
         
         y_pred_test = self.LGBMModel.predict(X_test)
         y_pred_proba_test = self.LGBMModel.predict_proba(X_test)
-        test_acc_test = accuracy_score(y_test, y_pred_test)
-        test_loss_test = log_loss(y_test, y_pred_proba_test)
+        test_acc = accuracy_score(y_test, y_pred_test)
+        test_loss = log_loss(y_test, y_pred_proba_test)
 
-        self.metadata['LGBMModel_accuracy_val'] = test_acc_val
-        self.metadata['LGBMModel_log_loss_val'] = test_loss_val
-        self.metadata['LGBMModel_accuracy_test'] = test_acc_test
-        self.metadata['LGBMModel_log_loss_test'] = test_loss_test
-        print(f'Val accuracy: {test_acc_val:.4f}')
-        print(f'Test accuracy: {test_acc_test:.4f}')
-        print(f'Val log loss: {test_loss_val:.4f}')
-        print(f'Test log loss: {test_loss_test:.4f}')
+        self.metadata['LGBMModel_accuracy_val'] = val_acc
+        self.metadata['LGBMModel_log_loss_val'] = val_loss
+        self.metadata['LGBMModel_accuracy_test'] = test_acc
+        self.metadata['LGBMModel_log_loss_test'] = test_loss
+        print(f'Val accuracy: {val_acc:.4f}')
+        print(f'Val log loss: {val_loss:.4f}')
+        print(f'Test accuracy: {test_acc:.4f}')
+        print(f'Test log loss: {test_loss:.4f}')
 
     def traintestRPModel(self, rp_params=None, name_model_path:str = "", name_model_name: str = ""):
         if not self.dataIsPrepared:

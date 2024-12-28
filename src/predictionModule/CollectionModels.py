@@ -37,14 +37,9 @@ class CollectionModels():
             save_name:str, 
             trainDates: pd.TimedeltaIndex=None, 
             valDates: pd.TimedeltaIndex=None, 
-            testDates: pd.TimedeltaIndex=None):
-        
-        params = {
-            'daysAfterPrediction': 21*12,
-            'monthsHorizon': 6,
-            'timesteps': 5,
-            'classificationInterval': [0], 
-        }
+            testDates: pd.TimedeltaIndex=None,
+            params = None):
+
         nextDayML = NextDayML(assetspl, 
                 trainDates = trainDates,
                 valDates = valDates,
@@ -77,9 +72,11 @@ class CollectionModels():
         nextDayML.save_data('src/predictionModule/bin', loadup_name)
         
     @staticmethod
-    def NextDayML_loadupData_lgbm(assetspl: Dict[str, AssetDataPolars], loadup_name: str):
+    def NextDayML_loadupData_lgbm(assetspl: Dict[str, AssetDataPolars], loadup_name: str, params = None):
         nextDayML = NextDayML(assetspl)
         nextDayML.load_data('src/predictionModule/bin', loadup_name)
+
+        ModelAnalyzer().print_label_distribution(nextDayML.y_val, nextDayML.y_test)
 
         def objective(trial):
             # 2. Suggest values of the hyperparameters using a trial object.
@@ -89,10 +86,10 @@ class CollectionModels():
                 'boosting_type': 'gbdt',
                 'early_stopping_rounds': 100,
                 'n_estimators': trial.suggest_int('n_estimators', 100, 300),
-                'lambda_l1': trial.suggest_float('lambda_l1', 1e-8, 1, log=True),
-                'lambda_l2': trial.suggest_float('lambda_l2', 1e-8, 1, log=True),
+                'lambda_l1': 0.9,
+                'lambda_l2': 0.9,
                 'num_leaves': trial.suggest_int('num_leaves', 8, 512),
-                'max_depth': trial.suggest_int('max_depth', 5, 14),
+                'max_depth': params["LGBM_max_depth"],
                 'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.9, log=True),
             }
 
@@ -101,7 +98,8 @@ class CollectionModels():
 
         # 3. Create a study object and optimize the objective function.
         study = optuna.create_study(direction='maximize')
-        study.optimize(objective, n_trials = 2)
+        n_trials = params['optuna_trials'] if params is not None else 10
+        study.optimize(objective, n_trials = n_trials)
         
         best_trial = study.best_trial
         print("Best Trial:")
@@ -116,10 +114,10 @@ class CollectionModels():
             'boosting_type': 'gbdt',
             'early_stopping_rounds': 100,
             'n_estimators': best_trial.params['n_estimators'],
-            'lambda_l1': best_trial.params['lambda_l1'],
-            'lambda_l2': best_trial.params['lambda_l2'],
+            'lambda_l1': 0.9,
+            'lambda_l2': 0.9,
             'num_leaves': best_trial.params['num_leaves'],
-            'max_depth': best_trial.params['max_depth'],
+            'max_depth': params["LGBM_max_depth"],
             'learning_rate': best_trial.params['learning_rate'],
         }
         
@@ -129,7 +127,7 @@ class CollectionModels():
         
         y_pred = nextDayML.LGBMModel.predict(nextDayML.X_test)
         y_pred_proba = nextDayML.LGBMModel.predict_proba(nextDayML.X_test)
-        
+        ModelAnalyzer().print_feature_importance_LGBM(nextDayML, 100)
         ModelAnalyzer().print_classification_metrics(nextDayML.y_test, y_pred, y_pred_proba)
         
     @staticmethod
