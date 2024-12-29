@@ -16,9 +16,6 @@ class CleanData():
         Returns:
             pd.DataFrame: The financial DataFrame with rows combined where fiscalDateEnding values are within daysDiscrep of each other.
         """
-        # Sort by the fiscal date
-        fin = fin.sort_values('fiscalDateEnding').reset_index(drop=True)
-
         # We'll iterate through the rows to find groups of rows whose fiscalDateEnding are within days of e
         combined_rows = []
         skip_indices = set()

@@ -159,13 +159,16 @@ class OutsourceLoader:
                 balanceSheetData=balanceSheetData, 
                 earningsData=earningsData)
             
-            financials_annually, financials_quarterly = parser.to_pandas()
-
-            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quarterly)
-            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually)
+            assetData.financials_annually, assetData.financials_quarterly = parser.to_pandas()
             
-            assetData.financials_annually = CleanData.financial_dropDuplicateYears(financials_annually)
-            assetData.financials_annually = CleanData.financial_dropLastRow(financials_annually)
+            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(assetData.financials_quarterly)
+            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(assetData.financials_annually)
+            
+            assetData.financials_annually = CleanData.financial_dropDuplicateYears(assetData.financials_annually)
+            assetData.financials_annually = CleanData.financial_dropLastRow(assetData.financials_annually)
+            
+            #todo: add last row if it is in company overview
+            #todo: add  upcoming information from company overview
             
         except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required
