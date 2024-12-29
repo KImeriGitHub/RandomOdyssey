@@ -131,6 +131,35 @@ class CollectionModels():
         ModelAnalyzer().print_classification_metrics(nextDayML.y_test, y_pred, y_pred_proba)
         
     @staticmethod
+    def NextDayML_loadupData_lgbm_noOptuna(assetspl: Dict[str, AssetDataPolars], loadup_name: str, params = None):
+        nextDayML = NextDayML(assetspl)
+        nextDayML.load_data('src/predictionModule/bin', loadup_name)
+
+        ModelAnalyzer().print_label_distribution(nextDayML.y_val, nextDayML.y_test)
+
+        lgbm_params = {
+            'verbosity': -1,
+            'n_jobs': -1,
+            'boosting_type': 'gbdt',
+            'early_stopping_rounds': 100,
+            'n_estimators': 500,
+            'lambda_l1': 0.9,
+            'lambda_l2': 0.9,
+            'num_leaves': 400,
+            'max_depth': params["LGBM_max_depth"],
+            'learning_rate': 0.99,
+        }
+        
+        nextDayML.traintestLGBMModel(lgbm_params, name_model_name=loadup_name+"_lgbmModel", name_model_path="src/predictionModule/bin")
+        print(nextDayML.metadata)
+        nextDayML.save_data('src/predictionModule/bin', loadup_name)
+        
+        y_pred = nextDayML.LGBMModel.predict(nextDayML.X_test)
+        y_pred_proba = nextDayML.LGBMModel.predict_proba(nextDayML.X_test)
+        ModelAnalyzer().print_feature_importance_LGBM(nextDayML, 100)
+        ModelAnalyzer().print_classification_metrics(nextDayML.y_test, y_pred, y_pred_proba)
+
+    @staticmethod
     def NextDayML_loadupData_LSTM(assetspl: Dict[str, AssetDataPolars], loadup_name: str):
         nextDayML = NextDayML(assetspl)
 
