@@ -46,7 +46,6 @@ class FeatureFinancialData():
     
     catav_ann = [
         'fiscalDateEnding',
-        'reportedDate',
         'reportedEPS',
         'grossProfit',
         'totalRevenue',
