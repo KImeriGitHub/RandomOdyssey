@@ -32,7 +32,7 @@ class FeatureFourierCoeff():
         
         self.buffer = 21*12+10
         self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.startDate)+1 - max(self.lagList, default=0)-self.buffer
-        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1+self.buffer
+        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1
         
         assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth+self.buffer, "Start index is negative."
         

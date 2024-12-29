@@ -17,7 +17,7 @@ class FeatureTA():
         
         self.buffer = 21*12+10  # 12 months + 10 days (see also rolling buffer in TAIndicators)
         self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.startDate)+1 - max(self.lagList, default=0) - self.buffer
-        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1 + self.buffer
+        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1
         
         if self.startIdx < 0:
             raise ValueError("Start Date is too old or lag too long.")
