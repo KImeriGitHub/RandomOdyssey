@@ -3,6 +3,8 @@ from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 from src.common.YamlTickerInOut import YamlTickerInOut
 
+from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
+
 class GroupSnP500FinanTo2011(IGroup):
   snp500tickers = YamlTickerInOut("src/tickerSelection").loadFromFile("snp500.yaml")["snp500tickers"]
 
@@ -10,19 +12,7 @@ class GroupSnP500FinanTo2011(IGroup):
    return "group_snp500_finanTo2011"
 
   def checkAsset(self, asset: AssetData) -> bool:
-    if asset.financials_quarterly is None:
-      return False
-    if asset.financials_annually is None:
-      return False
-    if not asset.financials_quarterly.columns.__contains__('fiscalDateEnding'):
-      return False
-    if not asset.financials_annually.columns.__contains__('fiscalDateEnding'):
-      return False
-    if len(asset.financials_annually) < 4: # Annual data is quite unattainable
-      return False
-    if len(asset.financials_quarterly) < 4*14:
-      return False
-    if asset.financials_quarterly["reportedEPS"].tail(4*15).isnull().sum() > 0:
+    if not GroupFinanTo2011.checkAsset(self, asset):
       return False
     
     adf: pd.DataFrame = asset.shareprice
