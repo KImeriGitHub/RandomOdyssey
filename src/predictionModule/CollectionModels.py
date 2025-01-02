@@ -9,6 +9,7 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.predictionModule.FourierML import FourierML
 from src.predictionModule.NextDayML import NextDayML
 from src.predictionModule.ModelAnalyzer import ModelAnalyzer
+from src.predictionModule.ConditionalML import ConditionalML
 
 import pandas as pd
 import numpy as np
@@ -82,7 +83,7 @@ class CollectionModels():
             # 2. Suggest values of the hyperparameters using a trial object.
             lgbm_params = {
                 'verbosity': -1,
-                'n_jobs': -1,
+                #'n_jobs': -1,
                 'boosting_type': 'gbdt',
                 'early_stopping_rounds': 100,
                 'n_estimators': trial.suggest_int('n_estimators', 100, 300),
@@ -110,7 +111,7 @@ class CollectionModels():
 
         lgbm_params = {
             'verbosity': -1,
-            'n_jobs': -1,
+            #'n_jobs': -1,
             'boosting_type': 'gbdt',
             'early_stopping_rounds': 100,
             'n_estimators': best_trial.params['n_estimators'],
@@ -183,3 +184,83 @@ class CollectionModels():
         nextDayML.save_data('src/predictionModule/bin', loadup_name)
         
         ModelAnalyzer(nextDayML).plot_lstm_absolute_diff_histogram()
+        
+    @staticmethod
+    def ConditionalML_saveData(
+            assetspl: Dict[str, AssetDataPolars], 
+            save_name:str, 
+            trainDates: pd.TimedeltaIndex=None, 
+            valDates: pd.TimedeltaIndex=None, 
+            testDates: pd.TimedeltaIndex=None,
+            params = None):
+
+        conditionalML = ConditionalML(assetspl, 
+                trainDates = trainDates,
+                valDates = valDates,
+                testDates = testDates,
+                params = params,
+                enableTimeSeries = False)
+
+        conditionalML.prepareData()
+
+        conditionalML.save_data('src/predictionModule/bin', save_name)
+        print(conditionalML.metadata)
+        
+    @staticmethod
+    def CondtionalML_loadupData_lgbm(assetspl: Dict[str, AssetDataPolars], loadup_name: str, params = None):
+        conditionalML = ConditionalML(assetspl)
+        conditionalML.load_data('src/predictionModule/bin', loadup_name)
+
+        ModelAnalyzer().print_label_distribution(conditionalML.y_val, conditionalML.y_test)
+
+        def objective(trial):
+            # 2. Suggest values of the hyperparameters using a trial object.
+            lgbm_params = {
+                'verbosity': -1,
+                'n_jobs': -1,
+                'boosting_type': 'gbdt',
+                'early_stopping_rounds': 100,
+                'n_estimators': trial.suggest_int('n_estimators', 100, 300),
+                'lambda_l1': 0.9,
+                'lambda_l2': 0.9,
+                'num_leaves': trial.suggest_int('num_leaves', 8, 512),
+                'max_depth': params["LGBM_max_depth"],
+                'learning_rate': trial.suggest_float('learning_rate', 0.3, 0.9, log=True),
+            }
+
+            conditionalML.traintestLGBMModel(lgbm_params)
+            return conditionalML.metadata['LGBMModel_accuracy_val']
+
+        # 3. Create a study object and optimize the objective function.
+        study = optuna.create_study(direction='maximize')
+        n_trials = params['optuna_trials'] if params['optuna_trials'] is not None else 10
+        study.optimize(objective, n_trials = n_trials, timeout=60*60*2)
+        
+        best_trial = study.best_trial
+        print("Best Trial:")
+        print(f"  Value (Accuracy): {best_trial.value}")
+        print("  Params:")
+        for key, value in best_trial.params.items():
+            print(f"    {key}: {value}")
+
+        lgbm_params = {
+            'verbosity': -1,
+            'n_jobs': -1,
+            'boosting_type': 'gbdt',
+            'early_stopping_rounds': 100,
+            'n_estimators': best_trial.params['n_estimators'],
+            'lambda_l1': 0.9,
+            'lambda_l2': 0.9,
+            'num_leaves': best_trial.params['num_leaves'],
+            'max_depth': params["LGBM_max_depth"],
+            'learning_rate': best_trial.params['learning_rate'],
+        }
+        
+        conditionalML.traintestLGBMModel(lgbm_params, name_model_name=loadup_name+"_lgbmModel", name_model_path="src/predictionModule/bin")
+        print(conditionalML.metadata)
+        conditionalML.save_data('src/predictionModule/bin', loadup_name)
+        
+        y_pred = conditionalML.LGBMModel.predict(conditionalML.X_test)
+        y_pred_proba = conditionalML.LGBMModel.predict_proba(conditionalML.X_test)
+        ModelAnalyzer().print_feature_importance_LGBM(conditionalML, 100)
+        ModelAnalyzer().print_classification_metrics(conditionalML.y_test, y_pred, y_pred_proba)

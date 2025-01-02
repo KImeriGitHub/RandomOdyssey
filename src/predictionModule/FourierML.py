@@ -133,7 +133,7 @@ class FourierML(IML):
         return res.tolist()
     
     def getFeaturesAndTarget(self, asset: AssetDataPolars, pricesArray: pl.Series, date: pd.Timestamp):
-        aidx = DPl(asset.adjClosePrice).getNextLowerIndex(date)+1
+        aidx = DPl(asset.adjClosePrice).getNextLowerOrEqualIndex(date)
 
         m = self.numOfMonths
         if (aidx - m * self.idxLengthOneMonth)<0:

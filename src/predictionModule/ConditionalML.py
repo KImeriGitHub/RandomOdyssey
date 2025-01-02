@@ -17,17 +17,17 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as 
 from src.predictionModule.IML import IML
 from src.featureAlchemy.FeatureMain import FeatureMain
 
-class NextDayML(IML):
+class ConditionalML(IML):
     # Class-level default parameters
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'fouriercutoff': 5,
         'multFactor': 6,
-        'daysAfterPrediction': 1,
+        'daysAfterPrediction': 21,
         'monthsHorizon': 13,
         'timesteps': 5,
-        'classificationInterval': [-0.0045, 0.0045], 
-        'averageOverDays': 5,
+        'classificationInterval': [0.05], 
+        'averageOverDays': 5
     }
 
     def __init__(self, assets: Dict[str, AssetDataPolars], 
@@ -64,7 +64,21 @@ class NextDayML(IML):
             raise ValueError("daysAfterPrediction should be greater than averageOverDays//2.")
         
         # Store parameters in metadata
-        self.metadata['NextDayML_params'] = self.params
+        self.metadata['Condtional_params'] = self.params
+    
+    def __condition_isMet(self, asset: AssetDataPolars, dateIdx: int):
+        """
+        If the return is up by 5 % from last month, only then it is met.
+        """
+        curAdjPrice = asset.volume["Volume"].item(dateIdx)
+        mMonthAdjPrice = asset.adjClosePrice["AdjClose"].item(dateIdx - self.idxLengthOneMonth)
+        curVolume = asset.volume["Volume"].item(dateIdx)
+        
+        if curVolume == asset.volume["Volume"].slice(dateIdx - 20,21).max():
+            return True
+
+        return False
+        
     
     @staticmethod
     def getTargetFromPrice(futureReturn: np.array, sorted_array: list[float]) -> list[float]:
@@ -84,19 +98,22 @@ class NextDayML(IML):
     def getFeaturesAndTarget(self, asset: AssetDataPolars, featureMain: FeatureMain, date: pd.Timestamp, aidx: int):
         m = self.monthsHorizon
         numTimesteps = self.timesteps
-        if (aidx - m * self.idxLengthOneMonth-1-numTimesteps)<0:
+        if (aidx - m * self.idxLengthOneMonth - 1 - numTimesteps)<0:
             print("Warning! Asset History does not span far enough.")
         
-        curPrice = asset.adjClosePrice["AdjClose"].item(aidx)
+        curAdjPrice:float = asset.adjClosePrice["AdjClose"].item(aidx)
         futurePrices = (
             asset.adjClosePrice["AdjClose"]
                 .slice(aidx + self.daysAfterPrediction - self.averageOverDays//2, self.averageOverDays).to_numpy()
         )
         futureMeanPrice = futurePrices.mean()
-        futureMeanPriceScaled = futureMeanPrice/curPrice
+        futureMeanPriceScaled = futureMeanPrice/curAdjPrice
+        
+        if curAdjPrice < 1e-10:
+            raise ValueError("Negative adjusted price detected.")
         
         features = featureMain.apply(date, idx=aidx)
-        features_timeseries = featureMain.apply(date, idx=aidx)
+        features_timeseries = featureMain.apply_timeseries(date, idx=aidx)
         
         target = self.getTargetFromPrice([futureMeanPriceScaled-1], self.classificationInterval)
         target = target[0]
@@ -131,7 +148,7 @@ class NextDayML(IML):
             if asset.adjClosePrice is None or not 'AdjClose' in asset.adjClosePrice.columns:
                 continue
 
-            print(f"Processing asset: {asset.ticker}.  Processed {processedCounter} out of {len(self.__assets)}.")
+            print(f"Processing asset: {asset.ticker}. Processed {processedCounter} out of {len(self.__assets)}.")
             processedCounter += 1
             
             params = {
@@ -141,6 +158,7 @@ class NextDayML(IML):
                 'monthsHorizon': self.monthsHorizon,
                 'timesteps': self.timesteps,
             }
+            
             featureMain = FeatureMain(
                 asset, 
                 min([self.trainDates.min(),self.valDates.min(),self.testDates.min()]), 
@@ -158,9 +176,16 @@ class NextDayML(IML):
             # Prepare Train Data And Val Dates
             trainValDates = self.trainDates.union(self.valDates)
             for date in trainValDates:
-                aidx = DPl(asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+                aidx = DPl(asset.shareprice).getNextLowerOrEqualIndex(date)
                 if asset.shareprice["Date"].item(aidx) != date:
                     continue
+                if asset.shareprice["Date"].item(-1) < date + pd.Timedelta(days=self.daysAfterPrediction+self.averageOverDays//2):
+                    print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
+                    continue
+                
+                if not self.__condition_isMet(asset, aidx):
+                    continue
+
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date, aidx)
 
                 if date in self.trainDates:
@@ -176,9 +201,15 @@ class NextDayML(IML):
 
             #Prepare Test Data
             for date in self.testDates:
-                aidx = DPl(asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+                aidx = DPl(asset.shareprice).getNextLowerOrEqualIndex(date)
                 if asset.shareprice["Date"].item(aidx) != date:
                     continue
+                if asset.shareprice["Date"].item(-1) < date + pd.Timedelta(days=self.daysAfterPrediction+self.averageOverDays//2):
+                    print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
+                    continue
+                if not self.__condition_isMet(asset, aidx):
+                    continue
+                
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date, aidx)
 
                 Xtest.append(features)
