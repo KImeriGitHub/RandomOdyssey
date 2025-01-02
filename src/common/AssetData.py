@@ -10,7 +10,7 @@ class AssetData:
     # [Open, High, Low, Close, Adj Close]
     shareprice: pd.DataFrame = None
     volume: pd.Series = None
-    dividends: pd.Series = None
+    dividends: pd.Series = None # Note: Must be per day and not in percentage
     splits: pd.Series = None
 
     # Adj Close has No NAN Values and maybe extra dates than Close price
