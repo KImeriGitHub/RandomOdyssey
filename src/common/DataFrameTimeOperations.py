@@ -35,7 +35,10 @@ class DataFrameTimeOperationsPandas:
 
         return -1
     
-    def getNextLowerIndex(self, targetDate: pd.Timestamp) -> int:
+    def getNextLowerOrEqualIndex(self, targetDate: pd.Timestamp) -> int:
+        """
+            Get the index of the closest date that is lower or equal than the target date
+        """
         # Get the index of dates
         dateIndex = self.df.index
 
@@ -63,14 +66,16 @@ class DataFrameTimeOperationsPandas:
                   startDate: pd.Timestamp, 
                   endDate: pd.Timestamp,
                   timeDelta: pd.Timedelta = pd.Timedelta(days=0)):
-
+        """
+            Returns dataframe of slice with dates between and including the start and end date
+        """
         if startDate > endDate:
             return ValueError("Start Date is later than the End Date!")
 
-        startIdx = self.getNextLowerIndex(startDate-timeDelta) + 1
-        endIdx = self.getNextLowerIndex(endDate+timeDelta)+1
+        startIdx = self.getNextLowerOrEqualIndex(startDate-timeDelta)
+        endIdx = self.getNextLowerOrEqualIndex(endDate+timeDelta)
 
-        return self.df.iloc[startIdx:endIdx]
+        return self.df.iloc[startIdx:endIdx+1]
     
     def around(self,
             date: pd.Timestamp,
@@ -91,6 +96,9 @@ class DataFrameTimeOperationsPolars:
             self.index = self.index.dt.replace_time_zone("UTC")
         # Check if index is datetime
         is_sorted = self.index.is_sorted()
+        
+        if not is_sorted:
+            return ValueError("Dates are not sorted!")
 
     def getIndex(self, targetDate: pd.Timestamp, timeDelta: pd.Timedelta = pd.Timedelta(days=0.5)) -> int:
         lenIndex = len(self.index)
@@ -113,10 +121,10 @@ class DataFrameTimeOperationsPolars:
 
         return -1
     
-    def getNextLowerIndex(self, targetDate: pd.Timestamp) -> int:
+    def getNextLowerOrEqualIndex(self, targetDate: pd.Timestamp) -> int:
         # Get the index of dates
         dateIndex = self.index
-
+        
         # Check boundary conditions
         if targetDate < dateIndex[0]:
             return -1
@@ -141,14 +149,16 @@ class DataFrameTimeOperationsPolars:
                   startDate: pd.Timestamp, 
                   endDate: pd.Timestamp,
                   timeDelta: pd.Timedelta = pd.Timedelta(days=0)):
-
+        """
+            Returns dataframe of slice with dates between and including the start and end date
+        """
         if startDate > endDate:
             return ValueError("Start Date is later than the End Date!")
 
-        startIdx = self.getNextLowerIndex(startDate-timeDelta) + 1
-        endIdx = self.getNextLowerIndex(endDate+timeDelta)+1
+        startIdx = self.getNextLowerOrEqualIndex(startDate-timeDelta)
+        endIdx = self.getNextLowerOrEqualIndex(endDate+timeDelta)
 
-        return self.df.slice(startIdx,endIdx-startIdx)
+        return self.df.slice(startIdx,endIdx-startIdx+1)
     
     def around(self,
             date: pd.Timestamp,
