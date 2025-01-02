@@ -90,7 +90,7 @@ class FeatureMain():
     
     def apply(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
         
         niveau = 1.0
         # Get features for current date
@@ -105,7 +105,7 @@ class FeatureMain():
         
     def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
             
         if not self.enableTimeSeries:
             return np.array([])

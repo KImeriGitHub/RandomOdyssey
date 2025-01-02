@@ -246,12 +246,12 @@ class FeatureFinancialData():
         self.asset.shareprice = self.asset.shareprice.with_columns([
             pl.when(pl.col("reportedEPS") <= 1e-5)
               .then(1e-5)
-              .otherwise( (pl.col("Adj Close") / pl.col("reportedEPS")).log() )
+              .otherwise( (pl.col("Close") / pl.col("reportedEPS")).log() )
               .alias("log_trailing_pe_ratio"),
 
             pl.when(pl.col("estimatedEPS") <= 1e-5)
               .then(1e-5)
-              .otherwise( (pl.col("Adj Close") / pl.col("estimatedEPS")).log() )
+              .otherwise( (pl.col("Close") / pl.col("estimatedEPS")).log() )
               .alias("log_forward_pe_ratio"),
         ])
         
@@ -314,7 +314,7 @@ class FeatureFinancialData():
         """
         # Find shareprice index if idx not provided
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date) + 1
+            idx = DPl(self.asset.shareprice).getNextLowerOrEqualIndex(date)
         
         # Get corresponding row indexes
         q_idx = self.asset.shareprice["q_idx"][idx]

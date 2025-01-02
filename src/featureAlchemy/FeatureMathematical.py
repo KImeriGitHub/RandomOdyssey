@@ -70,7 +70,7 @@ class FeatureMathematical():
     
     def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
         if idx-max(self.lagList, default=0) < 0 + 4:
             raise ValueError("Lag is too far back.")
         

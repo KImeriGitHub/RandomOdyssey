@@ -31,10 +31,10 @@ class FeatureFourierCoeff():
         self.monthsHorizon = self.params['monthsHorizon']
         
         self.buffer = 21*12+10
-        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.startDate)+1 - max(self.lagList, default=0)-self.buffer
-        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerIndex(self.endDate)+1
+        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.startDate) - max(self.lagList, default=0)-self.buffer
+        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.endDate)
         
-        assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth+self.buffer, "Start index is negative."
+        assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth + self.buffer, "Start index is negative."
         
         self.PricesPreMatrix = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1 + (self.fouriercutoff-1) + (self.fouriercutoff-1)))
         self.ReturnPreMatrix = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1 + (self.fouriercutoff-1) + (self.fouriercutoff-1)))
@@ -97,7 +97,7 @@ class FeatureFourierCoeff():
     
     def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerIndex(date)+1
+            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
         
         niveau = self.asset.adjClosePrice['AdjClose'].item(idx)
         scalingfactor = scaleToNiveau/niveau
