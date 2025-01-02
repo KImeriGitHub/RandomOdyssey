@@ -7,7 +7,6 @@
 - AYI
 - AES
 - AMG
-- AFL
 - AGCO
 - A
 - ADC
@@ -26,7 +25,6 @@
 - AXL
 - AEP
 - AXP
-- AFG
 - AIG
 - AWR
 - AMT
@@ -41,7 +39,6 @@
 - ATR
 - ABR
 - ARW
-- AJG
 - ABG
 - AHT
 - ASB
@@ -54,7 +51,6 @@
 - AVB
 - AVY
 - AVA
-- AVT
 - AXS
 - AXON
 - AZZ
@@ -114,7 +110,6 @@
 - CLF
 - CLX
 - CMS
-- CNA
 - CNO
 - KO
 - CDE
@@ -128,7 +123,6 @@
 - COP
 - CNX
 - ED
-- STZ
 - COO
 - GLW
 - CXW
@@ -141,12 +135,9 @@
 - CMI
 - CW
 - CVS
-- DHI
-- DHR
 - DRI
 - DAR
 - DVA
-- DECK
 - DE
 - DLX
 - DVN
@@ -180,15 +171,12 @@
 - EPR
 - EQT
 - EFX
-- ELS
-- EQR
 - ESE
 - ESS
 - EL
 - EXC
 - EXR
 - XOM
-- FDS
 - FICO
 - AGM
 - FRT
@@ -217,17 +205,14 @@
 - GCO
 - GEL
 - GPC
-- GNW
 - GEO
 - GS
 - GGG
 - GHM
-- GPK
 - GTN
 - GBX
 - GEF
 - GFF
-- GPI
 - GES
 - HAE
 - HAL
@@ -235,13 +220,13 @@
 - HOG
 - HHS
 - HIG
-- HVT
 - HE
 - FUL
 - HR
 - HEI
 - HLX
 - HP
+- HLF
 - HSY
 - HES
 - HPQ
@@ -270,9 +255,9 @@
 - JNJ
 - JCI
 - JLL
-- JPM
 - JNPR
 - KBH
+- K
 - KMPR
 - KMT
 - KEY
@@ -286,6 +271,7 @@
 - KRO
 - LZB
 - LH
+- LVS
 - LEG
 - LEN
 - LII
@@ -379,8 +365,6 @@
 - OI
 - PKG
 - PH
-- PAG
-- PNR
 - PFE
 - PCG
 - DOC
@@ -407,6 +391,7 @@
 - NX
 - PWR
 - DGX
+- RDN
 - RL
 - RRC
 - RJF
@@ -432,7 +417,6 @@
 - R
 - RHP
 - SLB
-- SMG
 - SEE
 - SRE
 - SXT
@@ -465,12 +449,9 @@
 - SUI
 - SHO
 - SUP
-- SNX
-- SNV
 - SYY
 - TPR
 - TGT
-- SNX
 - TGNA
 - TDY
 - TFX
@@ -569,7 +550,6 @@
 - AMAT
 - ADSK
 - ADP
-- BIIB
 - BKNG
 - CDNS
 - CTAS
@@ -611,7 +591,6 @@
 - VRTX
 - XEL
 - AKAM
-- ALGN
 - ACGL
 - BALL
 - TECH
@@ -644,7 +623,6 @@
 - MKTX
 - MPWR
 - NDAQ
-- NTAP
 - NDSN
 - NTRS
 - POOL

@@ -3,7 +3,6 @@
 - ABT
 - ACN
 - AES
-- AFL
 - A
 - APD
 - ALB
@@ -20,7 +19,6 @@
 - APH
 - AON
 - APA
-- AJG
 - AIZ
 - T
 - ATO
@@ -57,18 +55,14 @@
 - CL
 - COP
 - ED
-- STZ
 - COO
 - GLW
 - CCI
 - CSX
 - CMI
 - CVS
-- DHI
-- DHR
 - DRI
 - DVA
-- DECK
 - DE
 - DVN
 - DLR
@@ -85,13 +79,11 @@
 - EOG
 - EQT
 - EFX
-- EQR
 - ESS
 - EL
 - EXC
 - EXR
 - XOM
-- FDS
 - FICO
 - FRT
 - FDX
@@ -127,12 +119,13 @@
 - SJM
 - JNJ
 - JCI
-- JPM
 - JNPR
+- K
 - KEY
 - KMB
 - KIM
 - LH
+- LVS
 - LEN
 - LMT
 - LOW
@@ -168,7 +161,6 @@
 - ORCL
 - PKG
 - PH
-- PNR
 - PFE
 - PCG
 - DOC
@@ -253,7 +245,6 @@
 - AMAT
 - ADSK
 - ADP
-- BIIB
 - BKNG
 - CDNS
 - CTAS
@@ -294,7 +285,6 @@
 - VRTX
 - XEL
 - AKAM
-- ALGN
 - ACGL
 - BALL
 - TECH
@@ -327,7 +317,6 @@
 - MKTX
 - MPWR
 - NDAQ
-- NTAP
 - NDSN
 - NTRS
 - POOL
