@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
+from pandas.api.types import is_numeric_dtype
 
 class CleanData():
     def __init__():
         pass
     
     @staticmethod
-    def financial_fiscalDateIncongruence(fin: pd.DataFrame, daysDiscrep: int = 10) -> pd.DataFrame:
+    def financial_fiscalDateIncongruence(fin: pd.DataFrame, daysDiscrep: int = 30) -> pd.DataFrame:
         """Combine rows of a financial DataFrame that have fiscalDateEnding within daysDiscrep of each other.
 
         Args:
@@ -16,69 +17,92 @@ class CleanData():
         Returns:
             pd.DataFrame: The financial DataFrame with rows combined where fiscalDateEnding values are within daysDiscrep of each other.
         """
-        # We'll iterate through the rows to find groups of rows whose fiscalDateEnding are within days of e
-        combined_rows = []
-        skip_indices = set()
-        i = 0
-        while i < len(fin):
-            if i in skip_indices:
-                i += 1
-                continue
-            
-            current_row = fin.iloc[i]
-            # Look ahead to see if the next row is within days
-            if i + 1 < len(fin):
-                next_row = fin.iloc[i+1]
-                diff_days = (next_row['fiscalDateEnding'] - current_row['fiscalDateEnding']).days
-
-                if diff_days <= daysDiscrep:
-                    # We have at least two rows within days. Combine them.
-                    # The combination logic: for each column, if current is null and next is not, fill curren
-                    combined_dict = {}
-                    for col in fin.columns:
-                        val_current = current_row[col]
-                        val_next = next_row[col]
-                        # Prefer the non-null value (if both non-null, keep the first or choose as you like)
-                        if pd.isna(val_current) and not pd.isna(val_next):
-                            combined_dict[col] = val_next
-                        else:
-                            combined_dict[col] = val_current
-
-                    combined_rows.append(combined_dict)
-                    skip_indices.add(i+1)  # We used the next row to fill in current, so skip it in future
-                    i += 2
+        def combine_block(block: pd.DataFrame) -> dict:
+            out = {}
+            for col in fin.columns:
+                vals = block[col].dropna()
+                if len(vals) == 0:
+                    out[col] = None
+                elif is_numeric_dtype(block[col]):
+                    out[col] = vals.mean()  # average numeric
                 else:
-                    # No close next row, just keep the current one as is
-                    combined_rows.append(current_row.to_dict())
-                    i += 1
-            else:
-                # Last row, no pairs possible
-                combined_rows.append(current_row.to_dict())
-                i += 1
-
-        # Convert the combined list of dictionaries back to a DataFrame
-        res_df = pd.DataFrame(combined_rows)
-        
-        res_df.columns = fin.columns
-        
-        return res_df
+                    out[col] = vals.iloc[0]  # first non-null for non-numeric
+            return out
+    
+        groups, start = [], 0
+        for i in range(len(fin) - 1):
+            diff = (fin.loc[i+1, 'fiscalDateEnding'] - fin.loc[i, 'fiscalDateEnding']).days
+            if diff > daysDiscrep:
+                groups.append(combine_block(fin.iloc[start:i+1]))
+                start = i+1
+        # last group
+        groups.append(combine_block(fin.iloc[start:]))
+    
+        return pd.DataFrame(groups, columns=fin.columns)
     
     @staticmethod
     def financial_dropDuplicateYears(fin: pd.DataFrame) -> pd.DataFrame:
-        # Drop duplicate years in fin_ann, keep first entry
+        # Drop duplicate years in fin, combine duplicates by:
+        #  - taking the mean for numeric columns
+        #  - keeping the first (chronologically) row's values for other columns
         if "fiscalDateEnding" in fin.columns:
+            # Create a 'year' column from the datetime
             fin["year"] = fin["fiscalDateEnding"].dt.year
-            fin = fin.drop_duplicates(subset="year", keep="first").drop(columns="year")
+            
+            # Sort by 'fiscalDateEnding' so "first entry" is chronologically first
+            fin = fin.sort_values("fiscalDateEnding")
+            
+            # Identify numeric columns (for which we'll take the mean)
+            numeric_cols = fin.select_dtypes(include=[np.number]).columns
+            
+            # Group by 'year' and aggregate
+            def aggregate_group(group: pd.DataFrame) -> pd.Series:
+                # For numeric columns -> mean; for others -> take the first row's value
+                return pd.Series({
+                    col: group[col].mean(skipna=True) if col in numeric_cols 
+                         else group[col].iloc[0] 
+                    for col in group.columns
+                })
+            
+            # Apply the aggregation and reset index
+            fin_agg = fin.groupby("year", as_index=False).apply(aggregate_group)
+            fin_agg.reset_index(drop=True, inplace=True)
+            
+            return fin_agg
+        else:
+            # If 'fiscalDateEnding' not found, just return the original DataFrame
+            return fin
+    
+    @staticmethod
+    def financial_lastRow_fillWithCompanyOverview_AV(fin: pd.DataFrame, compOverview: pd.DataFrame) -> pd.DataFrame:
+        if not len(compOverview) == 1:
+            return fin
         
+        totalRevenue = pd.to_numeric(compOverview['RevenueTTM'].iloc[0], errors='coerce')
+        grossProfit = pd.to_numeric(compOverview['GrossProfitTTM'].iloc[0], errors='coerce')
+        EBITDA = pd.to_numeric(compOverview['EBITDA'].iloc[0], errors='coerce')
+
+        if np.isnan(fin.loc[len(fin)-1, 'totalRevenue']):
+            fin.loc[len(fin)-1, 'totalRevenue'] = totalRevenue
+        if np.isnan(fin.loc[len(fin)-1, 'grossProfit']):
+            fin.loc[len(fin)-1, 'grossProfit'] = grossProfit
+        if np.isnan(fin.loc[len(fin)-1, 'ebitda']):
+            fin.loc[len(fin)-1, 'ebitda'] = EBITDA
+
         return fin
     
     @staticmethod
-    def financial_dropLastRow(fin: pd.DataFrame, factor_nulls: float = 0.5) -> pd.DataFrame:
-        #if the last row has more null than half of the entries, drop it
-        if fin.iloc[-1].isnull().sum() > int(len(fin.columns)*factor_nulls):
-            fin = fin.iloc[:-1]
+    def financial_lastRow_removeIfOutOfFiscal(fin: pd.DataFrame) -> pd.DataFrame:
+        # Remove last row if the date difference between last to second is not equal to the difference between second to third and third to fourth
+        if len(fin) > 3:
+            m1 = fin.iloc[-1]['fiscalDateEnding'].month
+            m2 = fin.iloc[-2]['fiscalDateEnding'].month
+            d1 = fin.iloc[-1]['fiscalDateEnding'].day
+            d2 = fin.iloc[-2]['fiscalDateEnding'].day
+            if m1 != m2 and d1 != d2:
+                fin = fin.iloc[:-1]
+
         return fin
-            
     
     @staticmethod
     def fill_NAN_to_BusinessDays(s: pd.Series):

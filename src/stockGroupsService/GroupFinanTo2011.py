@@ -10,7 +10,7 @@ class GroupFinanTo2011(IGroup):
 
   def checkAsset(self, asset: AssetData) -> bool:
     quarterly_entries = 4*13
-    annual_entries = 4
+    annual_entries = 13
     
     if asset.financials_quarterly is None:
       return False
@@ -20,7 +20,7 @@ class GroupFinanTo2011(IGroup):
       return False
     if not asset.financials_annually.columns.__contains__('fiscalDateEnding'):
       return False
-    if len(asset.financials_annually) < annual_entries: # Annual data is quite unattainable
+    if len(asset.financials_annually) < annual_entries:
       return False
     if len(asset.financials_quarterly) < quarterly_entries:
       return False
@@ -30,9 +30,9 @@ class GroupFinanTo2011(IGroup):
     # Check if the asset has no empty entries in the quarterly financials in the columns quarterly_columns and annual financials in the columns annual_columns for the last n entries
     buffer_quar = 10
     buffer_ann = 10
-    if asset.financials_quarterly[GroupFinanTo2011.quarterly_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
+    if asset.financials_quarterly[GroupFinanTo2011.compact_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
       return False
-    if asset.financials_annually[GroupFinanTo2011.annual_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
+    if asset.financials_annually[GroupFinanTo2011.compact_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
       return False
     
     adf: pd.DataFrame = asset.shareprice
@@ -42,7 +42,17 @@ class GroupFinanTo2011(IGroup):
     #df_year = asset.financials_quarterly[asset.financials_quarterly['fiscalDateEnding'].dt.year == 2011]
     return ((current_date - first_date).days >= 20 * 366.0) \
       and ((current_date - max_date).days < 60) 
-      
+  
+  compact_columns = [
+    'fiscalDateEnding',
+    'reportedEPS',
+    'grossProfit',
+    'totalRevenue',
+    'ebitda',
+    'totalAssets',
+    'profitLoss',
+  ]
+
   quarterly_columns = [
     'fiscalDateEnding',
     'reportedDate',

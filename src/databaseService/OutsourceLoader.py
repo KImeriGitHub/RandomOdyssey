@@ -120,6 +120,7 @@ class OutsourceLoader:
         CleanData.fill_NAN_to_BusinessDays(assetData.adjClosePrice)
         
         # Configure company overview
+        company_overview = None
         try:
             company_overview, _ = fd.get_company_overview(symbol=tickerHandle)
             
@@ -161,14 +162,11 @@ class OutsourceLoader:
             
             assetData.financials_annually, assetData.financials_quarterly = parser.to_pandas()
             
-            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(assetData.financials_quarterly)
-            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(assetData.financials_annually)
-            
-            assetData.financials_annually = CleanData.financial_dropDuplicateYears(assetData.financials_annually)
-            assetData.financials_annually = CleanData.financial_dropLastRow(assetData.financials_annually)
-            
-            #todo: add last row if it is in company overview
-            #todo: add  upcoming information from company overview
+            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(assetData.financials_quarterly, daysDiscrep = 60)
+            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(assetData.financials_annually, daysDiscrep = 180)
+
+            if not company_overview is None:
+                assetData.financials_annually = CleanData.financial_lastRow_fillWithCompanyOverview_AV(assetData.financials_annually, company_overview)
             
         except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required
