@@ -221,13 +221,13 @@ class FeatureFinancialData():
         metricsColumns_ann = []
         
         # Configure joining dataframe
-        fin_quar_join = (self.fin_quar
+        self.fin_quar_join = (self.fin_quar
             .with_row_count("q_idx")
             .rename({"fiscalDateEnding": "Date"})
             .select(["Date", "q_idx"] + metricsColumns_quar)
         )
 
-        fin_ann_join = (self.fin_ann
+        self.fin_ann_join = (self.fin_ann
             .with_row_count("a_idx")
             .rename({"fiscalDateEnding": "Date"})
             .select(["Date", "a_idx"] + metricsColumns_ann)
@@ -236,11 +236,11 @@ class FeatureFinancialData():
         # Asof join only the indices
         if "q_idx" not in self.asset.shareprice.columns:
             self.asset.shareprice = (
-                self.asset.shareprice.join_asof(fin_quar_join, on="Date", strategy="backward")
+                self.asset.shareprice.join_asof(self.fin_quar_join, on="Date", strategy="backward")
             )
         if "a_idx" not in self.asset.shareprice.columns:
             self.asset.shareprice = (
-                self.asset.shareprice.join_asof(fin_ann_join, on="Date", strategy="backward")
+                self.asset.shareprice.join_asof(self.fin_ann_join, on="Date", strategy="backward")
             )
         
         self.asset.shareprice = self.asset.shareprice.with_columns([
