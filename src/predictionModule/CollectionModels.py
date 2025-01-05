@@ -16,6 +16,8 @@ import numpy as np
 from typing import Dict
 import optuna
 
+from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
+
 class CollectionModels():
     # Prepare Dates
     @staticmethod
@@ -211,7 +213,14 @@ class CollectionModels():
         conditionalML = ConditionalML(assetspl)
         conditionalML.load_data('src/predictionModule/bin', loadup_name)
 
-        ModelAnalyzer().print_label_distribution(conditionalML.y_val, conditionalML.y_test)
+        print("Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(conditionalML.y_train)
+        
+        print("Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(conditionalML.y_val)
+
+        print("Testing Label Distribution:")
+        ModelAnalyzer().print_label_distribution(conditionalML.y_test)
 
         def objective(trial):
             # 2. Suggest values of the hyperparameters using a trial object.
@@ -219,17 +228,22 @@ class CollectionModels():
                 'verbosity': -1,
                 'n_jobs': -1,
                 'boosting_type': 'gbdt',
-                'early_stopping_rounds': 100,
-                'n_estimators': trial.suggest_int('n_estimators', 100, 300),
-                'lambda_l1': 0.9,
-                'lambda_l2': 0.9,
-                'num_leaves': trial.suggest_int('num_leaves', 8, 512),
+                'early_stopping_rounds': 500,
+                'n_estimators': 5000,
+                'lambda_l1': trial.suggest_float('lambda_l1', 0.01, 0.9, log=True),
+                'lambda_l2': trial.suggest_float('lambda_l2', 0.01, 0.9, log=True),
+                'feature_fraction': trial.suggest_float('feature_fraction', 0.03, 0.09),
+                #'bagging_fraction': trial.suggest_float('bagging_fraction', 0.001, 0.9, log=True),
+                #'bagging_freq': trial.suggest_int('bagging_freq', 0, 30),
+                'num_leaves': trial.suggest_int('num_leaves', 512, 2048),
                 'max_depth': params["LGBM_max_depth"],
-                'learning_rate': trial.suggest_float('learning_rate', 0.3, 0.9, log=True),
+                'learning_rate': trial.suggest_float('learning_rate', 0.3, 0.99),
             }
-
             conditionalML.traintestLGBMModel(lgbm_params)
-            return conditionalML.metadata['LGBMModel_accuracy_val']
+            y_val_pred = conditionalML.LGBMModel.predict(conditionalML.X_val)
+            cm:np.array = confusion_matrix(conditionalML.y_val, y_val_pred, labels=np.unique(conditionalML.y_val))
+            per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
+            return np.prod(per_class_accuracy)
 
         # 3. Create a study object and optimize the objective function.
         study = optuna.create_study(direction='maximize')
@@ -247,10 +261,13 @@ class CollectionModels():
             'verbosity': -1,
             'n_jobs': -1,
             'boosting_type': 'gbdt',
-            'early_stopping_rounds': 100,
-            'n_estimators': best_trial.params['n_estimators'],
-            'lambda_l1': 0.9,
-            'lambda_l2': 0.9,
+            'early_stopping_rounds': 500,
+            'n_estimators': 5000,
+            'lambda_l1':best_trial.params['lambda_l1'],
+            'lambda_l2': best_trial.params['lambda_l2'],
+            'feature_fraction': best_trial.params['feature_fraction'],
+            #'bagging_fraction': best_trial.params['bagging_fraction'],
+            #'bagging_freq': best_trial.params['bagging_freq'],
             'num_leaves': best_trial.params['num_leaves'],
             'max_depth': params["LGBM_max_depth"],
             'learning_rate': best_trial.params['learning_rate'],
@@ -260,7 +277,15 @@ class CollectionModels():
         print(conditionalML.metadata)
         conditionalML.save_data('src/predictionModule/bin', loadup_name)
         
-        y_pred = conditionalML.LGBMModel.predict(conditionalML.X_test)
-        y_pred_proba = conditionalML.LGBMModel.predict_proba(conditionalML.X_test)
+        y_pred_val = conditionalML.LGBMModel.predict(conditionalML.X_val)
+        y_pred_val_proba = conditionalML.LGBMModel.predict_proba(conditionalML.X_val)
+        y_pred_test = conditionalML.LGBMModel.predict(conditionalML.X_test)
+        y_pred_test_proba = conditionalML.LGBMModel.predict_proba(conditionalML.X_test)
+        
+        print("Feature Importance:")
         ModelAnalyzer().print_feature_importance_LGBM(conditionalML, 100)
-        ModelAnalyzer().print_classification_metrics(conditionalML.y_test, y_pred, y_pred_proba)
+        print()
+        print("Validation Metrics:")
+        ModelAnalyzer().print_classification_metrics(conditionalML.y_val, y_pred_val, y_pred_val_proba)
+        print("Test Metrics:")
+        ModelAnalyzer().print_classification_metrics(conditionalML.y_test, y_pred_test, y_pred_test_proba)
