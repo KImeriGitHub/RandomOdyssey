@@ -89,9 +89,9 @@ class DataFrameTimeOperationsPandas:
         return self.df.iloc[idx]
     
 class DataFrameTimeOperationsPolars:
-    def __init__(self, df: pl.DataFrame):
+    def __init__(self, df: pl.DataFrame, dateCol: str = 'Date'):
         self.df = df
-        self.index = self.df['Date']
+        self.index = self.df[dateCol]
         if self.index.dtype.time_zone is None:
             self.index = self.index.dt.replace_time_zone("UTC")
         # Check if index is datetime

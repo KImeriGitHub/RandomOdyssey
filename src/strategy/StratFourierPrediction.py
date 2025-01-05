@@ -107,12 +107,11 @@ class StratFourierPrediction(IStrategy):
 
     def apply(self,
               assets: Dict[str, AssetDataPolars], 
-              portfolio: Portfolio, 
               currentDate: pd.Timestamp, 
               assetdateIdx: Dict[str, int] = {}):
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders, portfolio, currentDate, self.__stoplossLimit)
+        self.sell(sellOrders, self.__portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()
 
@@ -123,7 +122,7 @@ class StratFourierPrediction(IStrategy):
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders, portfolio, currentDate, self.__stoplossLimit)
+        self.buy(buyOrders, self.__portfolio, currentDate, self.__stoplossLimit)
 
         self.updateStoplossLimit()
 

@@ -13,6 +13,7 @@ class StratQuadraticAscendRanked(IStrategy):
     __cashthreshhold = 0.2
 
     def __init__(self,
+                 portfolio: Portfolio = None,
                  num_months: int = 2, 
                  num_months_var: int = 2, 
                  num_choices: int = 1,
@@ -27,7 +28,7 @@ class StratQuadraticAscendRanked(IStrategy):
         self.__stoplossRatio = stoplossratio
 
         self.__assets: Dict[str, AssetDataPolars] = {}
-        self.__portfolio: Portfolio = None
+        self.__portfolio: Portfolio = portfolio
 
         self.__stoplossLimit: Dict[str, float] = {}
         self.__blacklist: Dict[str, pd.Timestamp] = {}
@@ -180,16 +181,14 @@ class StratQuadraticAscendRanked(IStrategy):
 
     def apply(self,
               assets: Dict[str, AssetDataPolars], 
-              portfolio: Portfolio, 
               currentDate: pd.Timestamp, 
               assetdateIdx: Dict[str, int] = {}):
         
         self.__assets = assets
-        self.__portfolio = portfolio
         self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders, portfolio, currentDate)
+        self.sell(sellOrders, self.__portfolio, currentDate)
 
         self.updateStoplossLimit(sellorders = sellOrders)
 
@@ -200,6 +199,6 @@ class StratQuadraticAscendRanked(IStrategy):
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders, portfolio, currentDate)
+        self.buy(buyOrders, self.__portfolio, currentDate)
 
         self.updateStoplossLimit(buyorders = buyOrders)

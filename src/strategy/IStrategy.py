@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 
 class IStrategy(ABC):
-    def __init__(self, printBuySell):
+    def __init__(self, printBuySell =  False):
         self.printBuySell = printBuySell
 
     @abstractmethod

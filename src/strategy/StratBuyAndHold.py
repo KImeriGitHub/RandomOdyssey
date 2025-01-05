@@ -9,10 +9,11 @@ import numpy as np
 
 class StratBuyAndHold(IStrategy):
     def __init__(self, 
-                 targetTickers: List[str]):
+                 targetTickers: List[str],
+                 portfolio: Portfolio = None,):
         self.targetTickers = targetTickers
         self.__assets: Dict[str, AssetData] = {}
-        self.__portfolio: Portfolio = None
+        self.__portfolio: Portfolio = portfolio
 
         self.__assetdateIdx: Dict[str, int] = {}
 

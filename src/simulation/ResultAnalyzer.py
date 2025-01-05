@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('TkAgg')  # Set the backend before importing pyplot
 import matplotlib.pyplot as plt
 import pandas as pd
 from src.common.Portfolio import Portfolio

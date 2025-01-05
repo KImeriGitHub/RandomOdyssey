@@ -75,10 +75,10 @@ class SimulatePortfolio(ISimulation):
         dates = pd.date_range(self.startDate, self.endDate, freq='B') # 'B' for business days
         for date in dates:
             # Apply the strategy
-            self.strategy.apply(assets = self.assets, 
-                                portfolio = self.portfolio, 
-                                currentDate = date, 
-                                assetdateIdx = assetdateIdx)
+            self.strategy.apply(
+                assets = self.assets,
+                currentDate = date, 
+                assetdateIdx = assetdateIdx)
 
             # Advance assetdateIdx
             for ticker, asset in self.assets.items():

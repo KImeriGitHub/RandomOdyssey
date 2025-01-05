@@ -13,6 +13,7 @@ class StratLinearAscendRanked(IStrategy):
     __stoplossRatio = 0.92
 
     def __init__(self,
+                 portfolio: Portfolio = None,
                  num_months: int = 2, 
                  num_choices: int = 1,
                  ):
@@ -20,7 +21,7 @@ class StratLinearAscendRanked(IStrategy):
         self.num_choices: int = num_choices
 
         self.__assets: Dict[str, AssetDataPolars] = {}
-        self.__portfolio: Portfolio = None
+        self.__portfolio: Portfolio = portfolio
 
         self.__stoplossLimit: Dict[str, float] = {}
         self.__blacklist: Dict[str, pd.Timestamp] = {}
@@ -160,17 +161,15 @@ class StratLinearAscendRanked(IStrategy):
 
     def apply(self,
               assets: Dict[str, AssetDataPolars], 
-              portfolio: Portfolio, 
               currentDate: pd.Timestamp, 
               assetdateIdx: Dict[str, int] = {}):
         
         self.__assets = assets
-        self.__portfolio = portfolio
         self.__currentDate = currentDate
         self.__assetdateIdx = assetdateIdx
 
         sellOrders = self.sellOrders()
-        self.sell(sellOrders, portfolio, currentDate)
+        self.sell(sellOrders, self.__portfolio, currentDate)
 
         self.updateStoplossLimit(sellorders = sellOrders)
 
@@ -180,6 +179,6 @@ class StratLinearAscendRanked(IStrategy):
             return  # Do not buy if positions are not empty and no assets were sold.
 
         buyOrders = self.buyOrders()
-        self.buy(buyOrders, portfolio, currentDate)
+        self.buy(buyOrders, self.__portfolio, currentDate)
 
         self.updateStoplossLimit(buyorders = buyOrders)

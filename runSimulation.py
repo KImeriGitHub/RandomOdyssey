@@ -7,27 +7,25 @@ from typing import Dict
 import gc
 import time
 
-assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_over20years")
+assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_snp500_finanTo2011")
 # Convert to Polars for speedup
 assetspl: Dict[str, AssetDataPolars] = {}
 for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
 
-## FourierML
+res = np.zeros(50)
+for i in range(len(res)):
+    res[i] = CollectionSimulations.FreefallAndHighVol(
+        assets = assetspl, 
+        num_choices=5,
+    )
 
-## Quadratic Ascend
-"""
-CollectionSimulations.QuadraticAscend(assets = assetspl, 
-                                                      stoplossratio = 0.88,
-                                                      num_choices=1,
-                                                      num_months=6,
-                                                      num_months_var=6)
+print(np.mean(res))
 """
 slrList = np.arange(0.875, 0.88, 0.005).round(3).tolist()
 nmon = np.arange(6, 7, 1).round(0).tolist()
 nmonvar = np.arange(12, 13, 1).round(0).tolist()
 nchoice = np.arange(5, 6, 1).round(0).tolist()
-
 for nc in nchoice:
     for nm in nmon:
         for nmv in nmonvar:
@@ -42,3 +40,4 @@ for nc in nchoice:
                                                       num_months_var=nmv)
                 gc.collect()
                 time.sleep(0.1)
+"""
