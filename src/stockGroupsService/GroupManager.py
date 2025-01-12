@@ -1,5 +1,6 @@
 import os
 from typing import List, Dict
+import numpy as np
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetData import AssetData
@@ -17,7 +18,7 @@ class GroupManager:
             raise FileNotFoundError("The file 'group_all.yaml' is not given.")
 
         all_stocks_list = YamlTickerInOut(self.stockGroupPath).loadFromFile("group_all.yaml")
-
+        all_stocks_list = np.unique(all_stocks_list)
         # Initialize group lists
         group_lists = {criterion.groupName(): [] for criterion in self.groupClasses}
         assets: Dict[str, AssetData] = {}

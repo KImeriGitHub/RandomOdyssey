@@ -3,14 +3,14 @@ from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 from src.common.YamlTickerInOut import YamlTickerInOut
 
-class GroupFinanTo2011(IGroup):
+class GroupFinanTo2016(IGroup):
 
   def groupName(self) -> str:
-   return "group_finanTo2011"
+   return "group_finanTo2016"
 
   def checkAsset(self, asset: AssetData) -> bool:
-    quarterly_entries = 4*13
-    annual_entries = 13
+    quarterly_entries = 4*8
+    annual_entries = 8
     
     if asset.financials_quarterly is None:
       return False
@@ -30,13 +30,13 @@ class GroupFinanTo2011(IGroup):
     # Check if the asset has no empty entries in the quarterly financials in the columns quarterly_columns and annual financials in the columns annual_columns for the last n entries
     buffer_quar = 10
     buffer_ann = 10
-    if asset.financials_quarterly[GroupFinanTo2011.compact_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
+    if asset.financials_quarterly[GroupFinanTo2016.compact_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
       return False
-    if asset.financials_annually[GroupFinanTo2011.compact_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
+    if asset.financials_annually[GroupFinanTo2016.compact_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
       return False
-    if all([asset.financials_quarterly[col].tail(quarterly_entries).isnull().sum() > 0 for col in GroupFinanTo2011.compact_columns]):
+    if all([asset.financials_quarterly[col].tail(quarterly_entries).isnull().sum() > 0 for col in GroupFinanTo2016.compact_columns]):
       return False
-    if all([asset.financials_annually[col].tail(annual_entries).isnull().sum() > 0 for col in GroupFinanTo2011.compact_columns]):
+    if all([asset.financials_annually[col].tail(annual_entries).isnull().sum() > 0 for col in GroupFinanTo2016.compact_columns]):
       return False
     
     adf: pd.DataFrame = asset.shareprice
