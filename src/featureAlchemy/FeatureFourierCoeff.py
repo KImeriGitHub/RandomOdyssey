@@ -36,8 +36,12 @@ class FeatureFourierCoeff():
         
         assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth + self.buffer, "Start index is negative."
         
-        self.PricesPreMatrix = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1 + (self.fouriercutoff-1) + (self.fouriercutoff-1)))
-        self.ReturnPreMatrix = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1 + (self.fouriercutoff-1) + (self.fouriercutoff-1)))
+        self.PricesPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1))
+        self.PricesPreMatrix_abscoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
+        self.PricesPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
+        self.ReturnPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1))
+        self.ReturnPreMatrix_abscoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
+        self.ReturnPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
         self.__preprocess_fourierConst()
         
 
@@ -61,7 +65,9 @@ class FeatureFourierCoeff():
             res_abs = np.sqrt(res_cos**2+ res_sin**2)
             res_sign = (np.sign(res_cos)+1.0)/2.0
             
-            self.PricesPreMatrix[idx,0:(2*self.fouriercutoff-1)] = np.concatenate(([rsme], res_abs[1:], res_sign[1:]))
+            self.PricesPreMatrix_rsme[idx,:] = rsme
+            self.PricesPreMatrix_abscoeff[idx,0:(2*self.fouriercutoff-1)] = res_abs[1:]
+            self.PricesPreMatrix_signcoeff[idx,0:(2*self.fouriercutoff-1)] = res_sign[1:]
             
             #Returns log
             _, res_cos, res_sin = SeriesExpansion.getFourierInterpCoeff([0.0] + returns_log + [0.0], self.multFactor, self.fouriercutoff)
@@ -72,7 +78,9 @@ class FeatureFourierCoeff():
             res_abs = np.sqrt(res_cos**2+ res_sin**2)
             res_sign = (np.sign(res_cos)+1.0)/2.0
             
-            self.ReturnPreMatrix[idx,0:(2*self.fouriercutoff-1)] = np.concatenate(([rsme], res_abs[1:], res_sign[1:]))
+            self.ReturnPreMatrix_rsme[idx,:] = rsme
+            self.ReturnPreMatrix_abscoeff[idx,0:(2*self.fouriercutoff-1)] = res_abs[1:]
+            self.ReturnPreMatrix_signcoeff[idx,0:(2*self.fouriercutoff-1)] = res_sign[1:]
     
     def getFeatureNames(self) -> list[str]:
         pricesnames = ["Fourier_Price_RSME"] \
@@ -103,14 +111,22 @@ class FeatureFourierCoeff():
         scalingfactor = scaleToNiveau/niveau
         
         features = []
-        features.append(self.PricesPreMatrix[idx,:] * scalingfactor)
-        features.append(self.ReturnPreMatrix[idx,:] * scaleToNiveau)
+        features.append(self.PricesPreMatrix_rsme[idx,:] * scalingfactor)
+        features.append(self.PricesPreMatrix_abscoeff[idx,:] * scalingfactor)
+        features.append(self.PricesPreMatrix_signcoeff[idx,:])
+        features.append(self.ReturnPreMatrix_rsme[idx,:] * scaleToNiveau)
+        features.append(self.ReturnPreMatrix_abscoeff[idx,:] * scaleToNiveau)
+        features.append(self.ReturnPreMatrix_signcoeff[idx,:])
         
         for lag in self.lagList:
             idx_lag = idx - lag
             
-            features.append(self.PricesPreMatrix[idx_lag,:] * scalingfactor)
-            features.append(self.ReturnPreMatrix[idx_lag,:] * scaleToNiveau)
+            features.append(self.PricesPreMatrix_rsme[idx_lag,:] * scalingfactor)
+            features.append(self.PricesPreMatrix_abscoeff[idx_lag,:] * scalingfactor)
+            features.append(self.PricesPreMatrix_signcoeff[idx_lag,:])
+            features.append(self.ReturnPreMatrix_rsme[idx_lag,:] * scaleToNiveau)
+            features.append(self.ReturnPreMatrix_abscoeff[idx_lag,:] * scaleToNiveau)
+            features.append(self.ReturnPreMatrix_signcoeff[idx_lag,:])
 
         features = np.concatenate(features)
         return features

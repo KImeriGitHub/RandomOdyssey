@@ -37,6 +37,7 @@ class FeatureSeasonal():
     
     def getFeatureNames(self) -> list[str]:
         features_names = [
+            "Seasonal_year",
             "Seasonal_month",
             "Seasonal_day",
             "Seasonal_day_of_week",  # Monday=0, Sunday=6
@@ -53,6 +54,7 @@ class FeatureSeasonal():
         
         for lag in self.lagList:
             features_names.extend([
+                f"Seasonal_year_lag_m{lag}",
                 f"Seasonal_month_lag_m{lag}",
                 f"Seasonal_day_lag_m{lag}",
                 f"Seasonal_day_of_week_lag_m{lag}",
@@ -83,6 +85,7 @@ class FeatureSeasonal():
         
         # General date-related features
         features_raw = np.array([
+            date.year-self.startDate.year,
             date.month-1,
             date.day-1,
             date.dayofweek,  # Monday=0, Sunday=6
@@ -97,13 +100,28 @@ class FeatureSeasonal():
             np.max([np.min([(date - h).days for h in self.holidate_dates if h <= date]),90]),
         ])
         
-        unifyingFactorArray = np.array([1/11.0, 1/(date.days_in_month-1), 1/6.0, 1/3.0, 1/51.0, 1.0, 1.0, 1.0, 1.0, 1/2.0, 1/90.0, 1/90.0])
+        unifyingFactorArray = np.array([
+            1/(self.endDate.year - self.startDate.year+1),
+            1/11.0, 
+            1/(date.days_in_month-1), 
+            1/6.0, 
+            1/3.0, 
+            1/51.0, 
+            1.0, 
+            1.0, 
+            1.0, 
+            1.0, 
+            1/2.0, 
+            1/90.0, 
+            1/90.0
+        ])
         features_raw = features_raw * unifyingFactorArray
         
         for lag in self.lagList:
             date_lag = date - pd.Timedelta(days=lag)
             features_raw_lag = np.array([
-                date_lag.month-1,
+                date_lag.year-self.startDate.year,
+                (date_lag.month-1)*(date.days_in_month-1)/(date_lag.days_in_month-1),
                 date_lag.day-1,
                 date_lag.dayofweek,  # Monday=0, Sunday=6
                 date_lag.quarter-1,

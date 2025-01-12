@@ -80,10 +80,10 @@ class FeatureMathematical():
         mathFeatures = []  # Todo: make immutable
         mathFeatures.append(self.tradedPrice_log.item(idx))
         mathFeatures.extend([
-            (self.prices_Diff.item(idx) + niveau) * scalingfactor, 
-            (self.prices_DiffDiff.item(idx) + niveau) * scalingfactor, 
-            (self.prices_logDiff.item(idx) + niveau) * scalingfactor, 
-            (self.prices_logDiffDiff.item(idx) + niveau) * scalingfactor, 
+            (self.prices_Diff.item(idx)) * scaleToNiveau, 
+            (self.prices_DiffDiff.item(idx)) * scaleToNiveau, 
+            (self.prices_logDiff.item(idx)) * scaleToNiveau, 
+            (self.prices_logDiffDiff.item(idx)) * scaleToNiveau, 
             (self.pricesReturns.item(idx) * niveau) * scalingfactor, 
             (self.pricesReturns_log.item(idx) * niveau) * scalingfactor, 
             (self.drawdown.item(idx) * niveau) * scalingfactor,
@@ -94,10 +94,10 @@ class FeatureMathematical():
         for lag in self.lagList:
             idx_lag = idx - lag
             mathFeatures.extend([
-                (self.prices_Diff.item(idx_lag) + niveau) * scalingfactor, 
-                (self.prices_DiffDiff.item(idx_lag) + niveau) * scalingfactor, 
-                (self.prices_logDiff.item(idx_lag) + niveau) * scalingfactor, 
-                (self.prices_logDiffDiff.item(idx_lag) + niveau) * scalingfactor, 
+                (self.prices_Diff.item(idx_lag)) * scaleToNiveau, 
+                (self.prices_DiffDiff.item(idx_lag)) * scaleToNiveau, 
+                (self.prices_logDiff.item(idx_lag)) * scaleToNiveau, 
+                (self.prices_logDiffDiff.item(idx_lag)) * scaleToNiveau, 
                 (self.pricesReturns.item(idx_lag) * niveau) * scalingfactor, 
                 (self.pricesReturns_log.item(idx_lag) * niveau) * scalingfactor,
                 (self.drawdown.item(idx_lag) * niveau) * scalingfactor,

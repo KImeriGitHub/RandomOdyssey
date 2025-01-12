@@ -43,9 +43,10 @@ class FeatureTA():
             raise ValueError("Date is too old.")
         
         curClose = self.asset.shareprice['Close'].item(idx)
-        curVol = self.asset.shareprice['Volume'].item(idx)
+        curVol = self.asset.volume['Volume'].item(idx)
         
-        curVol = 1 if ~(curVol >= 1) else curVol
+        if not curVol >= 2:
+            curVol = 1
         
         curTAdf = self.taindic.getReScaledDataFrame(curClose, curVol)
         curTAdf = curTAdf.select(self.ColumnToUse)

@@ -95,10 +95,10 @@ class FeatureMain():
         niveau = 1.0
         # Get features for current date
         features = self.featCategory.apply(niveau)
-        features = np.concatenate((features, self.featSeasonal.apply(date, niveau)))
         features = np.concatenate((features, self.featMathematical.apply(date, niveau, idx)))
         features = np.concatenate((features, self.featFourierCoeff.apply(date, niveau, idx)))
         features = np.concatenate((features, self.featFinancialData.apply(date, niveau, idx)))
+        features = np.concatenate((features, self.featSeasonal.apply(date, niveau)))
         features = np.concatenate((features, self.featTA.apply(date, niveau, idx)))
         
         return features
@@ -117,10 +117,10 @@ class FeatureMain():
         for idx_t in range(idx-self.timesteps+1, idx+1):
             niveau = self.asset.adjClosePrice['AdjClose'].item(idx_t)
             timefeatures = self.featCategory.apply(niveau)
-            timefeatures = np.concatenate((timefeatures, self.featSeasonal_timelag.apply(date, niveau)))
             timefeatures = np.concatenate((timefeatures, self.featMathematical_timelag.apply(date, niveau, idx_t)))
             timefeatures = np.concatenate((timefeatures, self.featFourierCoeff_timelag.apply(date, niveau, idx_t)))
             timefeatures = np.concatenate((timefeatures, self.featFinancialData_timelag.apply(date, niveau, idx_t)))
+            timefeatures = np.concatenate((timefeatures, self.featSeasonal_timelag.apply(date, niveau)))
             timefeatures = np.concatenate((timefeatures, self.featTA_timelag.apply(date, niveau, idx_t)))
             
             featureMatrix[idx_t-idx+self.timesteps-1,:] = timefeatures

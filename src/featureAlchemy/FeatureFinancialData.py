@@ -163,7 +163,7 @@ class FeatureFinancialData():
         ])
         
         # divide surprisePercentage by 1000
-        if "surprisePercentage" in self.fin_quar.columns:
+        if "surprisePercentage" in self.fin_quar.columns and self.fin_quar["surprisePercentage"].count() > 0:
             self.fin_quar = self.fin_quar.with_columns(
                 (pl.col("surprisePercentage") / 1000.0).alias("surprisePercentage")
             )
