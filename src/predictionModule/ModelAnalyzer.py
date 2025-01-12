@@ -7,6 +7,7 @@ import xgboost as xgb
 from typing import Optional
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
 from src.predictionModule.IML import IML
+import lightgbm as lgb
 
 class ModelAnalyzer:
     def __init__(self, module = None):
@@ -85,10 +86,6 @@ class ModelAnalyzer:
         cm:np.array = confusion_matrix(y_true, y_pred, labels=classes)
         per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
 
-        print("  Per-class Accuracy:")
-        for cls, acc in zip(classes, per_class_accuracy):
-            print(f"    Class {cls}: {acc:.2f}")
-
         overall_acc = accuracy_score(y_true, y_pred)
         print(f"\n  Overall Accuracy: {overall_acc:.2f}")
 
@@ -121,6 +118,23 @@ class ModelAnalyzer:
         
         feature_importances = pd.DataFrame({
             'Feature': model.featureColumnNames,
+            'Importance': importances
+        })
+        feature_importances.sort_values(by='Importance', ascending=False, inplace=True)
+        top_n = min(n_feature, feature_importances.shape[0])
+        top_features = feature_importances.head(top_n).reset_index(drop=True)
+        top_features.index += 1  # Start ranking at 1
+        top_features.index.name = 'Rank'
+        top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
+        print(f"Top {top_n} Feature Importances:")
+        print(top_features.to_string())
+        
+    @staticmethod
+    def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
+        importances = lgbModel.feature_importances_
+        
+        feature_importances = pd.DataFrame({
+            'Feature': featureColumnNames,
             'Importance': importances
         })
         feature_importances.sort_values(by='Importance', ascending=False, inplace=True)

@@ -123,6 +123,8 @@ class NextDayML(IML):
              or self.testDates is None:
             raise ValueError("Data collection time is not defined.")
 
+        if not self.trainDates.intersection(self.valDates).empty:
+            raise ValueError("There are overlapping dates between Train-Validation Dates and Val Dates.")
         if not (self.trainDates.union(self.valDates)).intersection(self.testDates).empty:
                 raise ValueError("There are overlapping dates between Train-Validation Dates and Test Dates.")
 

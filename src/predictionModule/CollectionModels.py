@@ -6,7 +6,7 @@ from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.Portfolio import Portfolio
 from src.common.AssetDataPolars import AssetDataPolars
-from src.predictionModule.FourierML import FourierML
+from src.predictionModule.SubsetML import SubsetML
 from src.predictionModule.NextDayML import NextDayML
 from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.predictionModule.ConditionalML import ConditionalML
@@ -227,23 +227,24 @@ class CollectionModels():
             lgbm_params = {
                 'verbosity': -1,
                 'n_jobs': -1,
+                'metric': 'multi_logloss',
                 'boosting_type': 'gbdt',
-                'early_stopping_rounds': 500,
-                'n_estimators': 5000,
+                'early_stopping_rounds': 10,
+                'n_estimators': 100,
                 'lambda_l1': trial.suggest_float('lambda_l1', 0.01, 0.9, log=True),
                 'lambda_l2': trial.suggest_float('lambda_l2', 0.01, 0.9, log=True),
-                'feature_fraction': trial.suggest_float('feature_fraction', 0.03, 0.09),
+                'feature_fraction': trial.suggest_float('feature_fraction', 0.001, 0.01),
                 #'bagging_fraction': trial.suggest_float('bagging_fraction', 0.001, 0.9, log=True),
                 #'bagging_freq': trial.suggest_int('bagging_freq', 0, 30),
                 'num_leaves': trial.suggest_int('num_leaves', 512, 2048),
                 'max_depth': params["LGBM_max_depth"],
-                'learning_rate': trial.suggest_float('learning_rate', 0.3, 0.99),
+                'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.05),
             }
             conditionalML.traintestLGBMModel(lgbm_params)
             y_val_pred = conditionalML.LGBMModel.predict(conditionalML.X_val)
             cm:np.array = confusion_matrix(conditionalML.y_val, y_val_pred, labels=np.unique(conditionalML.y_val))
             per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
-            return np.prod(per_class_accuracy)
+            return conditionalML.metadata['LGBMModel_accuracy_val']
 
         # 3. Create a study object and optimize the objective function.
         study = optuna.create_study(direction='maximize')
@@ -260,9 +261,10 @@ class CollectionModels():
         lgbm_params = {
             'verbosity': -1,
             'n_jobs': -1,
+            'metric': 'multi_logloss',
             'boosting_type': 'gbdt',
-            'early_stopping_rounds': 500,
-            'n_estimators': 5000,
+            'early_stopping_rounds': 10,
+            'n_estimators': 100,
             'lambda_l1':best_trial.params['lambda_l1'],
             'lambda_l2': best_trial.params['lambda_l2'],
             'feature_fraction': best_trial.params['feature_fraction'],
@@ -289,3 +291,39 @@ class CollectionModels():
         ModelAnalyzer().print_classification_metrics(conditionalML.y_val, y_pred_val, y_pred_val_proba)
         print("Test Metrics:")
         ModelAnalyzer().print_classification_metrics(conditionalML.y_test, y_pred_test, y_pred_test_proba)
+        
+    @staticmethod
+    def SubsetML_saveData(
+            assetspl: Dict[str, AssetDataPolars], 
+            save_name: str, 
+            test_date: pd.Timestamp,
+            spareRatio: float = 0.5,
+            params = None):
+
+        subsetML = SubsetML(assetspl, 
+                spareRatio=spareRatio,
+                params = params,
+                test_start_date=test_date)
+
+        subsetML.prepareData()
+
+        subsetML.save_data('src/predictionModule/bin', save_name)
+        print(subsetML.metadata)
+        
+    @staticmethod
+    def SubsetML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp):
+        subsetML = SubsetML(assetspl,test_start_date=test_date)
+        subsetML.load_data('src/predictionModule/bin', loadup_name)
+        
+        subsetML.analyze_perFilter()
+        
+    @staticmethod
+    def SubsetML_loadup_predict(
+            assetspl: Dict[str, AssetDataPolars], 
+            loadup_name: str, 
+            test_date: pd.Timestamp,):
+        
+        subsetML = SubsetML(assetspl,test_start_date=test_date)
+        subsetML.load_data('src/predictionModule/bin', loadup_name)
+        
+        subsetML.predict()

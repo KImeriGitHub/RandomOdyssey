@@ -66,15 +66,13 @@ class ConditionalML(IML):
         # Store parameters in metadata
         self.metadata['Condtional_params'] = self.params
     
-    def condition_isMet(self, asset: AssetDataPolars, dateIdx: int) -> bool:
+    def condition_isMet(self, asset: AssetDataPolars, dateIdx: int, features: list) -> bool:
         
         curAdjPrice = asset.adjClosePrice["AdjClose"].item(dateIdx)
         mMonthAdjPrice = asset.adjClosePrice["AdjClose"].item(dateIdx - self.idxLengthOneMonth)
-        curVolume = asset.volume["Volume"].item(dateIdx)
 
-        # if highest volume or second highest volume in the last 20 days
-        if (curVolume == asset.volume["Volume"].slice(dateIdx - 20,21).max() or
-            curVolume == asset.volume["Volume"].slice(dateIdx - 20,21).sort(descending=True).item(1)):
+        # 
+        if (features[117] >= 0.1031040354050005):
             return True
 
         return False
@@ -143,6 +141,8 @@ class ConditionalML(IML):
              or self.testDates is None:
             raise ValueError("Data collection time is not defined.")
 
+        if not self.trainDates.intersection(self.valDates).empty:
+            raise ValueError("There are overlapping dates between Train-Validation Dates and Val Dates.")
         if not (self.trainDates.union(self.valDates)).intersection(self.testDates).empty:
             raise ValueError("There are overlapping dates between Train-Validation Dates and Test Dates.")
 
@@ -185,10 +185,10 @@ class ConditionalML(IML):
                     print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
                     continue
                 
-                if not self.condition_isMet(asset, aidx):
-                    continue
-
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date, aidx)
+
+                if not self.condition_isMet(asset, aidx, features):
+                    continue
 
                 Xtrain.append(features)
                 ytrain.append(target)
@@ -203,11 +203,11 @@ class ConditionalML(IML):
                 if asset.shareprice["Date"].item(-1) < date + pd.Timedelta(days=self.daysAfterPrediction+self.averageOverDays//2):
                     print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
                     continue
-                
-                if not self.condition_isMet(asset, aidx):
-                    continue
 
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date, aidx)
+
+                if not self.condition_isMet(asset, aidx, features):
+                    continue
 
                 Xval.append(features)
                 yval.append(target)
@@ -222,10 +222,11 @@ class ConditionalML(IML):
                 if asset.shareprice["Date"].item(-1) < date + pd.Timedelta(days=self.daysAfterPrediction+self.averageOverDays//2):
                     print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
                     continue
-                if not self.condition_isMet(asset, aidx):
-                    continue
                 
                 features, target, featuresTimeSeries, targetTimeSeries = self.getFeaturesAndTarget(asset, featureMain, date, aidx)
+
+                if not self.condition_isMet(asset, aidx, features):
+                    continue
 
                 Xtest.append(features)
                 ytest.append(target)

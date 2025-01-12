@@ -6,11 +6,12 @@ from src.common.AssetDataService import AssetDataService
 from typing import Dict
 import pandas as pd
 import numpy as np
+import polars as pl
 import datetime
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 
-assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_finanTo2011")
+assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_debug")
 assetspl: Dict[str, AssetDataPolars] = {}
 assetspl_cutoff: Dict[str, AssetDataPolars] = {} # Testing for leakage
 cutoffDate = pd.Timestamp(year=2024, month=10, day=15, tz='UTC')
@@ -27,14 +28,20 @@ for ticker, asset in assets.items():
     assetspl_cutoff[ticker].dividends = assetspl[ticker].dividends.slice(0, lastIdx + 1)
     assetspl_cutoff[ticker].splits = assetspl[ticker].splits.slice(0, lastIdx + 1)
     
+    lastClosePrice = assetspl_cutoff[ticker].shareprice['Close'].last()
+    lastAdjClosePrice = assetspl_cutoff[ticker].adjClosePrice['AdjClose'].last()
+    assetspl_cutoff[ticker].adjClosePrice.with_columns(
+        (pl.col("AdjClose")*lastClosePrice/lastAdjClosePrice).alias("AdjClose")
+    )
+    
 startTrainDate=pd.Timestamp(year=2017, month=1, day=4, tz='UTC')
 endTrainDate=pd.Timestamp(year=2023, month=11, day=2, tz='UTC')
 startValDate=pd.Timestamp(year=2022, month=11, day=1, tz="UTC")
-endValDate=pd.Timestamp(year=2022, month=11, day=25, tz="UTC")
+endValDate=pd.Timestamp(year=2023, month=1, day=25, tz="UTC")
 startTestDate=pd.Timestamp(year=2023, month=11, day=3, tz='UTC')
-endTestDate=pd.Timestamp(year=2023, month=11, day=29, tz="UTC")
+endTestDate=pd.Timestamp(year=2024, month=5, day=29, tz="UTC")
 
-spareDatesRatio = 0.75
+spareDatesRatio = 1.0
 
 spare_dates_train = CollectionModels.sample_spare_dates(startTrainDate, endTrainDate, spareDatesRatio)
 spare_dates_val1 = CollectionModels.sample_spare_dates(startValDate, endValDate, 1.0)
@@ -58,25 +65,36 @@ params = {
     'daysAfterPrediction': 21,
     'monthsHorizon': 6,
     'timesteps': 5,
-    'classificationInterval': [0, 0.05],
-    'optuna_trials': 20,
-    'optuna_trials': 20,
-    'LGBM_max_depth': 20,
+    'classificationInterval': [0.05],
+    'optuna_trials': 10,
+    'LGBM_max_depth': 10,
     'averageOverDays': 5,
 }
 
 if __name__ == "__main__":
     #formatted_date = datetime.datetime.now().strftime('%d%m%y')
-    binaries_name = f"ConditionalML_debug_oneMonthAfter_Over5perc_LeakageCheck"
+    #laglist = [0, 10, 30, 63, 110, 240, 365, 500]
+    lagList=[0]
     
-    #CollectionModels.ConditionalML_saveData(
-    #    assetspl = assetspl_cutoff, 
-    #    save_name = binaries_name, 
-    #    trainDates = spare_dates_train, 
-    #    valDates = spare_dates_val, 
-    #    testDates = spare_dates_test,
-    #    params=params)
-    CollectionModels.CondtionalML_loadupData_lgbm(
-        assetspl=assetspl_cutoff, 
-        loadup_name = binaries_name, 
-        params=params)
+    test_date = pd.Timestamp(year=2024, month=2, day=9, tz='UTC')
+    for dayLag in lagList:
+        binaries_subsetml_name = f"SubsetML_debug_spareDate{int(100*spareDatesRatio)}_dayLag{dayLag}"
+        test_date_lag = test_date - pd.Timedelta(days=dayLag)
+        
+        print(f"----------{binaries_subsetml_name}----------")
+        #CollectionModels.SubsetML_saveData(
+        #    assetspl = assetspl_cutoff, 
+        #    save_name = binaries_subsetml_name,
+        #    spareRatio=spareDatesRatio,
+        #    params=params,
+        #    test_date = test_date)  
+#
+        #CollectionModels.SubsetML_loadup_analyze(
+        #    assetspl = assetspl_cutoff, 
+        #    loadup_name = binaries_subsetml_name,
+        #    test_date = test_date)
+        
+        CollectionModels.SubsetML_loadup_predict(
+            assetspl = assetspl_cutoff, 
+            loadup_name = binaries_subsetml_name,
+            test_date = test_date)
