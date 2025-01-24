@@ -73,27 +73,25 @@ class ModelAnalyzer:
             print()
 
     @staticmethod 
-    def print_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_pred_proba: np.ndarray = None):
+    def print_classification_metrics(y_known: np.ndarray, y_observer: np.ndarray, y_obs_proba: np.ndarray = None):
         """
         Print per-class accuracy, overall accuracy, log loss, and TPR, FPR, TNR, FNR for each class.
 
         Parameters:
-            y_true (np.ndarray): True labels.
-            y_pred (np.ndarray): Predicted labels.
-            y_pred_proba (np.ndarray, optional): Predicted probabilities.
+            y_known (np.ndarray): known labels.
+            y_observer (np.ndarray): observed labels.
+            y_obs_proba (np.ndarray, optional): Predicted probabilities.
         """
-        classes = np.unique(y_true)
-        cm:np.array = confusion_matrix(y_true, y_pred, labels=classes)
+        classes = np.unique(y_known)
+        cm:np.array = confusion_matrix(y_known, y_observer, labels=classes)
         per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
 
-        overall_acc = accuracy_score(y_true, y_pred)
+        overall_acc = accuracy_score(y_known, y_observer)
         print(f"\n  Overall Accuracy: {overall_acc:.2f}")
 
-        if y_pred_proba is not None:
-            ll = log_loss(y_true, y_pred_proba)
+        if y_obs_proba is not None:
+            ll = log_loss(y_known, y_obs_proba)
             print(f"  Log Loss: {ll:.4f}")
-        else:
-            print("  Log Loss: Not provided.")
 
         print("\n  Metrics per Class:")
         for i, cls in enumerate(classes):

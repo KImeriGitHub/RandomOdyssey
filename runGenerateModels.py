@@ -8,31 +8,35 @@ import pandas as pd
 import numpy as np
 import polars as pl
 import datetime
+import os
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 
-assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_debug")
+stock_group = "finanTo2016"
+assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_"+stock_group)
 assetspl: Dict[str, AssetDataPolars] = {}
-assetspl_cutoff: Dict[str, AssetDataPolars] = {} # Testing for leakage
-cutoffDate = pd.Timestamp(year=2024, month=10, day=15, tz='UTC')
 for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
-    assetspl_cutoff[ticker] = assetspl[ticker]
-    lastIdx = DPl(assetspl[ticker].adjClosePrice).getNextLowerOrEqualIndex(cutoffDate)
-    if not assetspl[ticker].adjClosePrice['Date'].item(lastIdx) == cutoffDate:
-        print(f"Cutoff-date {cutoffDate} was not found in ticker {ticker}.")
-        
-    assetspl_cutoff[ticker].shareprice = assetspl[ticker].shareprice.slice(0, lastIdx + 1)
-    assetspl_cutoff[ticker].adjClosePrice = assetspl[ticker].adjClosePrice.slice(0, lastIdx + 1)
-    assetspl_cutoff[ticker].volume = assetspl[ticker].volume.slice(0, lastIdx + 1)
-    assetspl_cutoff[ticker].dividends = assetspl[ticker].dividends.slice(0, lastIdx + 1)
-    assetspl_cutoff[ticker].splits = assetspl[ticker].splits.slice(0, lastIdx + 1)
     
-    lastClosePrice = assetspl_cutoff[ticker].shareprice['Close'].last()
-    lastAdjClosePrice = assetspl_cutoff[ticker].adjClosePrice['AdjClose'].last()
-    assetspl_cutoff[ticker].adjClosePrice.with_columns(
-        (pl.col("AdjClose")*lastClosePrice/lastAdjClosePrice).alias("AdjClose")
-    )
+#assetspl_cutoff: Dict[str, AssetDataPolars] = {} # Testing for leakage
+#cutoffDate = pd.Timestamp(year=2024, month=10, day=15, tz='UTC')
+#for ticker, asset in assets.items():
+    #assetspl_cutoff[ticker] = assetspl[ticker]
+    #lastIdx = DPl(assetspl[ticker].adjClosePrice).getNextLowerOrEqualIndex(cutoffDate)
+    #if not assetspl[ticker].adjClosePrice['Date'].item(lastIdx) == cutoffDate:
+    #    print(f"Cutoff-date {cutoffDate} was not found in ticker {ticker}.")
+    #    
+    #assetspl_cutoff[ticker].shareprice = assetspl[ticker].shareprice.slice(0, lastIdx + 1)
+    #assetspl_cutoff[ticker].adjClosePrice = assetspl[ticker].adjClosePrice.slice(0, lastIdx + 1)
+    #assetspl_cutoff[ticker].volume = assetspl[ticker].volume.slice(0, lastIdx + 1)
+    #assetspl_cutoff[ticker].dividends = assetspl[ticker].dividends.slice(0, lastIdx + 1)
+    #assetspl_cutoff[ticker].splits = assetspl[ticker].splits.slice(0, lastIdx + 1)
+    #
+    #lastClosePrice = assetspl_cutoff[ticker].shareprice['Close'].last()
+    #lastAdjClosePrice = assetspl_cutoff[ticker].adjClosePrice['AdjClose'].last()
+    #assetspl_cutoff[ticker].adjClosePrice.with_columns(
+    #    (pl.col("AdjClose")*lastClosePrice/lastAdjClosePrice).alias("AdjClose")
+    #)
     
 startTrainDate=pd.Timestamp(year=2017, month=1, day=4, tz='UTC')
 endTrainDate=pd.Timestamp(year=2023, month=11, day=2, tz='UTC')
@@ -61,40 +65,70 @@ spare_dates_train = spare_dates_train.difference(spare_dates_val)
 #spare_dates_train = spare_dates_train_cleaned.union(pd.DatetimeIndex(spare_dates_val_half))
 
 assert spare_dates_train.intersection(spare_dates_val).empty
+
 params = {
-    'daysAfterPrediction': 21,
-    'monthsHorizon': 6,
+    'idxAfterPrediction': 10,
+    'monthsHorizon': 5,
     'timesteps': 5,
     'classificationInterval': [0.05],
-    'optuna_trials': 10,
+    'optuna_trials': 30,
     'LGBM_max_depth': 10,
     'averageOverDays': 5,
+    'optuna_weight': 4,
 }
 
 if __name__ == "__main__":
-    #formatted_date = datetime.datetime.now().strftime('%d%m%y')
-    #laglist = [0, 10, 30, 63, 110, 240, 365, 500]
-    lagList=[0]
-    
-    test_date = pd.Timestamp(year=2024, month=2, day=9, tz='UTC')
+    lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
+    lagList = np.unique(np.random.randint(0, 366*3, 10))
+    lagList = [0]
+    test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
     for dayLag in lagList:
-        binaries_subsetml_name = f"SubsetML_debug_spareDate{int(100*spareDatesRatio)}_dayLag{dayLag}"
         test_date_lag = test_date - pd.Timedelta(days=dayLag)
         
-        print(f"----------{binaries_subsetml_name}----------")
-        #CollectionModels.SubsetML_saveData(
-        #    assetspl = assetspl_cutoff, 
-        #    save_name = binaries_subsetml_name,
-        #    spareRatio=spareDatesRatio,
-        #    params=params,
-        #    test_date = test_date)  
-#
-        #CollectionModels.SubsetML_loadup_analyze(
-        #    assetspl = assetspl_cutoff, 
-        #    loadup_name = binaries_subsetml_name,
-        #    test_date = test_date)
+        formatted_date = test_date_lag.strftime('%d%b%Y')
         
-        CollectionModels.SubsetML_loadup_predict(
-            assetspl = assetspl_cutoff, 
-            loadup_name = binaries_subsetml_name,
-            test_date = test_date)
+        subsetML_binaries_subsetml_name = (
+            f"SubsetML_{stock_group}_spareDate{int(100 * spareDatesRatio)}_{formatted_date}_10days"
+        )
+        akinML_binaries_subsetml_name = (
+            f"AkinDistriML_{stock_group}_{formatted_date}_10days"
+        )
+        
+        print(f"----------Date: {test_date_lag}----------")
+        print(f"----------{akinML_binaries_subsetml_name}----------")
+        filePath = os.path.join("src/predictionModule/bin", akinML_binaries_subsetml_name + '.pkl')
+        if not os.path.exists(filePath):
+            CollectionModels.AkinDistriML_saveData(
+                assetspl = assetspl, 
+                save_name = akinML_binaries_subsetml_name,
+                params = params,
+                test_date = test_date_lag) 
+            
+        CollectionModels.AkinDistriML_loadup_analyze(
+            assetspl = assetspl, 
+            loadup_name = akinML_binaries_subsetml_name,
+            test_date = test_date_lag,
+            params = params,)
+         
+        
+        #print(f"----------{subsetML_binaries_subsetml_name}----------")
+        #filePath = os.path.join("src/predictionModule/bin", subsetML_binaries_subsetml_name + '.pkl')
+        #if not os.path.exists(filePath):
+        #    CollectionModels.SubsetML_saveData(
+        #        assetspl = assetspl, 
+        #        save_name = subsetML_binaries_subsetml_name,
+        #        spareRatio=spareDatesRatio,
+        #        params = params,
+        #        test_date = test_date_lag)  
+        #
+        #CollectionModels.SubsetML_loadup_analyze(
+        #    assetspl = assetspl, 
+        #    loadup_name = subsetML_binaries_subsetml_name,
+        #    test_date = test_date_lag,
+        #    params = params,)
+        #
+        #CollectionModels.SubsetML_loadup_predict(
+        #    assetspl = assetspl, 
+        #    loadup_name = binaries_subsetml_name,
+        #    test_date = test_date_lag,
+        #    params=params,)

@@ -14,7 +14,7 @@ class FeatureSeasonal():
     }
     
     def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = [], params: dict = None):
-        self.startDate = startDate-pd.Timedelta(days=min(lagList, default=0))
+        self.startDate = startDate-pd.Timedelta(days=max(lagList, default=0))
         self.endDate = endDate
         self.asset = asset
         self.lagList = lagList

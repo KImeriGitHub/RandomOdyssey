@@ -6,6 +6,7 @@ from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.Portfolio import Portfolio
 from src.common.AssetDataPolars import AssetDataPolars
+from src.predictionModule.AkinDistriML import AkinDistriML
 from src.predictionModule.SubsetML import SubsetML
 from src.predictionModule.NextDayML import NextDayML
 from src.predictionModule.ModelAnalyzer import ModelAnalyzer
@@ -311,8 +312,8 @@ class CollectionModels():
         print(subsetML.metadata)
         
     @staticmethod
-    def SubsetML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp):
-        subsetML = SubsetML(assetspl,test_start_date=test_date)
+    def SubsetML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None):
+        subsetML = SubsetML(assetspl,test_start_date=test_date, params = params)
         subsetML.load_data('src/predictionModule/bin', loadup_name)
         
         subsetML.analyze_perFilter()
@@ -321,9 +322,33 @@ class CollectionModels():
     def SubsetML_loadup_predict(
             assetspl: Dict[str, AssetDataPolars], 
             loadup_name: str, 
-            test_date: pd.Timestamp,):
+            test_date: pd.Timestamp,
+            params = None):
         
-        subsetML = SubsetML(assetspl,test_start_date=test_date)
+        subsetML = SubsetML(assetspl,test_start_date=test_date, params=params)
         subsetML.load_data('src/predictionModule/bin', loadup_name)
         
         subsetML.predict()
+        
+    @staticmethod
+    def AkinDistriML_saveData(
+            assetspl: Dict[str, AssetDataPolars], 
+            save_name: str, 
+            test_date: pd.Timestamp,
+            params = None):
+
+        akinML = AkinDistriML(assetspl,
+                params = params,
+                test_start_date=test_date)
+
+        akinML.prepareData()
+
+        akinML.save_data('src/predictionModule/bin', save_name)
+        print(akinML.metadata)
+        
+    @staticmethod
+    def AkinDistriML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None):
+        akinML = AkinDistriML(assetspl,test_start_date=test_date, params = params)
+        akinML.load_data('src/predictionModule/bin', loadup_name)
+        
+        akinML.analyze_perFilter()
