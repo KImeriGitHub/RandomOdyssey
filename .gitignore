@@ -17,5 +17,6 @@ src/predictionmodule/bin/*
 !src/predictionmodule/bin/__init__.py
 
 *.lprof
+output_*
 
 documents

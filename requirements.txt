@@ -10,7 +10,7 @@ pyarrow==18.0.0
 PyYAML==6.0.2
 PyYAML==6.0.2
 scikit_learn==1.5.2
-scipy==1.14.1
+scipy
 tensorflow==2.18.0
 xgboost==2.1.2
 yfinance==0.2.49
@@ -22,3 +22,4 @@ requests
 holidays
 optuna
 seaborn
+statistics
