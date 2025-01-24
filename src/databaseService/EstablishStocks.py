@@ -1,5 +1,5 @@
 import time
-
+import numpy as np
 from src.common.AssetData import AssetData
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut 
@@ -46,6 +46,7 @@ class EstablishStocks:
     
     def loadSaveAssets(self):
         stockList = self.__stockList()
+        stockList = np.unique(stockList)
         fileOut = AssetFileInOut("src/database")
         outsourceLoader = OutsourceLoader(outsourceOperator=self.operator, api_key=self.apiKey)
         allTickersYamlList = []
