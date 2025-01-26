@@ -9,6 +9,7 @@ import numpy as np
 import polars as pl
 import datetime
 import os
+import gc
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 
@@ -18,6 +19,28 @@ assetspl: Dict[str, AssetDataPolars] = {}
 for ticker, asset in assets.items():
     assetspl[ticker]= AssetDataService.to_polars(asset)
     
+#To free up RAM
+del assets
+cutoffDate = pd.Timestamp(year=2011, month=1, day=7, tz='UTC')
+for ticker, asset in assetspl.items():
+    lastIdx = DPl(assetspl[ticker].adjClosePrice).getNextLowerOrEqualIndex(cutoffDate)
+    if not assetspl[ticker].adjClosePrice['Date'].item(lastIdx) == cutoffDate:
+        print(f"Cutoff-date {cutoffDate} was not found in ticker {ticker}.")
+        
+    assetspl[ticker].shareprice = assetspl[ticker].shareprice.slice(lastIdx)
+    assetspl[ticker].adjClosePrice = assetspl[ticker].adjClosePrice.slice(lastIdx)
+    assetspl[ticker].volume = assetspl[ticker].volume.slice(lastIdx)
+    assetspl[ticker].dividends = assetspl[ticker].dividends.slice(lastIdx)
+    assetspl[ticker].splits = assetspl[ticker].splits.slice(lastIdx)
+    
+    assetspl[ticker].shareprice.shrink_to_fit()
+    assetspl[ticker].adjClosePrice.shrink_to_fit()
+    assetspl[ticker].volume.shrink_to_fit()
+    assetspl[ticker].dividends.shrink_to_fit()
+    assetspl[ticker].splits.shrink_to_fit()
+    
+gc.collect()
+
 #assetspl_cutoff: Dict[str, AssetDataPolars] = {} # Testing for leakage
 #cutoffDate = pd.Timestamp(year=2024, month=10, day=15, tz='UTC')
 #for ticker, asset in assets.items():
@@ -81,6 +104,7 @@ if __name__ == "__main__":
     lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
     lagList = np.unique(np.random.randint(0, 366*3, 20))
     test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
+    lagList = [30]
     res = []
     for dayLag in lagList:
         test_date_lag = test_date - pd.Timedelta(days=dayLag)

@@ -5,6 +5,7 @@ import bisect
 from typing import Dict, List
 import lightgbm as lgb
 import optuna
+from datetime import datetime
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
@@ -342,53 +343,78 @@ class AkinDistriML(IML):
         
         self.dist_weights = dist_weights / maxweight
         
+    # Compute distances
+    def rowwise_dist(A, B, batch_size=20):
+        # A: shape (nA, n_features), B: shape (nB, n_features)
+        # Returns shape (nA, n_features)
+        
+        # Distance to the distribution of B in every feature. Then take sqrt and then mean.
+        #return np.mean(np.sqrt(np.abs(A[:, None, :] - B)), axis=1)
+        # TOO RAM INTENSIVE
+        
+        nA, n_features = A.shape
+        nB = B.shape[0]
+        result = np.empty((nA, n_features), dtype=A.dtype)
+
+        for start in range(0, nA, batch_size):
+            end = start + batch_size
+            A_batch = A[start:end]  # Shape: (batch_size, n_features)
+            # Compute distances for the batch
+            diff = np.abs(A_batch[:, None, :] - B)  # Shape: (batch_size, nB, n_features)
+            distances = np.mean(np.sqrt(diff), axis=1)  # Shape: (batch_size, n_features)
+            result[start:end] = distances
+
+        return result
+        
     def __establishAkinMask_Testing(self, q: float):
         # Normalize features to [0, 1]
         X_min = self.X_test.min(axis=0)
         X_max = self.X_test.max(axis=0)
-        minmax_diff = np.maximum(X_max - X_min, 1)
-        X_test_norm = (self.X_test - X_min) / minmax_diff
+        minmax_diff = np.maximum(X_max - X_min, 0.1)
+        X_test_norm: np.array = (self.X_test - X_min) / minmax_diff
 
-        # Apply sqrt of weights
-        X_test_w = X_test_norm * np.sqrt(self.dist_weights)
-
-        dists_test = spatial.distance.cdist(X_test_w, X_test_w, metric='euclidean')
-        min_dists_test = np.median(dists_test, axis=1)
-        cutoff_test = np.quantile(min_dists_test, q)
-        self.akinMask_test = (min_dists_test <= cutoff_test)
+        dists_test   = AkinDistriML.rowwise_dist(X_test_norm, X_test_norm) * (self.dist_weights)
+        
+        sum_dists_test = np.sum(dists_test, axis=1)
+        cutoff_test = np.quantile(sum_dists_test, q)
+        self.akinMask_test = (sum_dists_test <= cutoff_test)
+        
+        del X_min, X_max, minmax_diff, X_test_norm, dists_test, sum_dists_test
     
         
     def establishAkinMask(self, q: float):
         self.__establishAkinMask_Testing(np.sqrt(q))
     
-        # Normalize all sets using train stats (common practice)
+        # Normalize all sets using train stats
         X_min = self.X_train.min(axis=0)
         X_max = self.X_train.max(axis=0)
-        minmax_diff = np.maximum(X_max - X_min, 1)
+        minmax_diff = np.maximum(X_max - X_min, 0.1)
         X_train_norm = (self.X_train - X_min) / minmax_diff
         X_val_norm   = (self.X_val   - X_min) / minmax_diff
         X_test_norm  = (self.X_test[self.akinMask_test] - X_min) / minmax_diff
+        
+        dists_train   = AkinDistriML.rowwise_dist(X_train_norm, X_test_norm) * (self.dist_weights)
+        dists_val   = AkinDistriML.rowwise_dist(X_val_norm, X_test_norm) * (self.dist_weights)
 
-        # Apply sqrt of weights
-        X_train_w = X_train_norm * np.sqrt(self.dist_weights)
-        X_val_w   = X_val_norm   * np.sqrt(self.dist_weights)
-        X_test_w  = X_test_norm  * np.sqrt(self.dist_weights)
-
-        dists_train = spatial.distance.cdist(X_train_w, X_test_w, metric='euclidean')
-        dists_val   = spatial.distance.cdist(X_val_w,   X_test_w, metric='euclidean')
-        min_dists_train = np.median(dists_train, axis=1)
-        min_dists_val   = np.median(dists_val,   axis=1)
-        cutoff_train = np.quantile(min_dists_train, q)
-        cutoff_val   = np.quantile(min_dists_val,   q)
-        self.akinMask_training   = (min_dists_train <= cutoff_train)
-        self.akinMask_validation = (min_dists_val   <= cutoff_val)
+        sum_dists_train = np.sum(dists_train, axis=1)
+        sum_dists_val   = np.sum(dists_val,   axis=1)
+        cutoff_train = np.quantile(sum_dists_train, q)
+        cutoff_val   = np.quantile(sum_dists_val,   q)
+        self.akinMask_training   = (sum_dists_train <= cutoff_train)
+        self.akinMask_validation = (sum_dists_val   <= cutoff_val)
+        
+        del X_min, X_max, minmax_diff, X_train_norm, X_val_norm, X_test_norm, dists_train, dists_val, sum_dists_train, sum_dists_val
     
     def analyze_perFilter(self):
         if not self.evaluateTestResults:
             raise ValueError("evaluateTestResults is set to False. Cannot analyze per filter.")
         
+        startTime = datetime.now()
         self.establishDistriWeights()
         self.establishAkinMask(self.quantil)
+        endTime = datetime.now()
+        
+        print(f"Time taken to establish akin mask: {endTime-startTime}")
         
         print("Number of features: ", len(self.featureColumnNames))
         
