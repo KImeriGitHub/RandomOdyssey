@@ -46,12 +46,12 @@ class SubsetML(IML):
         
         trainingInterval_days = 120
         testInterval_days = 5
-        train_val_ratio = 0.1
+        val_idxDays = 20
         self.quantil: float = 0.2
         self.print_OptunaBars = True
-        self.testDates = pd.date_range(self.test_start_date, self.test_start_date + pd.Timedelta(days=testInterval_days), freq='B')
+        self.testDates = pd.date_range(self.test_start_date - pd.Timedelta(days=testInterval_days), self.test_start_date, freq='B')
         
-        if not self.testDates[0] == self.test_start_date:
+        if not self.testDates[-1] == self.test_start_date:
             print("test_start_date is not a business day. Correcting to first business day in assets before test_start_date.")
             asset: AssetDataPolars = self.__assets[next(iter(self.__assets))]
             dateIdx = DPl(asset.shareprice).getNextLowerOrEqualIndex(self.test_start_date)
@@ -62,7 +62,7 @@ class SubsetML(IML):
         aidx_m = aidx - self.params['idxAfterPrediction']
         train_end_date = self.__assets[exampleTicker].shareprice["Date"].item(aidx_m)
         train_start_date = train_end_date - pd.Timedelta(days=trainingInterval_days)
-        self.trainDates, self.valDates = self.__calculate_dates(train_start_date, train_end_date, train_val_ratio)
+        self.trainDates, self.valDates = self.__calculate_dates(train_start_date, train_end_date, val_idxDays)
         
         assert self.__assets[exampleTicker].shareprice["Date"].last() >= max(self.testDates)
         

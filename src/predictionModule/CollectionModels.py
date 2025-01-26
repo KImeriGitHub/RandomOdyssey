@@ -351,4 +351,4 @@ class CollectionModels():
         akinML = AkinDistriML(assetspl,test_start_date=test_date, params = params)
         akinML.load_data('src/predictionModule/bin', loadup_name)
         
-        akinML.analyze_perFilter()
+        return akinML.analyze_perFilter()

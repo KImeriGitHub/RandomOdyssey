@@ -12,7 +12,7 @@ import os
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 
-stock_group = "finanTo2016"
+stock_group = "snp500_finanTo2011"
 assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_"+stock_group)
 assetspl: Dict[str, AssetDataPolars] = {}
 for ticker, asset in assets.items():
@@ -79,9 +79,9 @@ params = {
 
 if __name__ == "__main__":
     lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
-    lagList = np.unique(np.random.randint(0, 366*3, 10))
-    lagList = [0]
+    lagList = np.unique(np.random.randint(0, 366*3, 20))
     test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
+    res = []
     for dayLag in lagList:
         test_date_lag = test_date - pd.Timedelta(days=dayLag)
         
@@ -104,11 +104,12 @@ if __name__ == "__main__":
                 params = params,
                 test_date = test_date_lag) 
             
-        CollectionModels.AkinDistriML_loadup_analyze(
+        res_loc = CollectionModels.AkinDistriML_loadup_analyze(
             assetspl = assetspl, 
             loadup_name = akinML_binaries_subsetml_name,
             test_date = test_date_lag,
             params = params,)
+        res.append(res_loc)
          
         
         #print(f"----------{subsetML_binaries_subsetml_name}----------")
@@ -132,3 +133,6 @@ if __name__ == "__main__":
         #    loadup_name = binaries_subsetml_name,
         #    test_date = test_date_lag,
         #    params=params,)
+    
+    print(f"Resulting list: {res}")
+    print(f"Resulting mean: {np.mean([x for x in res if not None])}")

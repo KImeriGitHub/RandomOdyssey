@@ -44,14 +44,14 @@ class AkinDistriML(IML):
         self.evaluateTestResults = evaluateTestResults
         self.test_start_date = test_start_date
         
-        trainingInterval_days = 365*2+60
+        trainingInterval_days = 365*1+60
         testInterval_days = 5
-        train_val_ratio = 0.1
-        self.quantil: float = 0.2
+        val_idxDays = 20
+        self.quantil: float = 0.1
         self.print_OptunaBars = True
-        self.testDates = pd.date_range(self.test_start_date, self.test_start_date + pd.Timedelta(days=testInterval_days), freq='B')
+        self.testDates = pd.date_range(self.test_start_date - pd.Timedelta(days=testInterval_days), self.test_start_date, freq='B')
         
-        if not self.testDates[0] == self.test_start_date:
+        if not self.testDates[-1] == self.test_start_date:
             print("test_start_date is not a business day. Correcting to first business day in assets before test_start_date.")
             asset: AssetDataPolars = self.__assets[next(iter(self.__assets))]
             dateIdx = DPl(asset.shareprice).getNextLowerOrEqualIndex(self.test_start_date)
@@ -62,7 +62,7 @@ class AkinDistriML(IML):
         aidx_m = aidx - self.params['idxAfterPrediction']
         train_end_date = self.__assets[exampleTicker].shareprice["Date"].item(aidx_m)
         train_start_date = train_end_date - pd.Timedelta(days=trainingInterval_days)
-        self.trainDates, self.valDates = self.__calculate_dates(train_start_date, train_end_date, train_val_ratio)
+        self.trainDates, self.valDates = self.__calculate_dates(train_start_date, train_end_date, val_idxDays)
         
         assert self.__assets[exampleTicker].shareprice["Date"].last() >= max(self.testDates)
         
@@ -82,14 +82,13 @@ class AkinDistriML(IML):
         self.lgbModelsList = None
         self.best_values = None
         
-    def __calculate_dates(self, start_date: pd.Timestamp, end_date: pd.Timestamp, val_ratio: float):
+    def __calculate_dates(self, start_date: pd.Timestamp, end_date: pd.Timestamp, val_idxDays: int):
         # Create a continuous date range
         date_range = pd.date_range(start_date, end_date, freq='B')
 
         # Time-based split (e.g. last 20% for validation)
-        n_train = int(len(date_range) * (1 - val_ratio))
-        train_dates = date_range[:n_train]
-        val_dates = date_range[n_train:]
+        train_dates = date_range[:(-1-val_idxDays)]
+        val_dates = date_range[(-1-val_idxDays):]
         return train_dates, val_dates
     
     def getTargetClassification(self, futureReturn: np.array, sorted_array: list[float]) -> list[float]:
@@ -275,7 +274,13 @@ class AkinDistriML(IML):
             )
             mask_y_val_pred = LGBMModel.predict(mask_X_val)
             cm:np.array = confusion_matrix(mask_y_val_pred, mask_y_val, labels=np.unique(mask_y_val))
-            per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
+            cmsum = np.sum(cm, axis=1)
+            per_class_accuracy = np.divide(
+                np.diagonal(cm),
+                cmsum,
+                out=np.zeros_like(cmsum, dtype=float),
+                where=(cmsum != 0)
+            )
             return np.sum(per_class_accuracy)
 
         # 3. Create a study2 object and optimize the objective function.
@@ -325,6 +330,8 @@ class AkinDistriML(IML):
                 continue
             if 'Category' in self.featureColumnNames[i]:
                 continue  
+            if 'daysToReport' in self.featureColumnNames[i]:
+                continue  
             
             kResult: stats.KstestResult = stats.ks_2samp(self.X_train[:, i], self.X_test[:, i])
             dist_weights[i] = kResult.statistic  # 0 = similar, 1 = very different
@@ -352,7 +359,7 @@ class AkinDistriML(IML):
     
         
     def establishAkinMask(self, q: float):
-        self.__establishAkinMask_Testing(q)
+        self.__establishAkinMask_Testing(np.sqrt(q))
     
         # Normalize all sets using train stats (common practice)
         X_min = self.X_train.min(axis=0)
@@ -382,6 +389,8 @@ class AkinDistriML(IML):
         
         self.establishDistriWeights()
         self.establishAkinMask(self.quantil)
+        
+        print("Number of features: ", len(self.featureColumnNames))
         
         print("Overall Training Label Distribution:")
         ModelAnalyzer().print_label_distribution(self.y_train)
@@ -452,12 +461,15 @@ class AkinDistriML(IML):
         second_col_probs_test = masked_y_pred_proba_test[:, 1]
         top_5_indices = np.argsort(second_col_probs_test)[-5:][::-1]
         selected_top5_indices = [i for i in top_5_indices if second_col_probs_test[i] > 0.5]
+        accuracy_top_5_above_50 = np.nan
         if selected_top5_indices:
             selected_true_labels = masked_y_test[selected_top5_indices]
             accuracy_top_5_above_50 = np.mean(selected_true_labels == 1)
             print(f"Accuracy of top up to 5 (prob > 50%) in test set: {accuracy_top_5_above_50:.2%}")
         else:
             print("No test predictions above 50% probability for class 1 among the top 5 rows.")
+            
+        return accuracy_top_5_above_50
         
         
     def __establish_lgbmList(self):
