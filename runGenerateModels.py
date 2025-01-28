@@ -102,9 +102,9 @@ params = {
 
 if __name__ == "__main__":
     lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
-    lagList = np.unique(np.random.randint(0, 366*3, 20))
-    test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
+    lagList = np.unique(np.random.randint(0, 366*1, 10))
     lagList = [30]
+    test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
     res = []
     for dayLag in lagList:
         test_date_lag = test_date - pd.Timedelta(days=dayLag)
@@ -159,4 +159,4 @@ if __name__ == "__main__":
         #    params=params,)
     
     print(f"Resulting list: {res}")
-    print(f"Resulting mean: {np.mean([x for x in res if not None])}")
+    print(f"Resulting mean: {np.mean([x for x in res if x is not None])}")
