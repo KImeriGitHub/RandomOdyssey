@@ -94,7 +94,7 @@ params = {
     'monthsHorizon': 5,
     'timesteps': 5,
     'classificationInterval': [0.05],
-    'optuna_trials': 30,
+    'optuna_trials': 3,
     'LGBM_max_depth': 10,
     'averageOverDays': 5,
     'optuna_weight': 4,
@@ -103,7 +103,8 @@ params = {
 if __name__ == "__main__":
     lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
     lagList = np.unique(np.random.randint(0, 366*1, 10))
-    lagList = [30]
+    lagList = np.array([0, 10, 20, 30, 45, 55])
+    lagList = [20]
     test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
     res = []
     for dayLag in lagList:
@@ -118,7 +119,7 @@ if __name__ == "__main__":
             f"AkinDistriML_{stock_group}_{formatted_date}_10days"
         )
         
-        print(f"----------Date: {test_date_lag}----------")
+        print(f"----------Date: {test_date_lag} , Lag: {dayLag}----------")
         print(f"----------{akinML_binaries_subsetml_name}----------")
         filePath = os.path.join("src/predictionModule/bin", akinML_binaries_subsetml_name + '.pkl')
         if not os.path.exists(filePath):
