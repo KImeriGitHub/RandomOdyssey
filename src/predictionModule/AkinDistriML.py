@@ -54,7 +54,6 @@ class AkinDistriML(IML):
         
         trainingInterval_days = 365*1+60
         testInterval_days = 5
-        val_idxDays = 20
         self.quantil: float = 0.1
         self.print_OptunaBars = True
         self.testDates = pd.date_range(self.test_start_date - pd.Timedelta(days=testInterval_days), self.test_start_date, freq='B')
@@ -70,7 +69,7 @@ class AkinDistriML(IML):
         aidx_m = aidx - self.params['idxAfterPrediction']
         train_end_date = self.__assets[exampleTicker].shareprice["Date"].item(aidx_m)
         train_start_date = train_end_date - pd.Timedelta(days=trainingInterval_days)
-        self.trainDates, self.valDates = self.__calculate_dates(train_start_date, train_end_date, val_idxDays)
+        self.trainDates = pd.date_range(train_start_date, train_end_date, freq='B')
         
         assert self.__assets[exampleTicker].shareprice["Date"].last() >= max(self.testDates)
         
@@ -90,15 +89,6 @@ class AkinDistriML(IML):
         self.lgbModelsList = None
         self.best_values = None
         
-    def __calculate_dates(self, start_date: pd.Timestamp, end_date: pd.Timestamp, val_idxDays: int):
-        # Create a continuous date range
-        date_range = pd.date_range(start_date, end_date, freq='B')
-
-        # Time-based split (e.g. last 20% for validation)
-        train_dates = date_range[:(-1-val_idxDays)]
-        val_dates = date_range[(-1-val_idxDays):]
-        return train_dates, val_dates
-    
     def getTargetClassification(self, futureReturn: np.array, sorted_array: list[float]) -> list[float]:
         """
         Args:
@@ -199,25 +189,6 @@ class AkinDistriML(IML):
                 Xtrain.append(features)
                 ytrain.append(target)
                 ytrainPrice.append(target_reg)
-                
-            # Prepare Val Data
-            for date in self.valDates:
-                aidx = DPl(asset.shareprice).getNextLowerOrEqualIndex(date)
-                if asset.shareprice["Date"].item(aidx) != date:
-                    continue
-                if (aidx - self.monthsHorizon * self.idxLengthOneMonth - 1)<0:
-                    print("Warning! Asset History does not span far enough for features.")
-                    continue
-                if len(asset.shareprice["Date"]) <= aidx + self.idxAfterPrediction:
-                    print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
-                    continue
-
-                features = self.getFeatures(asset, featureMain, date, aidx)
-                target, target_reg = self.getTarget(asset, featureMain, date, aidx)
-
-                Xval.append(features)
-                yval.append(target)
-                yvalPrice.append(target_reg)
 
             #Prepare Test Data
             for date in self.testDates:
@@ -327,6 +298,52 @@ class AkinDistriML(IML):
         lgbmInstance.fit(mask_X_Train, mask_y_Train,
                          eval_set=[(mask_X_val, mask_y_val)])       
         return lgbmInstance, study.best_value
+    
+    def __run_LGBM(self, mask_X_Train, mask_y_Train, mask_X_val, mask_y_val, sample_weights):
+        intscaler = 16
+        best_params  = {
+            'verbosity': -1,
+            'n_jobs': -1,
+            'is_unbalance': True,
+            'objective': 'binary',
+            'metric': 'binary',
+            'early_stopping_rounds': 2000//intscaler,
+            'num_boost_round': 40000//intscaler,
+            #'min_data_in_leaf': study.best_trial.params['min_data_in_leaf'],
+            #'feature_fraction_bynode': study.best_trial.params['feature_fraction_bynode'],
+            #'feature_fraction': study.best_trial.params['feature_fraction'],
+            'num_leaves': 2048//intscaler, #study.best_trial.params['num_leaves'],
+            'random_state': 41,
+        }
+        lgbmInstance = lgb.LGBMClassifier(**best_params)
+        #lgbmInstance.fit(X_final, y_final, sample_weight=w_final)        
+        lgbmInstance.fit(mask_X_Train, mask_y_Train,
+                         eval_set=[(mask_X_val, mask_y_val)],
+                         sample_weight=sample_weights)       
+        return lgbmInstance
+    
+    def __run_LGBM_reg(self, mask_X_Train, mask_y_Train_reg, mask_X_val, mask_y_val_reg, sample_weights):
+        intscaler = 1
+        best_params  = {
+            'verbosity': -1,
+            'n_jobs': -1,
+            'is_unbalance': True,
+            'objective': 'regression',
+            'metric': 'rsme',
+            #'early_stopping_rounds': 2000//intscaler,
+            'num_boost_round': 40000//intscaler,
+            #'min_data_in_leaf': study.best_trial.params['min_data_in_leaf'],
+            #'feature_fraction_bynode': study.best_trial.params['feature_fraction_bynode'],
+            #'feature_fraction': study.best_trial.params['feature_fraction'],
+            'num_leaves': 2048//intscaler, #study.best_trial.params['num_leaves'],
+            'random_state': 41,
+        }
+        lgbmInstance = lgb.LGBMRegressor(**best_params)
+        #lgbmInstance.fit(X_final, y_final, sample_weight=w_final)        
+        lgbmInstance.fit(mask_X_Train, mask_y_Train_reg,
+                         eval_set=[(mask_X_val, mask_y_val_reg)],
+                         sample_weight=sample_weights)       
+        return lgbmInstance
         
     """
     # Compute distances
@@ -367,27 +384,34 @@ class AkinDistriML(IML):
         return out
     """
     
-    def __get_ksDis_vec(self, Xtr, Xv, Xte):
+    def __print_ksDis(self, Xtr, Xte, fImp, mask_features):
         fTrain = Xtr.shape[1]
-        fVal = Xv.shape[1]
         fTest = Xte.shape[1]
         
-        assert fTrain == fVal == fTest, "Feature dimensions are not equal."
+        assert fTrain == fTest == len(fImp), "Feature dimensions are not equal."
+        assert np.all(fImp>=0), "Feature importances are not non-negative."
         
-        metric_distrEquality_train = np.zeros((fTrain))
-        metric_distrEquality_val = np.zeros((fVal))
-        for i in range((fTrain)):
+        weightedFeatures = self.__mask_weightedFeatures()
+        features_w = weightedFeatures[mask_features]
+        
+        Xtr_masked = Xtr[:, features_w]
+        Xte_masked = Xte[:, features_w]
+        fImp_masked = fImp[features_w]
+        
+        metric_distrEquality_train = np.zeros(len(fImp_masked))
+        quantile_points = np.linspace(0.01, 0.99, 100)
+        qIndices_train = np.array(quantile_points * Xtr.shape[0]).astype(int)
+        qIndices_test = np.array(quantile_points * Xte.shape[0]).astype(int)
+        for i in range(Xtr_masked.shape[1]):
+            train_sorted = np.sort(Xtr_masked[:, i])
+            test_sorted = np.sort(Xte_masked[:, i])
             
-            kResult_train: stats.KstestResult = stats.ks_2samp(Xtr[:, i], Xte[:, i])
-            metric_distrEquality_train[i] = kResult_train.statistic  # 0 = similar, 1 = very different
+            train_quantiles = train_sorted[qIndices_train]
+            test_quantiles = test_sorted[qIndices_test]
             
-            kResult_val: stats.KstestResult = stats.ks_2samp(Xv[:, i], Xte[:, i])
-            metric_distrEquality_val[i] = kResult_val.statistic  # 0 = similar, 1 = very different
+            metric_distrEquality_train[i] = np.mean(np.abs(train_quantiles - test_quantiles))
             
         print("  Train-Test Distri Equality: ", np.quantile(metric_distrEquality_train, 0.9))
-        print("  Val-Test Distri Equality: ", np.quantile(metric_distrEquality_val, 0.9))
-        
-        return metric_distrEquality_train, metric_distrEquality_val
         
     def __mask_weightedFeatures(self):
         feature_names = np.array(self.featureColumnNames).astype(str)
@@ -422,139 +446,170 @@ class AkinDistriML(IML):
         predictions = clf.predict(test_norm)
         return  (predictions > 0)
         
-    def __establishAkinMask_TrainVal(self, ptr:float, pv:float, Xtr, Xv, Xte, mask_features):
+    #def __establishAkinMask_TrainVal(self, ptr:float, pv:float, Xtr, Xv, Xte, mask_features):
+    #    fTrain = Xtr.shape[1]
+    #    fVal = Xv.shape[1]
+    #    fTest = Xte.shape[1]
+    #    
+    #    assert fTrain == fVal == fTest, "Feature dimensions are not equal."
+    #    
+    #    if ptr >= 1 - 1e-12 and pv >= 1 - 1e-12:
+    #        return np.ones(len(Xtr), dtype=bool), np.ones(len(Xv), dtype=bool)
+    #    
+    #    weightedFeatures = self.__mask_weightedFeatures()
+    #    features_w = weightedFeatures[mask_features]
+    #    
+    #    Xtr_masked = Xtr[:, features_w]
+    #    Xv_masked = Xv[:, features_w]
+    #    Xte_masked = Xte[:, features_w]
+    #    
+    #    ksDis_train = self.__get_ksDis_vec(Xtr_masked, Xte_masked)
+    #    n_features = Xtr_masked.shape[1]
+    #    interp_num = 50
+    #
+    #    # Precompute per-feature mins and maxes
+    #    mins_train, maxs_train = np.min(Xtr_masked, axis=0), np.max(Xtr_masked, axis=0)
+    #    mins_val, maxs_val = np.min(Xv_masked, axis=0), np.max(Xv_masked, axis=0)
+    #    mins_test, maxs_test = np.min(Xte_masked, axis=0), np.max(Xte_masked, axis=0)
+    #
+    #    # Random subsample for training KDE
+    #    mask_kde = np.random.rand(Xtr_masked.shape[0]) < 0.1
+    #    if np.sum(mask_kde) < 2:  # ensure at least two points
+    #        mask_kde[:] = True
+    #
+    #    def process_feature(i):
+    #        pts_tr = np.linspace(mins_train[i], maxs_train[i], interp_num)
+    #        pts_val = np.linspace(mins_val[i], maxs_val[i], interp_num)
+    #        pts_test = np.linspace(mins_test[i], maxs_test[i], interp_num)
+    #
+    #        kde_tr = stats.gaussian_kde(Xtr_masked[mask_kde, i])
+    #        kde_val = stats.gaussian_kde(Xv_masked[:, i])
+    #        kde_test = stats.gaussian_kde(Xte_masked[:, i])
+    #
+    #        kde_tr_vals = kde_tr(pts_tr)
+    #        kde_val_vals = kde_val(pts_val)
+    #        kde_test_vals = kde_test(pts_test)
+    #
+    #        interp_tr_at_tr = np.interp(Xtr_masked[:, i], pts_tr, kde_tr_vals)
+    #        interp_tr_at_test = np.interp(Xtr_masked[:, i], pts_test, kde_test_vals)
+    #        interp_val_at_val = np.interp(Xv_masked[:, i], pts_val, kde_val_vals)
+    #        interp_val_at_test = np.interp(Xv_masked[:, i], pts_test, kde_test_vals)
+    #
+    #        contr_tr = ksDis_train[i] * (interp_tr_at_tr - interp_tr_at_test)
+    #        return contr_tr
+    #
+    #    # Parallelize feature processing
+    #    results = Parallel(n_jobs=-1)(delayed(process_feature)(i) for i in range(n_features))
+    #
+    #    weightedSum_train = np.sum([r[0] for r in results], axis=0)
+    #    weightedSum_val = np.sum([r[1] for r in results], axis=0)
+    #
+    #    cutoff_train = np.quantile(weightedSum_train, ptr)
+    #    mask_train = weightedSum_train <= cutoff_train
+    #
+    #    cutoff_val = np.quantile(weightedSum_val, pv)
+    #    mask_val = weightedSum_val <= cutoff_val
+    #
+    #    return mask_train, mask_val
+        
+    def __establishWeights(self, Xtr, Xte, mask_features, fImp):
         fTrain = Xtr.shape[1]
-        fVal = Xv.shape[1]
         fTest = Xte.shape[1]
+        nTrain = Xtr.shape[0]
+        nTest = Xte.shape[0]
         
-        assert fTrain == fVal == fTest, "Feature dimensions are not equal."
-        
-        if ptr >= 1 - 1e-12 and pv >= 1 - 1e-12:
-            return np.ones(len(Xtr), dtype=bool), np.ones(len(Xv), dtype=bool)
+        assert fTrain == fTest == len(fImp), "Feature dimensions are not equal."
+        assert np.all(fImp>=0), "Feature importances are not non-negative."
         
         weightedFeatures = self.__mask_weightedFeatures()
         features_w = weightedFeatures[mask_features]
         
         Xtr_masked = Xtr[:, features_w]
-        Xv_masked = Xv[:, features_w]
         Xte_masked = Xte[:, features_w]
+        fImp_masked = fImp[features_w]
+        fImp_masked_cs = np.cumsum(fImp_masked)
         
-        ksDis_train, ksDis_val = self.__get_ksDis_vec(Xtr_masked, Xv_masked, Xte_masked)
-        n_features = Xtr_masked.shape[1]
-        interp_num = 50
-
-        # Precompute per-feature mins and maxes
-        mins_train, maxs_train = np.min(Xtr_masked, axis=0), np.max(Xtr_masked, axis=0)
-        mins_val, maxs_val = np.min(Xv_masked, axis=0), np.max(Xv_masked, axis=0)
-        mins_test, maxs_test = np.min(Xte_masked, axis=0), np.max(Xte_masked, axis=0)
-
-        # Random subsample for training KDE
-        mask_kde = np.random.rand(Xtr_masked.shape[0]) < 0.1
-        if np.sum(mask_kde) < 2:  # ensure at least two points
-            mask_kde[:] = True
-
-        def process_feature(i):
-            pts_tr = np.linspace(mins_train[i], maxs_train[i], interp_num)
-            pts_val = np.linspace(mins_val[i], maxs_val[i], interp_num)
-            pts_test = np.linspace(mins_test[i], maxs_test[i], interp_num)
-
-            kde_tr = stats.gaussian_kde(Xtr_masked[mask_kde, i])
-            kde_val = stats.gaussian_kde(Xv_masked[:, i])
-            kde_test = stats.gaussian_kde(Xte_masked[:, i])
-
-            kde_tr_vals = kde_tr(pts_tr)
-            kde_val_vals = kde_val(pts_val)
-            kde_test_vals = kde_test(pts_test)
-
-            interp_tr_at_tr = np.interp(Xtr_masked[:, i], pts_tr, kde_tr_vals)
-            interp_tr_at_test = np.interp(Xtr_masked[:, i], pts_test, kde_test_vals)
-            interp_val_at_val = np.interp(Xv_masked[:, i], pts_val, kde_val_vals)
-            interp_val_at_test = np.interp(Xv_masked[:, i], pts_test, kde_test_vals)
-
-            contr_tr = ksDis_train[i] * (interp_tr_at_tr - interp_tr_at_test)
-            contr_val = ksDis_val[i] * (interp_val_at_val - interp_val_at_test)
-            return contr_tr, contr_val
-
-        # Parallelize feature processing
-        results = Parallel(n_jobs=-1)(delayed(process_feature)(i) for i in range(n_features))
-
-        weightedSum_train = np.sum([r[0] for r in results], axis=0)
-        weightedSum_val = np.sum([r[1] for r in results], axis=0)
-
-        cutoff_train = np.quantile(weightedSum_train, ptr)
-        mask_train = weightedSum_train <= cutoff_train
-
-        cutoff_val = np.quantile(weightedSum_val, pv)
-        mask_val = weightedSum_val <= cutoff_val
-
-        return mask_train, mask_val
+        sample_weights = np.ones(nTrain, dtype=float)
+        window = np.ones(nTest) / nTest
+        for i in range(Xtr_masked.shape[1]):
+            samTr = Xtr_masked[:, i]
+            samTe = Xte_masked[:, i]
+            argsort_samTr = np.argsort(samTr)
+            argsort_samTe = np.argsort(samTe)
+            sort_samTr = samTr[argsort_samTr]
+            sort_samTe = samTe[argsort_samTe]
+            
+            lo = np.searchsorted(sort_samTe, sort_samTr[:-1], side="right")
+            hi = np.searchsorted(sort_samTe, sort_samTr[1:], side="left")
+            weights_sorted = hi - lo
+            weights_sorted = np.convolve(weights_sorted, window, mode='same')
+            weights_sorted = np.insert(weights_sorted, 0, weights_sorted[0])
+            weights_sorted *= nTrain/np.sum(weights_sorted)
+            
+            weights = weights_sorted[np.argsort(argsort_samTr)]
+            
+            if i == 0:
+                sample_weights = weights
+                continue
+            if fImp_masked_cs[i-1] < 1e-12:
+                sample_weights = weights
+                continue
+            
+            tau = fImp_masked[i] / fImp_masked_cs[i]
+            sample_weights = (1-tau) * sample_weights + tau * weights
+            
+        return sample_weights
         
-    def __establishAkinMask_Features(self, p_features: float, Xtr, Xv, Xte, ytr, yv, feature_max:int):
+    def __establishAkinMask_Features(self, p_features: float, lgbmInstance: lgb.Booster, Xtr):
         fTrain = Xtr.shape[1]
-        fVal = Xv.shape[1]
-        fTest = Xte.shape[1]
-        assert fTrain == fVal == fTest, "Feature dimensions are not equal."
         
         if p_features >= 1 - 1e-12:
-            return np.ones(fTest, dtype=bool)
+            return np.ones(fTrain, dtype=bool)
         
-        train_data = lgb.Dataset(Xtr, label=ytr)
-        test_data = lgb.Dataset(Xv, label=yv, reference=train_data)
-
-        params  = {
-            'verbosity': -1,
-            'n_jobs': -1,
-            'is_unbalance': True,
-            'objective': 'binary',
-            'metric': 'binary',
-            'early_stopping_rounds': 2000//8,
-            'feature_fraction': np.max([0.1, min(feature_max/fTrain,1.0)]),
-            'num_leaves': 1024//8,
-            'max_depth': 15,
-            'learning_rate': 0.05,
-            'random_state': 41,
-        }
-
-        gbm = lgb.train(
-            params,
-            train_data,
-            valid_sets=test_data,
-            num_boost_round=10000//8,
-        )
-        print(" Mask Feature Best Iteration: ", gbm.best_iteration)
-        
+        # SHAP FEATURE IMPORTANCE
         #warnings.filterwarnings("ignore", message="LightGBM binary classifier with TreeExplainer shap values output has changed to a list of ndarray")
-        #explainer = shap.TreeExplainer(gbm)
-        #shap_values = explainer.shap_values(Xte)
+        #explainer = shap.TreeExplainer(lgbmInstance)
+        #shap_values = explainer.shap_values(Xtr)
+        #feature_importances = np.abs(shap_values).mean(axis=0)
+        #shap_quant = np.quantile(feature_importances, 1-p_features)
         #
-        ## Feature importance
-        #mean_abs_shap = np.abs(shap_values).mean(axis=0)
-        #shap_quant = np.quantile(mean_abs_shap, 1-p_features)
-        #
-        #mask = mean_abs_shap > shap_quant
+        #mask = feature_importances > shap_quant
         
-        feature_importances = gbm.feature_importance()
+        # BUILD-IN LGBM FEATURE IMPORTANCE
+        feature_importances = lgbmInstance.feature_importance()
         argsort_features = np.argsort(feature_importances)
         pN = int(np.ceil(p_features * len(feature_importances)))
         top_indices = argsort_features[-pN:]
         mask = np.zeros_like(feature_importances, dtype=bool)
         mask[top_indices] = True
         
-        return mask
+        return mask, feature_importances
     
-    def __establishAkinMask_Test(self, p_test, Xtr, Xv, Xte, ytr_reg, yv_reg, yte_reg, feature_max:int):
-        # yte_reg to be used with caution because of leakage
-        fTrain = Xtr.shape[1]
-        fVal = Xv.shape[1]
-        fTest = Xte.shape[1]
-        assert fTrain == fVal == fTest, "Feature dimensions are not equal."
-        
+    def __establishAkinMask_Test(self, p_test, lgbmInstance: lgb.Booster, Xte):
         if p_test >= 1 - 1e-12:
             return np.ones(len(Xte), dtype=bool)
         
-        train_data = lgb.Dataset(Xtr, label = ytr_reg)
-        test_data = lgb.Dataset(Xv, label = yv_reg, reference=train_data)
+        y_pred = lgbmInstance.predict(Xte)
+        
+        # Quantile regression to subset mask
+        mask = y_pred >= np.quantile(y_pred, 1-p_test)
+        return mask
+    
+    def __establishLGBMInstance(self, Xtr, Xte, ytr_reg, yte_reg, feature_max:int, sample_weights):
+        # yte_reg to be used with caution, because of leakage
+        fTrain = Xtr.shape[1]
+        fTest = Xte.shape[1]
+        assert fTrain == fTest, "Feature dimensions are not equal."
+        
+        # Random subsample for validation set
+        mask_val = np.random.rand(Xtr.shape[0]) < 0.05
+        if np.sum(mask_val) < 2:  
+            ValueError("Not enough data points to establish validation set")
+        
+        train_data = lgb.Dataset(Xtr[~mask_val], label = ytr_reg[~mask_val], weight=sample_weights[~mask_val])
+        test_data = lgb.Dataset(Xtr[mask_val], label = ytr_reg[mask_val], reference=train_data)
 
+        intscaler = 1
         params = {
             'verbosity': -1,
             'n_jobs': -1,
@@ -562,10 +617,10 @@ class AkinDistriML(IML):
             'objective': 'quantile',
             'alpha': 0.8,
             'metric': 'quantile',
-            'early_stopping_rounds': 2000//8,
+            'early_stopping_rounds': 2000//intscaler,
             'feature_fraction': np.max([0.1, min(feature_max / fTrain, 1.0)]),
-            'num_leaves': 1024//8,
-            'max_depth': 15,
+            'num_leaves': 1024//intscaler,
+            'max_depth': 20,
             'learning_rate': 0.05,
             'random_state': 41,
         }
@@ -574,86 +629,80 @@ class AkinDistriML(IML):
             params,
             train_data,
             valid_sets=[test_data],
-            num_boost_round=10000//8,
+            num_boost_round=10000//intscaler,
         )
-        print(" Mask Testing Best Iteration: ", gbm.best_iteration)
+        
+        print("  Mask Testing Best Iteration: ", gbm.best_iteration)
         y_pred = gbm.predict(Xte)
-        print(" Accuracy at Test Mask: ", np.abs(yte_reg-y_pred).mean()) 
-        # Quantile regression to subset mask
-        mask = y_pred > np.quantile(y_pred, 1-p_test)
-        return mask
+        print("  Accuracy at Test Mask: ", np.abs(yte_reg-y_pred).mean()) 
         
-    def establishMasks(self, q_train: float, q_val:float, q_test: float, feature_max:int, iterSteps_approx: int, rm_ratio = 0.01):
+        return gbm
+        
+    def establishMasks(self, q_test: float, feature_max:int, iterSteps: int, rm_ratio = 0.01):
         mask_train = self.__establishMask_rmOutliers(self.X_train_norm, rm_ratio)
-        mask_val = self.__establishMask_rmOutliers(self.X_val_norm, rm_ratio)
         mask_test = self.__establishMask_rmOutliers(self.X_test_norm, rm_ratio)
-        mask_features = np.ones(self.X_test.shape[1], dtype=bool)
+        mask_features = np.ones(self.X_train.shape[1], dtype=bool)
+        sample_weights = np.ones(self.X_train.shape[0], dtype=float)
+        feature_importances = np.ones(self.X_train.shape[1], dtype=float)
         
-        p_train = q_train ** (1 / iterSteps_approx)
-        p_val = q_val ** (1 / iterSteps_approx)
-        p_test = q_test ** (1 / iterSteps_approx)
+        p_test = q_test ** (1 / iterSteps)
         q_features = feature_max / self.X_test.shape[1]
-        p_features = q_features ** (1 / iterSteps_approx)
+        p_features = q_features ** (1 / iterSteps)
         
-        for i in range(iterSteps_approx):
-            print(f"Establish Mask: Step {i+1}/{iterSteps_approx}.")
+        for i in range(iterSteps):
+            print(f"Establish Mask: Step {i+1}/{iterSteps}.")
             startTime_loop = datetime.now()
 
-            # Establish Train and Val Mask
-            mask_train_loop, mask_val_loop = self.__establishAkinMask_TrainVal(
-                ptr = p_train, 
-                pv = p_val, 
+            # Establish Weights
+            sample_weights_loop = self.__establishWeights(
                 Xtr = self.X_train_norm[mask_train][:, mask_features], 
-                Xv = self.X_val_norm[mask_val][:, mask_features], 
                 Xte = self.X_test_norm[mask_test][:, mask_features],
-                mask_features = mask_features
+                mask_features = mask_features,
+                fImp = feature_importances[mask_features],
             )
-            mask_train[mask_train] = mask_train_loop
-            mask_val[mask_val] = mask_val_loop
-
-            # Establish Feature Mask
-            mask_features_loop = self.__establishAkinMask_Features(
-                p_features, 
-                Xtr=self.X_train_norm[mask_train][:, mask_features], 
-                Xv=self.X_val_norm[mask_val][:, mask_features], 
-                Xte=self.X_test_norm[mask_test][:, mask_features],
-                ytr=self.y_train[mask_train], 
-                yv=self.y_val[mask_val],
-                feature_max=feature_max
+            sample_weights[mask_train] = sample_weights_loop
+            
+            # Estblish LGBM Instance
+            lgbmInstance = self.__establishLGBMInstance(
+                Xtr = self.X_train_norm[mask_train][:, mask_features], 
+                Xte = self.X_test_norm[mask_test][:, mask_features],
+                ytr_reg = self.y_train_timeseries[mask_train], 
+                yte_reg = self.y_test_timeseries[mask_test],
+                feature_max = feature_max,
+                sample_weights = sample_weights[mask_train]
             )
-            mask_features[mask_features] = mask_features_loop
             
             # Establish Test Mask: quantil regression to subset mask
             mask_test_loop = self.__establishAkinMask_Test(
                 p_test,
-                Xtr=self.X_train_norm[mask_train][:, mask_features], 
-                Xv=self.X_val_norm[mask_val][:, mask_features], 
+                lgbmInstance = lgbmInstance,
                 Xte=self.X_test_norm[mask_test][:, mask_features],
-                ytr_reg=self.y_train_timeseries[mask_train], 
-                yv_reg=self.y_val_timeseries[mask_val],
-                yte_reg=self.y_test_timeseries[mask_test],
-                feature_max=feature_max
             )
             mask_test[mask_test] = mask_test_loop
             
-            # Keep track of running variables and determine end
-            if mask_features.sum() <= feature_max:
-                p_features = 1.0
-            if mask_train.sum() / len(mask_train) < q_train:
-                p_train = 1.0
-            if mask_val.sum() / len(mask_val) < q_val:
-                p_val = 1.0
-            if mask_test.sum() / len(mask_test) < q_test:
-                p_test = 1.0
+            # Establish Feature Mask
+            mask_features_loop, feature_importances_loop = self.__establishAkinMask_Features(
+                p_features, 
+                lgbmInstance = lgbmInstance,
+                Xtr = self.X_train_norm[mask_train][:, mask_features],
+            )
+            feature_importances[mask_features] = feature_importances_loop
+            mask_features[mask_features] = mask_features_loop
             
             endTime_loop = datetime.now()
+            self.__print_ksDis(
+                Xtr = self.X_train_norm[mask_train][:, mask_features], 
+                Xte = self.X_test_norm[mask_test][:, mask_features],
+                fImp = feature_importances[mask_features],
+                mask_features = mask_features
+            ) 
             print(f"  Time elapsed: {endTime_loop - startTime_loop}.")
-            
-            if p_train == 1.0 and p_val == 1.0 and p_test == 1.0 and p_features == 1.0:
-                print("  Stopping early due to all masks being established.")
-                break
+            print("  Masked Training Label Distribution:")
+            ModelAnalyzer().print_label_distribution(self.y_train[mask_train])
+            print("  Masked Test Label Distribution:")
+            ModelAnalyzer().print_label_distribution(self.y_test[mask_test])
         
-        return mask_train, mask_val, mask_test, mask_features
+        return mask_train, mask_test, mask_features, sample_weights
     
     def analyze_perFilter(self):
         if not self.evaluateTestResults:
@@ -664,35 +713,40 @@ class AkinDistriML(IML):
         scaler = StandardScaler()
         scaler.fit(self.X_train)
         self.X_train_norm = scaler.transform(self.X_train)
-        self.X_val_norm = scaler.transform(self.X_val)
         self.X_test_norm = scaler.transform(self.X_test)
         
         startTime = datetime.now()
         nTrain = self.X_train.shape[0]
-        nVal = self.X_val.shape[0]
         nTest = self.X_test.shape[0]
+        
         train_quantil = 0.6
         test_quantil = 0.6
-        val_quantil = 0.6
         feature_max = 500
         itersteps = 5
-        mask_train, mask_val, mask_test, mask_features = self.establishMasks(
-                q_train=train_quantil, 
-                q_val=val_quantil, 
+        
+        mask_train, mask_test, mask_features, sample_weights = self.establishMasks(
                 q_test=test_quantil, 
                 feature_max=feature_max, 
-                iterSteps_approx=itersteps,
+                iterSteps=itersteps,
             )        
         endTime = datetime.now()
         
+        #Establish validation set
+        # Random subsample for validation set
+        mask_val = np.random.rand(np.sum(mask_train)) < 0.05
+        if np.sum(mask_val) < 2:  
+            ValueError("Not enough data points to establish validation set")
+            
+        self.X_val = self.X_train[mask_train][mask_val]
+        self.y_val = self.y_train[mask_train][mask_val]
+        self.y_val_reg = self.y_train_timeseries[mask_train][mask_val]
+        
         print(f"train_quantil: {train_quantil}")
-        print(f"val_quantil: {val_quantil}")
         print(f"test_quantil: {test_quantil}")
         print(f"feature_max: {feature_max}")
         print(f"iterSteps: {itersteps}")
         print(f"Masking completed in {endTime - startTime}.")
         print(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
-        print(f"Validation samples selected: {mask_val.sum()} out of {nVal}")
         print(f"Test samples selected: {mask_test.sum()} out of {nTest}")
         print(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
         
@@ -704,12 +758,17 @@ class AkinDistriML(IML):
         print("Overall Testing Label Distribution:")
         ModelAnalyzer().print_label_distribution(self.y_test)
         
-        masked_X_train = self.X_train[mask_train][:, mask_features]
-        masked_y_train = self.y_train[mask_train]
-        masked_X_val = self.X_val[mask_val][:, mask_features]
-        masked_y_val = self.y_val[mask_val]
+        masked_X_train = self.X_train[mask_train][~mask_val][:, mask_features]
+        masked_y_train = self.y_train[mask_train][~mask_val]
+        masked_y_train_reg = self.y_train_timeseries[mask_train][~mask_val]
+        masked_X_val = self.X_val[:, mask_features]
+        masked_y_val = self.y_val
+        masked_y_val_reg = self.y_val_reg
         masked_X_test = self.X_test[mask_test][:, mask_features]
         masked_y_test = self.y_test[mask_test]
+        masked_y_test_reg = self.y_test_timeseries[mask_test]
+        
+        masked_sample_weights_train = sample_weights[mask_train][~mask_val]
             
         if (
             len(np.unique(masked_y_test)) < 2
@@ -729,51 +788,37 @@ class AkinDistriML(IML):
         print("Masked Test Label Distribution:")
         ModelAnalyzer().print_label_distribution(masked_y_test)
         
-        lgbmPostOptuna, _ = self.__run_OptunaOnFiltered(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_X_test, enablePrint=True)
+        #lgbmPostOptuna, _ = self.__run_OptunaOnFiltered(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_X_test, enablePrint=True)
+        #lgbmInstance = self.__run_LGBM(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_sample_weights_train)
+        lgbmInstance = self.__run_LGBM_reg(masked_X_train, masked_y_train_reg, masked_X_val, masked_y_val_reg, masked_sample_weights_train)
         
         masked_colnames = np.array(self.featureColumnNames)[mask_features]
-        ModelAnalyzer().print_feature_importance_LGBM(lgbmPostOptuna, masked_colnames, 10)
+        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10)
         
-        masked_y_pred_train = lgbmPostOptuna.predict(masked_X_train)
-        #masked_y_pred_proba_train = lgbmPostOptuna.predict_proba(masked_X_train)
+        masked_y_pred_train_reg = lgbmInstance.predict(masked_X_train)
         
-        masked_y_pred_val = lgbmPostOptuna.predict(masked_X_val)
-        masked_y_pred_proba_val = lgbmPostOptuna.predict_proba(masked_X_val)
+        masked_y_pred_val_reg = lgbmInstance.predict(masked_X_val)
         
-        masked_y_pred_test = lgbmPostOptuna.predict(masked_X_test)
-        masked_y_pred_proba_test = lgbmPostOptuna.predict_proba(masked_X_test)
+        masked_y_pred_test_reg = lgbmInstance.predict(masked_X_test)
         
         print("Predicted Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_train)
+        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05)
         print("Predicted Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_val)
+        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05)
         print("Predicted Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_test)
-        
-        if (
-            len(np.unique(masked_y_pred_val)) < 2
-            or len(np.unique(masked_y_pred_test)) < 2
-        ):
-            print("Skipping printing due to insufficient predicted classes.")
-            return
+        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05)
         
         print("Validation Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_val, masked_y_val, masked_y_pred_proba_val)
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None)
         print("Testing Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_test, masked_y_test, masked_y_pred_proba_test)
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_test_reg > 0.05, masked_y_test_reg > 0.05, None)
         
-        # Top 5 highest probabilities in the second column (>50%)
-        second_col_probs_test = masked_y_pred_proba_test[:, 1]
-        top_5_indices = np.argsort(second_col_probs_test)[-5:][::-1]
-        selected_top5_indices = [i for i in top_5_indices if second_col_probs_test[i] > 0.5]
-        accuracy_top_5_above_50 = np.nan
-        if selected_top5_indices:
-            selected_true_labels = masked_y_test[selected_top5_indices]
-            accuracy_top_5_above_50 = np.mean(selected_true_labels == 1)
-            print(f"Accuracy of top up to 5 (prob > 50%) in test set: {accuracy_top_5_above_50:.2%}")
-        else:
-            print("No test predictions above 50% probability for class 1 among the top 5 rows.")
-            
+        # Top 5 highest 
+        top_5_indices = np.argsort(masked_y_pred_test_reg)[-5:][::-1]
+        selected_true_values = masked_y_test[top_5_indices]
+        accuracy_top_5_above_50 = np.mean(selected_true_values > 0.05)
+        print(f"Accuracy of top 5 to be over 5% in test set: {accuracy_top_5_above_50:.2%}")
+        
         return accuracy_top_5_above_50
         
 
