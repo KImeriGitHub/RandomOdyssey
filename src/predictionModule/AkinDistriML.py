@@ -323,7 +323,7 @@ class AkinDistriML(IML):
         return lgbmInstance
     
     def __run_LGBM_reg(self, mask_X_Train, mask_y_Train_reg, mask_X_val, mask_y_val_reg, sample_weights):
-        intscaler = 1
+        intscaler = 16
         best_params  = {
             'verbosity': -1,
             'n_jobs': -1,
@@ -384,7 +384,7 @@ class AkinDistriML(IML):
         return out
     """
     
-    def __print_ksDis(self, Xtr, Xte, fImp, mask_features):
+    def __get_ksDis(self, Xtr, Xte, fImp, mask_features):
         fTrain = Xtr.shape[1]
         fTest = Xte.shape[1]
         
@@ -413,6 +413,10 @@ class AkinDistriML(IML):
             
         print("  Train-Test Distri Equality: ", np.quantile(metric_distrEquality_train, 0.9))
         
+        res = np.zeros(fTest)
+        res[features_w] = metric_distrEquality_train
+        return res
+        
     def __mask_weightedFeatures(self):
         feature_names = np.array(self.featureColumnNames).astype(str)
         patterns = [
@@ -435,7 +439,7 @@ class AkinDistriML(IML):
             if max_train - min_train < 1e-4:  # TODO: There is one such thing. To investigate! Perhaps the year.
                 mask[i] = False
             
-            if max_train - min_train > 2 * (max_test - min_test):
+            if max_train - min_train > 4 * (max_test - min_test):
                 mask[i] = False
             
         return mask
@@ -523,15 +527,22 @@ class AkinDistriML(IML):
         
         weightedFeatures = self.__mask_weightedFeatures()
         features_w = weightedFeatures[mask_features]
+        ksdis = self.__get_ksDis(Xtr, Xte, fImp, mask_features)
         
         Xtr_masked = Xtr[:, features_w]
         Xte_masked = Xte[:, features_w]
         fImp_masked = fImp[features_w]
         fImp_masked_cs = np.cumsum(fImp_masked)
         
+        ksdis_masked = ksdis[features_w]
+        ksdis_masked_cs = np.cumsum(ksdis_masked)
+        
         sample_weights = np.ones(nTrain, dtype=float)
         window = np.ones(nTest) / nTest
+        ksdis_argmax = np.argmax(ksdis_masked)
         for i in range(Xtr_masked.shape[1]):
+            if i != ksdis_argmax:
+                continue
             samTr = Xtr_masked[:, i]
             samTe = Xte_masked[:, i]
             argsort_samTr = np.argsort(samTr)
@@ -548,15 +559,17 @@ class AkinDistriML(IML):
             
             weights = weights_sorted[np.argsort(argsort_samTr)]
             
-            if i == 0:
-                sample_weights = weights
-                continue
-            if fImp_masked_cs[i-1] < 1e-12:
-                sample_weights = weights
-                continue
+            sample_weights = weights
             
-            tau = fImp_masked[i] / fImp_masked_cs[i]
-            sample_weights = (1-tau) * sample_weights + tau * weights
+            #if i == 0:
+            #    sample_weights = weights
+            #    continue
+            #if fImp_masked_cs[i-1] < 1e-12:
+            #    sample_weights = weights
+            #    continue
+            
+            #tau = ksdis_masked[i] / ksdis_masked_cs[i]
+            #sample_weights = (1-tau) * sample_weights + tau * weights
             
         return sample_weights
         
@@ -609,7 +622,7 @@ class AkinDistriML(IML):
         train_data = lgb.Dataset(Xtr[~mask_val], label = ytr_reg[~mask_val], weight=sample_weights[~mask_val])
         test_data = lgb.Dataset(Xtr[mask_val], label = ytr_reg[mask_val], reference=train_data)
 
-        intscaler = 1
+        intscaler = 16
         params = {
             'verbosity': -1,
             'n_jobs': -1,
@@ -639,8 +652,8 @@ class AkinDistriML(IML):
         return gbm
         
     def establishMasks(self, q_test: float, feature_max:int, iterSteps: int, rm_ratio = 0.01):
-        mask_train = self.__establishMask_rmOutliers(self.X_train_norm, rm_ratio)
-        mask_test = self.__establishMask_rmOutliers(self.X_test_norm, rm_ratio)
+        mask_train = np.ones(self.X_train.shape[0], dtype=bool) #self.__establishMask_rmOutliers(self.X_train_norm, rm_ratio)
+        mask_test = np.ones(self.X_test.shape[0], dtype=bool) #self.__establishMask_rmOutliers(self.X_test_norm, rm_ratio)
         mask_features = np.ones(self.X_train.shape[1], dtype=bool)
         sample_weights = np.ones(self.X_train.shape[0], dtype=float)
         feature_importances = np.ones(self.X_train.shape[1], dtype=float)
@@ -690,7 +703,7 @@ class AkinDistriML(IML):
             mask_features[mask_features] = mask_features_loop
             
             endTime_loop = datetime.now()
-            self.__print_ksDis(
+            self.__get_ksDis(
                 Xtr = self.X_train_norm[mask_train][:, mask_features], 
                 Xte = self.X_test_norm[mask_test][:, mask_features],
                 fImp = feature_importances[mask_features],

@@ -103,7 +103,7 @@ params = {
 if __name__ == "__main__":
     lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
     lagList = np.unique(np.random.randint(0, 366*1, 10))
-    lagList = np.array([0, 10, 20, 30, 45, 55])
+    lagList = np.array([55]) + 365*2 + 270
     test_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
     res = []
     for dayLag in lagList:
