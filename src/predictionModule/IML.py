@@ -41,10 +41,14 @@ class IML(ABC):
         self.y_test_timeseries: np.array = np.array([])
         self.X_val_timeseries: np.array = np.array([])
         self.y_val_timeseries: np.array = np.array([])
+        self.meta_train: np.array = np.array([])
+        self.meta_val: np.array = np.array([])
+        self.meta_test: np.array = np.array([])
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
         self.metadata: Dict = {}
         self.featureColumnNames: List = []
+        self.metaColumnNames: List = []
 
         self.dataIsPrepared = False
 
@@ -163,6 +167,9 @@ class IML(ABC):
             'y_test_timeseries': self.y_test_timeseries,
             'X_val_timeseries': self.X_val_timeseries,
             'y_val_timeseries': self.y_val_timeseries,
+            'meta_train': self.meta_train,
+            'meta_val': self.meta_val,
+            'meta_test': self.meta_test,
             'trainStartDate': self.trainStartDate,
             'trainEndDate': self.trainEndDate,
             'testStartDate': self.testStartDate,
@@ -170,7 +177,8 @@ class IML(ABC):
             'valStartDate': self.valStartDate,
             'valEndDate': self.valEndDate,
             'metadata': self.metadata,
-            'featureColumnNames': self.featureColumnNames
+            'featureColumnNames': self.featureColumnNames,
+            'metaColumnNames': self.metaColumnNames
         }
         with open(filePath, 'wb') as f:
             pickle.dump(data, f)
@@ -196,6 +204,9 @@ class IML(ABC):
         self.y_test_timeseries = data.get('y_test_timeseries', np.array([]))
         self.X_val_timeseries = data.get('X_val_timeseries', np.array([]))
         self.y_val_timeseries = data.get('y_val_timeseries', np.array([]))
+        self.meta_train = data.get('meta_train', np.array([]))
+        self.meta_val = data.get('meta_val', np.array([]))
+        self.meta_test = data.get('meta_test', np.array([]))
         self.trainStartDate = data.get('trainStartDate', None)
         self.trainEndDate = data.get('trainEndDate', None)
         self.testStartDate = data.get('testStartDate', None)
@@ -204,6 +215,7 @@ class IML(ABC):
         self.valEndDate = data.get('valEndDate', None)
         self.metadata = data.get('metadata', {})
         self.featureColumnNames = data.get('featureColumnNames', [])
+        self.metaColumnNames = data.get('metaColumnNames', [])
         print(f'Data and metadata loaded from {filePath}')
         self.dataIsPrepared = True
         return self.metadata

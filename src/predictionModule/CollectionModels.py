@@ -93,7 +93,7 @@ class CollectionModels():
                 'lambda_l1': 0.9,
                 'lambda_l2': 0.9,
                 'num_leaves': trial.suggest_int('num_leaves', 8, 512),
-                'max_depth': params["LGBM_max_depth"],
+                'max_depth': 15,
                 'learning_rate': trial.suggest_float('learning_rate', 0.001, 0.9, log=True),
             }
 
@@ -121,7 +121,7 @@ class CollectionModels():
             'lambda_l1': 0.9,
             'lambda_l2': 0.9,
             'num_leaves': best_trial.params['num_leaves'],
-            'max_depth': params["LGBM_max_depth"],
+            'max_depth': 15,
             'learning_rate': best_trial.params['learning_rate'],
         }
         
@@ -150,7 +150,7 @@ class CollectionModels():
             'lambda_l1': 0.9,
             'lambda_l2': 0.9,
             'num_leaves': 400,
-            'max_depth': params["LGBM_max_depth"],
+            'max_depth': 15,
             'learning_rate': 0.99,
         }
         
@@ -238,7 +238,7 @@ class CollectionModels():
                 #'bagging_fraction': trial.suggest_float('bagging_fraction', 0.001, 0.9, log=True),
                 #'bagging_freq': trial.suggest_int('bagging_freq', 0, 30),
                 'num_leaves': trial.suggest_int('num_leaves', 512, 2048),
-                'max_depth': params["LGBM_max_depth"],
+                'max_depth': 15,
                 'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.05),
             }
             conditionalML.traintestLGBMModel(lgbm_params)
@@ -272,7 +272,7 @@ class CollectionModels():
             #'bagging_fraction': best_trial.params['bagging_fraction'],
             #'bagging_freq': best_trial.params['bagging_freq'],
             'num_leaves': best_trial.params['num_leaves'],
-            'max_depth': params["LGBM_max_depth"],
+            'max_depth': 15,
             'learning_rate': best_trial.params['learning_rate'],
         }
         
@@ -335,11 +335,13 @@ class CollectionModels():
             assetspl: Dict[str, AssetDataPolars], 
             save_name: str, 
             test_date: pd.Timestamp,
+            evaluateTestResults = True,
             params = None):
 
         akinML = AkinDistriML(assetspl,
                 params = params,
-                test_start_date=test_date)
+                test_date=test_date,
+                gatherTestResults = evaluateTestResults)
 
         akinML.prepareData()
 
@@ -348,7 +350,38 @@ class CollectionModels():
         
     @staticmethod
     def AkinDistriML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None):
-        akinML = AkinDistriML(assetspl,test_start_date=test_date, params = params)
+        akinML = AkinDistriML(assetspl,test_date=test_date, params = params, gatherTestResults=True)
         akinML.load_data('src/predictionModule/bin', loadup_name)
         
-        return akinML.analyze_perFilter()
+        return akinML.analyze()
+    
+    @staticmethod
+    def AkinDistriML_saveData_predict(assetspl: Dict[str, AssetDataPolars], save_name: str, test_date: pd.Timestamp, params = None):
+        akinML = AkinDistriML(
+            assetspl,
+            params = params,
+            test_date=test_date,
+            gatherTestResults = False
+        )
+
+        akinML.prepareData()
+
+        akinML.save_data('src/predictionModule/bin', save_name)
+        print(akinML.metadata)
+        
+        return akinML.predict()
+    
+    @staticmethod
+    def AkinDistriML_loadUpData_predict(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None):
+        akinML = AkinDistriML(
+            assetspl,
+            params = params,
+            test_date=test_date,
+            gatherTestResults = False
+        )
+
+        akinML.load_data('src/predictionModule/bin', loadup_name)
+        
+        print(akinML.metadata)
+        
+        return akinML.predict()

@@ -126,10 +126,27 @@ class ModelAnalyzer:
         top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
         print(f"Top {top_n} Feature Importances:")
         print(top_features.to_string())
-        
+    
     @staticmethod
     def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
         importances = lgbModel.feature_importances_
+        
+        feature_importances = pd.DataFrame({
+            'Feature': featureColumnNames,
+            'Importance': importances
+        })
+        feature_importances.sort_values(by='Importance', ascending=False, inplace=True)
+        top_n = min(n_feature, feature_importances.shape[0])
+        top_features = feature_importances.head(top_n).reset_index(drop=True)
+        top_features.index += 1  # Start ranking at 1
+        top_features.index.name = 'Rank'
+        top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
+        print(f"Top {top_n} Feature Importances:")
+        print(top_features.to_string())
+    
+    @staticmethod
+    def print_feature_importance_LGBM(lgbModel: lgb.Booster, featureColumnNames: list[str], n_feature: int = 20):
+        importances = lgbModel.feature_importance()
         
         feature_importances = pd.DataFrame({
             'Feature': featureColumnNames,
