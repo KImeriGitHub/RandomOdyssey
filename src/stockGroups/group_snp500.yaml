@@ -29,7 +29,6 @@
 - AMGN
 - AMP
 - AMT
-- AMTM
 - AMZN
 - ANET
 - ANSS
@@ -56,7 +55,6 @@
 - BDX
 - BEN
 - BF-B
-- BG
 - BIIB
 - BK
 - BKNG
@@ -95,6 +93,7 @@
 - CLX
 - CMCSA
 - CME
+- CMG
 - CMI
 - CMS
 - CNC
@@ -207,6 +206,7 @@
 - GM
 - GNRC
 - GOOG
+- GOOGL
 - GPC
 - GPN
 - GRMN
@@ -317,7 +317,6 @@
 - MPWR
 - MRK
 - MRNA
-- MRO
 - MS
 - MSCI
 - MSFT
@@ -337,6 +336,7 @@
 - NOC
 - NOW
 - NRG
+- NSC
 - NTAP
 - NTRS
 - NUE
@@ -488,6 +488,7 @@
 - WRB
 - WST
 - WTW
+- WY
 - WYNN
 - XEL
 - XOM

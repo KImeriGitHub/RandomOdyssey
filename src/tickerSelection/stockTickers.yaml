@@ -328,7 +328,6 @@
     - RATE
     - BKU
     - BCS
-    - B
     - CUDA
     - ABX
     - BAS
@@ -2742,7 +2741,6 @@
     - LRCX
     - LIN
     - LULU
-    - MAR
     - MRVL
     - MELI
     - META

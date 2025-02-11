@@ -123,7 +123,6 @@
 - BF-B
 - BFR
 - BFS
-- BG
 - BGC
 - BH
 - BHE
@@ -180,6 +179,7 @@
 - CCU
 - CDE
 - CDNS
+- CE
 - CFR
 - CHD
 - CHE
@@ -375,7 +375,6 @@
 - FRT
 - FSS
 - FT
-- FTI
 - FUL
 - FUN
 - GAB
@@ -408,6 +407,7 @@
 - GLW
 - GME
 - GNW
+- GOOGL
 - GPC
 - GPI
 - GPK
@@ -686,6 +686,7 @@
 - NRG
 - NRP
 - NRT
+- NSC
 - NSP
 - NTAP
 - NTRS
@@ -721,6 +722,7 @@
 - OPY
 - ORA
 - ORCL
+- ORI
 - ORLY
 - OSK
 - OXM
@@ -754,6 +756,7 @@
 - PHG
 - PHI
 - PHM
+- PHX
 - PII
 - PIM
 - PIPR
@@ -768,6 +771,7 @@
 - POOL
 - PPG
 - PPL
+- PPT
 - PRA
 - PRGO
 - PRU
@@ -775,6 +779,7 @@
 - PSO
 - PTC
 - PUK
+- PVH
 - PWR
 - PYT
 - QCOM
@@ -988,7 +993,6 @@
 - USNA
 - USPH
 - UTI
-- UTL
 - UVE
 - UVV
 - VAL
@@ -1056,6 +1060,7 @@
 - WTR
 - WTS
 - WWW
+- WY
 - WYNN
 - X
 - XEL

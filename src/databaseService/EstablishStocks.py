@@ -52,6 +52,7 @@ class EstablishStocks:
         allTickersYamlList = []
         for ticker in stockList:
             try:
+                ticker = str(ticker)
                 tStart = time.time()
                 asset: AssetData = outsourceLoader.load(ticker=ticker)
                 fileOut.saveToFile(asset)
