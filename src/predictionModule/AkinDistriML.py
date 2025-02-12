@@ -7,6 +7,9 @@ import lightgbm as lgb
 import optuna
 import shap
 import warnings
+import re
+import logging
+
 from datetime import datetime
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
@@ -39,14 +42,19 @@ class AkinDistriML(IML):
         'classificationInterval': [0.05], 
     }
 
-    def __init__(self, assets: Dict[str, AssetDataPolars], 
-                 test_date: pd.Timestamp,
-                 params: dict = None,
-                 gatherTestResults: bool = False):
+    def __init__(
+            self, assets: Dict[str, AssetDataPolars], 
+            test_date: pd.Timestamp,
+            params: dict = None,
+            gatherTestResults: bool = False,
+            logger: logging.Logger = None
+        ):
+        
         super().__init__()
         self.__assets: Dict[str, AssetDataPolars] = assets
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
+        self.logger = logger
         
         self.lagList = [1,2,3,5,7,10,13,16,21,45,60,102,200,255,290]
         self.featureColumnNames = []
@@ -59,7 +67,7 @@ class AkinDistriML(IML):
         self.testDates = pd.date_range(self.test_date - pd.Timedelta(days=testInterval_days), self.test_date, freq='B')
         
         if not self.testDates[-1] == self.test_date:
-            print("test_start_date is not a business day. Correcting to first business day in assets before test_start_date.")
+            self.logger.info("test_start_date is not a business day. Correcting to first business day in assets before test_start_date.")
             asset: AssetDataPolars = self.__assets[next(iter(self.__assets))]
             dateIdx = DPl(asset.shareprice).getNextLowerOrEqualIndex(self.test_date)
             self.test_date = pd.Timestamp(asset.shareprice["Date"].item(dateIdx))
@@ -152,7 +160,7 @@ class AkinDistriML(IML):
             if asset.adjClosePrice is None or not 'AdjClose' in asset.adjClosePrice.columns:
                 continue
 
-            print(f"Processing asset: {asset.ticker}. Processed {processedCounter} out of {len(self.__assets)}.")
+            self.logger.info(f"Processing asset: {asset.ticker}. Processed {processedCounter} out of {len(self.__assets)}.")
             processedCounter += 1
             
             params = {
@@ -183,10 +191,10 @@ class AkinDistriML(IML):
                 if asset.shareprice["Date"].item(aidx) != date:
                     continue
                 if (aidx - self.monthsHorizon * self.idxLengthOneMonth - 1)<0:
-                    print("Warning! Asset History does not span far enough for features.")
+                    self.logger.info("Warning! Asset History does not span far enough for features.")
                     continue
                 if len(asset.shareprice["Date"]) <= aidx + self.idxAfterPrediction:
-                    print(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
+                    self.logger.info(f"Asset {ticker} does not have enough data to calculate target on date {date}.")
                     continue
 
                 features = self.getFeatures(asset, featureMain, date, aidx)
@@ -204,7 +212,7 @@ class AkinDistriML(IML):
                 if asset.shareprice["Date"].item(aidx) != date:
                     continue
                 if (aidx - self.monthsHorizon * self.idxLengthOneMonth - 1)<0:
-                    print("Warning! Asset History does not span far enough for features.")
+                    self.logger.info("Warning! Asset History does not span far enough for features.")
                     continue
                 
                 features = self.getFeatures(asset, featureMain, date, aidx)
@@ -287,9 +295,9 @@ class AkinDistriML(IML):
         study = optuna.create_study(direction='maximize')
         study.optimize(objective, n_trials = self.params['optuna_trials'], show_progress_bar=self.print_OptunaBars)
         if enablePrint:
-            print("  Best Value: ", study.best_value)
+            self.logger.info(f"  Best Value:  {study.best_value}")
             for key, value in study.best_trial.params.items():
-                print(f"  {key}: {value}")
+                self.logger.info(f"  {key}: {value}")
 
         best_params  = {
             'verbosity': -1,
@@ -370,7 +378,7 @@ class AkinDistriML(IML):
                     f"{data_name}'s {eval_name}: {result}"
                     for data_name, eval_name, result, _ in env.evaluation_result_list
                 ]
-                print(f"Iteration {env.iteration}: " + ", ".join(results))
+                self.logger.info(f"Iteration {env.iteration}: " + ", ".join(results))
         gbm = lgb.train(
             params,
             train_data,
@@ -395,7 +403,7 @@ class AkinDistriML(IML):
         test_quantiles = test_sorted[qIndices_test]
         metric_distrEquality = np.mean(np.abs(train_quantiles - test_quantiles), axis=0)
             
-        print("  Train-Test Distri Equality: ", np.quantile(metric_distrEquality, 0.9))
+        self.logger.info(f"  Train-Test Distri Equality: {np.quantile(metric_distrEquality, 0.9)}")
         
         res = np.zeros(len(mask_features), dtype=float)
         res[features_w] = metric_distrEquality
@@ -443,39 +451,52 @@ class AkinDistriML(IML):
             mask_train, 
             mask_test,
             mask_features,
-            fImp,
             n_trunc,
             n_bin = 20
         ):
 
+        # Get distribution distances for each feature
         ksdis = self.__get_ksDis(mask_train, mask_test, mask_features)
         
-        mask_colToAssimilate = np.char.find(self.featureColumnNames, "FeatureTA") >= 0
-        mask_colToAssimilate = mask_colToAssimilate | np.char.find(self.featureColumnNames, "MathFeature") >= 0
-        mask_colToAssimilate = mask_colToAssimilate | np.char.find(self.featureColumnNames, "Fourier") >= 0
+        mask_colToAssimilate = np.ones(len(mask_features), dtype=bool)
         
-        ksdis_colToAssimilate = ksdis
-        ksdis_colToAssimilate[~mask_colToAssimilate] = 0
+        # Get feature which we want to make the same distribution between train and test
+        mask_FeatureTA = np.char.find(self.featureColumnNames, "FeatureTA") >= 0
+        mask_FinData_quar = (np.char.find(self.featureColumnNames, "FinData_quar_") >= 0)
+        mask_FinData_metrics = (np.char.find(self.featureColumnNames, "FinData_metrics_") >= 0)
+        mask_Fourier = (np.char.find(self.featureColumnNames, "Fourier_Price_AbsCoeff") >= 0)
+        mask_MathFeature = (np.char.find(self.featureColumnNames, "MathFeature_Return") >= 0)
+        list_masks = [mask_FeatureTA, mask_FinData_quar, mask_FinData_metrics, mask_Fourier, mask_MathFeature]
+        n_masks = len(list_masks)
         
-        ksdis_argsort = np.argsort(ksdis)
-        ksdis_argsort_tc = np.flip(ksdis_argsort[-n_trunc:])
+        # Non lag exclusion
+        mask_lagNotToExclude = np.zeros(len(mask_features), dtype=bool)
+        for d in []: # Not in use
+            pattern = re.compile(rf"_m{d}(?!\d)")
+            matches = np.array([bool(pattern.search(name)) for name in self.featureColumnNames])
+            mask_lagNotToExclude |= matches
+        mask_colToAssimilate = mask_colToAssimilate & (~mask_lagNotToExclude)
         
-        match_factor_arr = fImp[ksdis_argsort_tc] * ksdis[ksdis_argsort_tc]
-        match_factor_arr = np.maximum(match_factor_arr, np.zeros_like(match_factor_arr))
-        if np.sum(match_factor_arr) < 1e-12:
-            match_factor_arr = ksdis[ksdis_argsort_tc]
+        # Get the top n_trunc features to assimilate for each mask
+        splits: list = np.array_split(np.arange(n_trunc), n_masks)
+        indices_mask = []
+        for i in range(len(splits)):
+            ksdis_i = ksdis.copy()
+            mask_toSort = list_masks[i] & mask_colToAssimilate
+            ksdis_i[~mask_toSort] = 0
+            ksdis_argsort = np.argsort(ksdis_i)
+            indices_mask.extend(ksdis_argsort[-len(splits[i]):])
         
-        for i in range(len(match_factor_arr)):
-            print(f"  Feature {i}: {self.featureColumnNames[ksdis_argsort_tc[i]]}")
+        for i in range(len(indices_mask)):
+            self.logger.info(f"  Feature {i}: {self.featureColumnNames[indices_mask[i]]}")
         
         sample_weights = DistributionTools.establishMatchingWeight(
-            self.X_train[mask_train][:, ksdis_argsort_tc],
-            self.X_test[mask_test][:, ksdis_argsort_tc],
-            match_factor_arr,
+            self.X_train[mask_train][:, indices_mask],
+            self.X_test[mask_test][:, indices_mask],
             n_bin = n_bin
         )
         sample_weights /= np.sum(mask_train) / np.sum(sample_weights)
-        print("  Zeros Weight Ratio: ", np.sum(sample_weights < 1e-6) / len(sample_weights))
+        self.logger.info(f"  Zeros Weight Ratio: {np.sum(sample_weights < 1e-6) / len(sample_weights)}")
         return sample_weights
         
     def __establishAkinMask_Features(self, p_features: float, lgbmInstance: lgb.Booster, mask_train, mask_features):
@@ -561,7 +582,7 @@ class AkinDistriML(IML):
                     f"{data_name}'s {eval_name}: {result}"
                     for data_name, eval_name, result, _ in env.evaluation_result_list
                 ]
-                print(f"Iteration {env.iteration}: " + ", ".join(results))
+                self.logger.info(f"Iteration {env.iteration}: " + ", ".join(results))
         
         gbm = lgb.train(
             params,
@@ -572,9 +593,9 @@ class AkinDistriML(IML):
         )
         
         if self.gatherTestResults:
-            print("  Mask Testing Best Iteration: ", gbm.best_iteration)
+            self.logger.info(f"  Mask Testing Best Iteration: {gbm.best_iteration}")
             y_pred = gbm.predict(self.X_test[mask_test][:, mask_features], num_iteration=gbm.best_iteration)
-            print("  Accuracy at Test Mask: ", np.abs(self.y_test_timeseries[mask_test]-y_pred).mean()) 
+            self.logger.info(f"  Accuracy at Test Mask: {np.abs(self.y_test_timeseries[mask_test]-y_pred).mean()}") 
         
         return gbm
         
@@ -598,7 +619,7 @@ class AkinDistriML(IML):
         p_features = q_features ** (1 / iterSteps)
         
         for i in range(iterSteps):
-            print(f"Establish Mask: Step {i+1}/{iterSteps}.")
+            self.logger.info(f"Establish Mask: Step {i+1}/{iterSteps}.")
             startTime_loop = datetime.now()
 
             # Establish Weights
@@ -606,7 +627,6 @@ class AkinDistriML(IML):
                 mask_train = mask_train, 
                 mask_test = mask_test,
                 mask_features = mask_features,
-                fImp = feature_importances,
                 n_trunc = weight_truncation,
                 n_bin = n_bin
             )
@@ -648,20 +668,19 @@ class AkinDistriML(IML):
                 mask_test = mask_test,
                 mask_features = mask_features,
             ) 
-            print(f"  Time elapsed: {endTime_loop - startTime_loop}.")
-            print("  Masked Training Label Distribution:")
-            ModelAnalyzer().print_label_distribution(self.y_train[mask_train])
+            self.logger.info(f"  Time elapsed: {endTime_loop - startTime_loop}.")
+            self.logger.info("  Masked Training Label Distribution:")
+            ModelAnalyzer().print_label_distribution(self.y_train[mask_train], logger=self.logger)
             if self.gatherTestResults:
-                print("  Masked Test Label Distribution:")
-                ModelAnalyzer().print_label_distribution(self.y_test[mask_test])
+                self.logger.info("  Masked Test Label Distribution:")
+                ModelAnalyzer().print_label_distribution(self.y_test[mask_test], logger=self.logger)
                 
         # End of loop Establish Weights
-        print("End of Loop computation.")
+        self.logger.info("End of Loop computation.")
         sample_weights_loop = self.__establishWeights(
             mask_train = mask_train, 
             mask_test = mask_test,
             mask_features = mask_features,
-            fImp = feature_importances,
             n_trunc = weight_truncation,
             n_bin = n_bin
         )
@@ -690,12 +709,12 @@ class AkinDistriML(IML):
         num_boost_round = self.params['Akin_pre_num_boost_round']
         weight_truncation = self.params['Akin_pre_weight_truncation']
         
-        print(f"num_leaves: {num_leaves}")
-        print(f"num_boost_round: {num_boost_round}")
-        print(f"weight_truncation: {weight_truncation}")
-        print(f"test_quantil: {test_quantil}")
-        print(f"feature_max: {feature_max}")
-        print(f"iterSteps: {itersteps}")
+        self.logger.info(f"num_leaves: {num_leaves}")
+        self.logger.info(f"num_boost_round: {num_boost_round}")
+        self.logger.info(f"weight_truncation: {weight_truncation}")
+        self.logger.info(f"test_quantil: {test_quantil}")
+        self.logger.info(f"feature_max: {feature_max}")
+        self.logger.info(f"iterSteps: {itersteps}")
         
         startTime = datetime.now()
         mask_train, mask_test, mask_features, sample_weights = self.establishMasks(
@@ -707,11 +726,11 @@ class AkinDistriML(IML):
             weight_truncation = weight_truncation,
         )        
         endTime = datetime.now()
-        print(f"Masking completed in {endTime - startTime}.")
+        self.logger.info(f"Masking completed in {endTime - startTime}.")
         
-        print(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
-        print(f"Test samples selected: {mask_test.sum()} out of {nTest}")
-        print(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
+        self.logger.info(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
+        self.logger.info(f"Test samples selected: {mask_test.sum()} out of {nTest}")
+        self.logger.info(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
         
         #Establish validation set
         # Random subsample for validation set
@@ -735,36 +754,36 @@ class AkinDistriML(IML):
         
         masked_sample_weights_train = sample_weights[mask_train][~mask_val]
             
-        print("Number of features: ", len(self.featureColumnNames))
-        print("Overall Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_train)
-        print("Overall Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_val)
-        print("Overall Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_test)
+        self.logger.info(f"Number of features: {len(self.featureColumnNames)}")
+        self.logger.info("Overall Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(self.y_train, logger = self.logger)
+        self.logger.info("Overall Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(self.y_val, logger = self.logger)
+        self.logger.info("Overall Testing Label Distribution:")
+        ModelAnalyzer().print_label_distribution(self.y_test, logger = self.logger)
             
         if (
             len(np.unique(masked_y_test)) < 2
             or len(np.unique(masked_y_val)) < 2
             or len(np.unique(masked_y_train)) < 2
         ):
-            print("STOPPED! Due to insufficient classes in masked.")
-            print("Classes in masked training set: ", np.unique(masked_y_train))
-            print("Classes in masked validation set: ", np.unique(masked_y_val))
-            print("Classes in test set: ", np.unique(masked_y_test))
+            self.logger.info("STOPPED! Due to insufficient classes in masked.")
+            self.logger.info(f"Classes in masked training set:  {np.unique(masked_y_train)}")
+            self.logger.info(f"Classes in masked validation set:  {np.unique(masked_y_val)}")
+            self.logger.info(f"Classes in test set:  {np.unique(masked_y_test)}")
             return
         
-        print("Masked Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_train)
-        print("Masked Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_val)
-        print("Masked Test Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_test)
+        self.logger.info("Masked Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_train, logger = self.logger)
+        self.logger.info("Masked Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_val, logger = self.logger)
+        self.logger.info("Masked Test Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_test, logger = self.logger)
         
         startTime = datetime.now()
         num_leaves = self.params['Akin_num_leaves']
         num_boost_round = self.params['Akin_num_boost_round']
-        print(f"LGBM: num_leaves: {num_leaves}, num_boost_round: {num_boost_round}")
+        self.logger.info(f"LGBM: num_leaves: {num_leaves}, num_boost_round: {num_boost_round}")
         #lgbmPostOptuna, _ = self.__run_OptunaOnFiltered(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_X_test, enablePrint=True)
         #lgbmInstance = self.__run_LGBM(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_sample_weights_train)
         lgbmInstance = self.__run_LGBM_reg(
@@ -777,10 +796,10 @@ class AkinDistriML(IML):
             num_boost_round = num_boost_round
         )
         endTime = datetime.now()
-        print(f"LGBM completed in {endTime - startTime}.")
+        self.logger.info(f"LGBM completed in {endTime - startTime}.")
         
         masked_colnames = np.array(self.featureColumnNames)[mask_features]
-        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10)
+        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10, logger = self.logger)
         
         masked_y_pred_train_reg = lgbmInstance.predict(masked_X_train, num_iteration=lgbmInstance.best_iteration)
         
@@ -788,39 +807,39 @@ class AkinDistriML(IML):
         
         masked_y_pred_test_reg = lgbmInstance.predict(masked_X_test, num_iteration=lgbmInstance.best_iteration)
         
-        print("Predicted Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05)
-        print("Predicted Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05)
-        print("Predicted Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05)
+        self.logger.info("Predicted Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05, logger = self.logger)
+        self.logger.info("Predicted Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05, logger = self.logger)
+        self.logger.info("Predicted Testing Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05, logger = self.logger)
         
-        print("Training Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_train_reg > 0.05, masked_y_train_reg > 0.05, None)
-        print("Validation Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None)
-        print("Testing Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_test_reg > 0.05, masked_y_test_reg > 0.05, None)
+        self.logger.info("Training Masked Classification Metrics:")
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_train_reg > 0.05, masked_y_train_reg > 0.05, None, logger = self.logger)
+        self.logger.info("Validation Masked Classification Metrics:")
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None, logger = self.logger)
+        self.logger.info("Testing Masked Classification Metrics:")
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_test_reg > 0.05, masked_y_test_reg > 0.05, None, logger = self.logger)
         
         # Top m highest 
         m = self.params['Akin_top_highest']
-        top_m_indices = np.argsort(masked_y_pred_test_reg)[-m:][::-1]
+        top_m_indices = np.flip(np.argsort(masked_y_pred_test_reg)[-m:])
         selected_true_values = masked_y_test[top_m_indices]
         selected_true_values_reg = masked_y_test_reg[top_m_indices]
         accuracy_top_m_above_5 = np.mean(selected_true_values > 0.05)
-        print(f"Accuracy of top {m} to be over 5% in test set: {accuracy_top_m_above_5:.2%}")
-        print(f"Mean value of top {m}: {np.mean(selected_true_values_reg)}")
-        print(f"Min value of top {m}: {np.min(selected_true_values_reg)}")
-        print(f"Max value of top {m}: {np.max(selected_true_values_reg)}")
+        self.logger.info(f"Accuracy of top {m} to be over 5% in test set: {accuracy_top_m_above_5:.2%}")
+        self.logger.info(f"Mean value of top {m}: {np.mean(selected_true_values_reg)}")
+        self.logger.info(f"Min value of top {m}: {np.min(selected_true_values_reg)}")
+        self.logger.info(f"Max value of top {m}: {np.max(selected_true_values_reg)}")
         
         selected_stocks = self.meta_test[top_m_indices]
         for i, stock in enumerate(selected_stocks[:,0]):
-            print(f"Stock: {stock}")
-            print(f"    prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
+            self.logger.info(f"Stock: {stock}")
+            self.logger.info(f"    prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
             aidx = DPl(self.__assets[stock].shareprice).getNextLowerOrEqualIndex(self.test_date)
-            print(f"    start price: {self.__assets[stock].shareprice['Close'].item(aidx)}")
-            print(f"    end price: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction)}")
-            print(f"    ratio: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction) / self.__assets[stock].shareprice['Close'].item(aidx)}")
+            self.logger.info(f"    start price: {self.__assets[stock].shareprice['Close'].item(aidx)}")
+            self.logger.info(f"    end price: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction)}")
+            self.logger.info(f"    ratio: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction) / self.__assets[stock].shareprice['Close'].item(aidx)}")
         
         return accuracy_top_m_above_5
                 
@@ -844,12 +863,12 @@ class AkinDistriML(IML):
         num_boost_round = self.params['Akin_pre_num_boost_round']
         weight_truncation = self.params['Akin_pre_weight_truncation']
         
-        print(f"num_leaves: {num_leaves}")
-        print(f"num_boost_round: {num_boost_round}")
-        print(f"weight_truncation: {weight_truncation}")
-        print(f"test_quantil: {test_quantil}")
-        print(f"feature_max: {feature_max}")
-        print(f"iterSteps: {itersteps}")
+        self.logger.info(f"num_leaves: {num_leaves}")
+        self.logger.info(f"num_boost_round: {num_boost_round}")
+        self.logger.info(f"weight_truncation: {weight_truncation}")
+        self.logger.info(f"test_quantil: {test_quantil}")
+        self.logger.info(f"feature_max: {feature_max}")
+        self.logger.info(f"iterSteps: {itersteps}")
         mask_train, mask_test, mask_features, sample_weights = self.establishMasks(
             q_test=test_quantil, 
             feature_max=feature_max, 
@@ -859,11 +878,11 @@ class AkinDistriML(IML):
             weight_truncation = weight_truncation,
         )        
         endTime = datetime.now()
-        print(f"Masking completed in {endTime - startTime}.")
+        self.logger.info(f"Masking completed in {endTime - startTime}.")
         
-        print(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
-        print(f"Test samples selected: {mask_test.sum()} out of {nTest}")
-        print(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
+        self.logger.info(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
+        self.logger.info(f"Test samples selected: {mask_test.sum()} out of {nTest}")
+        self.logger.info(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
         
         #Establish validation set
         # Random subsample for validation set
@@ -885,20 +904,20 @@ class AkinDistriML(IML):
         
         masked_sample_weights_train = sample_weights[mask_train][~mask_val]
             
-        print("Number of features: ", len(self.featureColumnNames))
-        print("Overall Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_train)
-        print("Overall Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_val)
-        print("Masked Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_train)
-        print("Masked Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_val)
+        self.logger.info(f"Number of features:  {len(self.featureColumnNames)}")
+        self.logger.info("Overall Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(self.y_train, logger = self.logger)
+        self.logger.info("Overall Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(self.y_val, logger = self.logger)
+        self.logger.info("Masked Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_train, logger = self.logger)
+        self.logger.info("Masked Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_val, logger = self.logger)
         
         startTime = datetime.now()
         num_leaves = self.params['Akin_num_leaves']
         num_boost_round = self.params['Akin_num_boost_round']
-        print(f"LGBM: num_leaves: {num_leaves}, num_boost_round: {num_boost_round}")
+        self.logger.info(f"LGBM: num_leaves: {num_leaves}, num_boost_round: {num_boost_round}")
         lgbmInstance = self.__run_LGBM_reg(
             masked_X_train, 
             masked_y_train_reg, 
@@ -909,10 +928,10 @@ class AkinDistriML(IML):
             num_boost_round = num_boost_round
         )
         endTime = datetime.now()
-        print(f"LGBM completed in {endTime - startTime}.")
+        self.logger.info(f"LGBM completed in {endTime - startTime}.")
         
         masked_colnames = np.array(self.featureColumnNames)[mask_features]
-        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10)
+        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10, logger = self.logger)
         
         masked_y_pred_train_reg = lgbmInstance.predict(masked_X_train, num_iteration=lgbmInstance.best_iteration)
         
@@ -920,22 +939,22 @@ class AkinDistriML(IML):
         
         masked_y_pred_test_reg = lgbmInstance.predict(masked_X_test, num_iteration=lgbmInstance.best_iteration)
         
-        print("Predicted Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05)
-        print("Predicted Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05)
-        print("Predicted Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05)
+        self.logger.info("Predicted Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05, logger = self.logger)
+        self.logger.info("Predicted Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05, logger = self.logger)
+        self.logger.info("Predicted Testing Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05, logger = self.logger)
         
-        print("Training Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_train_reg > 0.05, masked_y_train_reg > 0.05, None)
-        print("Validation Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None)
-        print()
+        self.logger.info("Training Masked Classification Metrics:")
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_train_reg > 0.05, masked_y_train_reg > 0.05, None, logger = self.logger)
+        self.logger.info("Validation Masked Classification Metrics:")
+        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None, logger = self.logger)
+        self.logger.info("")
         
         # Top m highest
         m = self.params['Akin_top_highest']
         top_m_indices = np.argsort(masked_y_pred_test_reg)[-m:][::-1]
         selected_stocks = self.meta_test[top_m_indices]
         for i, stock in enumerate(selected_stocks[:,0]):
-            print(f"Stock: {stock}, prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
+            self.logger.info(f"Stock: {stock}, prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")

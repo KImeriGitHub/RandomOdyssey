@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 import optuna
+import logging
 
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
 
@@ -349,19 +350,20 @@ class CollectionModels():
         print(akinML.metadata)
         
     @staticmethod
-    def AkinDistriML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None):
-        akinML = AkinDistriML(assetspl,test_date=test_date, params = params, gatherTestResults=True)
+    def AkinDistriML_loadup_analyze(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None, logger = None):
+        akinML = AkinDistriML(assetspl,test_date=test_date, params = params, gatherTestResults=True, logger = logger)
         akinML.load_data('src/predictionModule/bin', loadup_name)
         
         return akinML.analyze()
     
     @staticmethod
-    def AkinDistriML_saveData_predict(assetspl: Dict[str, AssetDataPolars], save_name: str, test_date: pd.Timestamp, params = None):
+    def AkinDistriML_saveData_predict(assetspl: Dict[str, AssetDataPolars], save_name: str, test_date: pd.Timestamp, params = None, logger = None):
         akinML = AkinDistriML(
             assetspl,
             params = params,
             test_date=test_date,
-            gatherTestResults = False
+            gatherTestResults = False,
+            logger = logger
         )
 
         akinML.prepareData()
@@ -372,12 +374,13 @@ class CollectionModels():
         return akinML.predict()
     
     @staticmethod
-    def AkinDistriML_loadUpData_predict(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None):
+    def AkinDistriML_loadUpData_predict(assetspl: Dict[str, AssetDataPolars], loadup_name: str, test_date: pd.Timestamp, params = None, logger = None):
         akinML = AkinDistriML(
             assetspl,
             params = params,
             test_date=test_date,
-            gatherTestResults = False
+            gatherTestResults = False,
+            logger = logger
         )
 
         akinML.load_data('src/predictionModule/bin', loadup_name)

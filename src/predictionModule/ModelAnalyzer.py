@@ -8,6 +8,7 @@ from typing import Optional
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
 from src.predictionModule.IML import IML
 import lightgbm as lgb
+import logging
 
 class ModelAnalyzer:
     def __init__(self, module = None):
@@ -57,7 +58,7 @@ class ModelAnalyzer:
         return percentage_sum_sq
     
     @staticmethod
-    def print_label_distribution(*arrays):
+    def print_label_distribution(*arrays, logger: logging.Logger):
         """
         Print the distribution of one or more label arrays.
 
@@ -69,11 +70,11 @@ class ModelAnalyzer:
             total = counts.sum()
             for val, count in zip(unique_vals, counts):
                 freq = count / total
-                print(f"  Label {val}: Count = {count}, Frequency = {freq:.2f}")
-            print()
+                logger.info(f"  Label {val}: Count = {count}, Frequency = {freq:.2f}")
+            logger.info("")
 
     @staticmethod 
-    def print_classification_metrics(y_known: np.ndarray, y_observer: np.ndarray, y_obs_proba: np.ndarray = None):
+    def print_classification_metrics(y_known: np.ndarray, y_observer: np.ndarray, y_obs_proba: np.ndarray = None, logger: logging.Logger = None):
         """
         Print per-class accuracy, overall accuracy, log loss, and TPR, FPR, TNR, FNR for each class.
 
@@ -87,13 +88,13 @@ class ModelAnalyzer:
         per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
 
         overall_acc = accuracy_score(y_known, y_observer)
-        print(f"\n  Overall Accuracy: {overall_acc:.2f}")
+        logger.info(f"\n  Overall Accuracy: {overall_acc:.2f}")
 
         if y_obs_proba is not None:
             ll = log_loss(y_known, y_obs_proba)
-            print(f"  Log Loss: {ll:.4f}")
+            logger.info(f"  Log Loss: {ll:.4f}")
 
-        print("\n  Metrics per Class:")
+        logger.info("\n  Metrics per Class:")
         for i, cls in enumerate(classes):
             TP = cm[i, i]
             FN = cm[i].sum() - TP
@@ -105,13 +106,13 @@ class ModelAnalyzer:
             TNR = TN / (TN + FP) if (TN + FP) else 0
             FNR = FN / (FN + TP) if (FN + TP) else 0
 
-            print(f"    Class {cls}:")
-            print(f"      TPR: {TPR:.2f}, FPR: {FPR:.2f}, TNR: {TNR:.2f}, FNR: {FNR:.2f}") 
+            logger.info(f"    Class {cls}:")
+            logger.info(f"      TPR: {TPR:.2f}, FPR: {FPR:.2f}, TNR: {TNR:.2f}, FNR: {FNR:.2f}") 
             
-        print()
+        logger.info("")
 
     @staticmethod
-    def print_feature_importance_LGBM(model: IML, n_feature: int = 50):
+    def print_feature_importance_LGBM(model: IML, n_feature: int = 50, logger: logging.Logger = None):
         importances = model.LGBMModel.feature_importances_
         
         feature_importances = pd.DataFrame({
@@ -124,11 +125,11 @@ class ModelAnalyzer:
         top_features.index += 1  # Start ranking at 1
         top_features.index.name = 'Rank'
         top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
-        print(f"Top {top_n} Feature Importances:")
-        print(top_features.to_string())
+        logger.info(f"Top {top_n} Feature Importances:")
+        logger.info(top_features.to_string())
     
     @staticmethod
-    def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
+    def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20, logger: logging.Logger = None):
         importances = lgbModel.feature_importances_
         
         feature_importances = pd.DataFrame({
@@ -141,11 +142,11 @@ class ModelAnalyzer:
         top_features.index += 1  # Start ranking at 1
         top_features.index.name = 'Rank'
         top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
-        print(f"Top {top_n} Feature Importances:")
-        print(top_features.to_string())
+        logger.info(f"Top {top_n} Feature Importances:")
+        logger.info(top_features.to_string())
     
     @staticmethod
-    def print_feature_importance_LGBM(lgbModel: lgb.Booster, featureColumnNames: list[str], n_feature: int = 20):
+    def print_feature_importance_LGBM(lgbModel: lgb.Booster, featureColumnNames: list[str], n_feature: int = 20, logger: logging.Logger = None):
         importances = lgbModel.feature_importance()
         
         feature_importances = pd.DataFrame({
@@ -158,8 +159,8 @@ class ModelAnalyzer:
         top_features.index += 1  # Start ranking at 1
         top_features.index.name = 'Rank'
         top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
-        print(f"Top {top_n} Feature Importances:")
-        print(top_features.to_string())
+        logger.info(f"Top {top_n} Feature Importances:")
+        logger.info(top_features.to_string())
 
 
     def plot_per_class_accuracy(self, y_val: np.ndarray, y_pred: np.ndarray, test_acc: float, test_loss: float):

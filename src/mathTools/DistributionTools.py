@@ -10,7 +10,7 @@ class DistributionTools():
         pass
     
     @staticmethod
-    def establishMatchingWeight(sam_tr: np.array, sam_te: np.array, imp: np.array, n_bin: int = 10) -> np.array:
+    def establishMatchingWeight(sam_tr: np.array, sam_te: np.array, n_bin: int = 10) -> np.array:
         """
         PRE: sam_tr and sam_te are the training and test samples; imp is the importance vector.
         POST: Returns a nonnegative weight vector (length=num_sam_tr) obtained via NNLS so that for each
@@ -18,9 +18,6 @@ class DistributionTools():
               the sum over the bin equals the target bin sum computed from the original sorted weights.
         """
         num_sam_tr, n_feat = sam_tr.shape
-        assert imp.shape[0] == n_feat, "Importance vector length must equal the number of features."
-        imp = np.maximum(imp, 0)
-        imp_sc = imp / imp.sum()
 
         # Compute sorted weights for each feature (memory-friendly per-column processing)
         weights_sorted = np.zeros((num_sam_tr, n_feat), dtype=float)

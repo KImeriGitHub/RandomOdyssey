@@ -105,8 +105,8 @@ class FeatureFinancialData():
         self.fin_quar = self.asset.financials_quarterly
         self.fin_ann = self.asset.financials_annually
         
-        self.num_quar_lag = 8   # number of lags to consider for quarterly data
-        self.num_ann_lag = 2    # number of lags to consider for annual data
+        self.num_quar_lag = 16   # number of lags to consider for quarterly data
+        self.num_ann_lag = 4    # number of lags to consider for annual data
         
         self.__operateOnFinData()
         self.__operateOnFinData_lag()
