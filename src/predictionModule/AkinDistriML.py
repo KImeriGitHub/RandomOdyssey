@@ -123,7 +123,7 @@ class AkinDistriML(IML):
         futureMeanPrice = asset.adjClosePrice["AdjClose"].item(aidx + self.idxAfterPrediction)
         futureMaxPrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().max()
 
-        futurePriceScaled = futureMaxPrice/curAdjPrice
+        futurePriceScaled = futureMeanPrice/curAdjPrice
         
         target = self.getTargetClassification([futurePriceScaled-1], self.classificationInterval)
         target_reg = futurePriceScaled-1
@@ -217,7 +217,6 @@ class AkinDistriML(IML):
                 
                 features = self.getFeatures(asset, featureMain, date, aidx)
                 Xtest.append(features)
-                
                 metaTest.append([ticker, date])
                 
                 if self.gatherTestResults:
@@ -389,24 +388,23 @@ class AkinDistriML(IML):
         return gbm
     
     def __get_ksDis(self, mask_train, mask_test, mask_features):
-        weightedFeatures = self.__mask_weightedFeatures()
-        features_w = weightedFeatures & mask_features
+        metric_distrEquality = np.zeros(mask_features.sum())
         
-        metric_distrEquality = np.zeros(features_w.sum())
-        quantile_points = np.linspace(0.01, 0.99, 100)
+        quantile_points = np.linspace(0.01, 0.99, 200)
         qIndices_train = np.array(quantile_points * mask_train.sum()).astype(int)
         qIndices_test = np.array(quantile_points * mask_test.sum()).astype(int)
         
-        train_sorted = np.sort(self.X_train[mask_train][:, features_w], axis=0)
-        test_sorted = np.sort(self.X_test[mask_test][:, features_w], axis=0)
+        train_sorted = np.sort(self.X_train[mask_train][:, mask_features], axis=0)
+        test_sorted = np.sort(self.X_test[mask_test][:, mask_features], axis=0)
         train_quantiles = train_sorted[qIndices_train]
         test_quantiles = test_sorted[qIndices_test]
+        
         metric_distrEquality = np.mean(np.abs(train_quantiles - test_quantiles), axis=0)
             
         self.logger.info(f"  Train-Test Distri Equality: {np.quantile(metric_distrEquality, 0.9)}")
         
         res = np.zeros(len(mask_features), dtype=float)
-        res[features_w] = metric_distrEquality
+        res[mask_features] = metric_distrEquality
         
         del train_sorted, test_sorted, train_quantiles, test_quantiles # saving on RAM
         
@@ -457,16 +455,18 @@ class AkinDistriML(IML):
 
         # Get distribution distances for each feature
         ksdis = self.__get_ksDis(mask_train, mask_test, mask_features)
+        weightedFeatures = self.__mask_weightedFeatures()
         
-        mask_colToAssimilate = np.ones(len(mask_features), dtype=bool)
+        mask_colToAssimilate = mask_features & weightedFeatures
         
         # Get feature which we want to make the same distribution between train and test
         mask_FeatureTA = np.char.find(self.featureColumnNames, "FeatureTA") >= 0
         mask_FinData_quar = (np.char.find(self.featureColumnNames, "FinData_quar_") >= 0)
-        mask_FinData_metrics = (np.char.find(self.featureColumnNames, "FinData_metrics_") >= 0)
-        mask_Fourier = (np.char.find(self.featureColumnNames, "Fourier_Price_AbsCoeff") >= 0)
-        mask_MathFeature = (np.char.find(self.featureColumnNames, "MathFeature_Return") >= 0)
-        list_masks = [mask_FeatureTA, mask_FinData_quar, mask_FinData_metrics, mask_Fourier, mask_MathFeature]
+        #mask_FinData_ann = (np.char.find(self.featureColumnNames, "FinData_ann_") >= 0)
+        #mask_FinData_metrics = (np.char.find(self.featureColumnNames, "FinData_metrics_") >= 0)
+        #mask_Fourier = (np.char.find(self.featureColumnNames, "Fourier_Price_AbsCoeff") >= 0)
+        #mask_MathFeature = (np.char.find(self.featureColumnNames, "MathFeature_Return") >= 0)
+        list_masks = [mask_colToAssimilate] #[mask_FeatureTA, mask_FinData_quar] #, mask_FinData_ann] # mask_FinData_metrics, mask_Fourier, mask_MathFeature]
         n_masks = len(list_masks)
         
         # Non lag exclusion
