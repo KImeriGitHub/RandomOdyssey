@@ -146,7 +146,6 @@
 - APO
 - APTV
 - APU
-- AQB
 - AQN
 - AR
 - ARA
@@ -216,7 +215,6 @@
 - AZN
 - AZO
 - AZZ
-- B
 - BA
 - BABA
 - BAC
@@ -257,6 +255,7 @@
 - BFAM
 - BFR
 - BFS
+- BG
 - BGC
 - BGCA
 - BGG
@@ -485,7 +484,6 @@
 - CRCM
 - CRH
 - CRI
-- CRK
 - CRL
 - CRM
 - CRR
@@ -816,7 +814,6 @@
 - FRT
 - FSCE
 - FSD
-- FSK
 - FSL
 - FSLR
 - FSM
@@ -860,7 +857,6 @@
 - GEO
 - GEQ
 - GES
-- GEV
 - GFF
 - GFI
 - GFIG
@@ -1293,7 +1289,6 @@
 - MAIN
 - MAN
 - MANU
-- MAR
 - MAS
 - MATX
 - MBI
@@ -1509,7 +1504,6 @@
 - NRP
 - NRT
 - NS
-- NSC
 - NSH
 - NSM
 - NSP
@@ -1530,7 +1524,6 @@
 - NVR
 - NVS
 - NVTA
-- NWE
 - NWHM
 - NWL
 - NWN
@@ -2060,10 +2053,8 @@
 - TPL
 - TPR
 - TPTA
-- TPVG
 - TPX
 - TPZ
-- TR
 - TRC
 - TRCA
 - TREX
@@ -2189,7 +2180,6 @@
 - VLO
 - VLRS
 - VLT
-- VLTO
 - VMC
 - VMI
 - VMO
@@ -2287,7 +2277,6 @@
 - WSR
 - WST
 - WT
-- WTI
 - WTM
 - WTR
 - WTS
@@ -2295,7 +2284,6 @@
 - WU
 - WWE
 - WWW
-- WY
 - WYNN
 - X
 - XCO
