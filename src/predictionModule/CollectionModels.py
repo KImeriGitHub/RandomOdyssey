@@ -337,12 +337,14 @@ class CollectionModels():
             save_name: str, 
             test_date: pd.Timestamp,
             evaluateTestResults = True,
-            params = None):
+            params = None, 
+            logger = None):
 
         akinML = AkinDistriML(assetspl,
                 params = params,
                 test_date=test_date,
-                gatherTestResults = evaluateTestResults)
+                gatherTestResults = evaluateTestResults, 
+                logger = logger)
 
         akinML.prepareData()
 

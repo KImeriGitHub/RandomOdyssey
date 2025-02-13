@@ -119,11 +119,12 @@ class AkinDistriML(IML):
         if (aidx + self.idxAfterPrediction) >= len(asset.adjClosePrice["AdjClose"]):
             raise ValueError("Asset does not have enough data to calculate target.")
         
-        curAdjPrice:float = asset.adjClosePrice["AdjClose"].item(aidx)
-        futureMeanPrice = asset.adjClosePrice["AdjClose"].item(aidx + self.idxAfterPrediction)
+        curAdjPrice: float = asset.adjClosePrice["AdjClose"].item(aidx)
+        futureLastPrice = asset.adjClosePrice["AdjClose"].item(aidx + self.idxAfterPrediction)
+        futureMeanPrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().mean()
         futureMaxPrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().max()
 
-        futurePriceScaled = futureMeanPrice/curAdjPrice
+        futurePriceScaled = futureLastPrice/curAdjPrice
         
         target = self.getTargetClassification([futurePriceScaled-1], self.classificationInterval)
         target_reg = futurePriceScaled-1
@@ -359,10 +360,9 @@ class AkinDistriML(IML):
             'verbosity': -1,
             'n_jobs': -1,
             'is_unbalance': True,
-            'boost_from_average': True,
-            'objective': 'quantile',
-            'alpha': 0.85,
-            'metric': 'quantile',  # NOTE: the string 'rsme' is not recognized, v 4.5.0
+            'objective': 'regression',
+            #'alpha': 0.85,
+            'metric': 'l2_root',  # NOTE: the string 'rsme' is not recognized, v 4.5.0
             'lambda_l1': 1.0,
             'lambda_l2': 1.0,
             'early_stopping_rounds': num_boost_round//10,
@@ -824,17 +824,16 @@ class AkinDistriML(IML):
         # Top m highest 
         m = self.params['Akin_top_highest']
         top_m_indices = np.flip(np.argsort(masked_y_pred_test_reg)[-m:])
-        selected_true_values = masked_y_test[top_m_indices]
         selected_true_values_reg = masked_y_test_reg[top_m_indices]
-        accuracy_top_m_above_5 = np.mean(selected_true_values > 0.05)
+        accuracy_top_m_above_5 = np.mean(selected_true_values_reg > 0.05)
         self.logger.info(f"Accuracy of top {m} to be over 5% in test set: {accuracy_top_m_above_5:.2%}")
         self.logger.info(f"Mean value of top {m}: {np.mean(selected_true_values_reg)}")
         self.logger.info(f"Min value of top {m}: {np.min(selected_true_values_reg)}")
         self.logger.info(f"Max value of top {m}: {np.max(selected_true_values_reg)}")
         
-        selected_stocks = self.meta_test[top_m_indices]
+        selected_stocks = self.meta_test[mask_test][top_m_indices]
         for i, stock in enumerate(selected_stocks[:,0]):
-            self.logger.info(f"Stock: {stock}")
+            self.logger.info(f"Stock: {stock}, Date: {selected_stocks[i,1]}")
             self.logger.info(f"    prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
             aidx = DPl(self.__assets[stock].shareprice).getNextLowerOrEqualIndex(self.test_date)
             self.logger.info(f"    start price: {self.__assets[stock].shareprice['Close'].item(aidx)}")
@@ -955,6 +954,6 @@ class AkinDistriML(IML):
         # Top m highest
         m = self.params['Akin_top_highest']
         top_m_indices = np.argsort(masked_y_pred_test_reg)[-m:][::-1]
-        selected_stocks = self.meta_test[top_m_indices]
+        selected_stocks = self.meta_test[mask_test][top_m_indices]
         for i, stock in enumerate(selected_stocks[:,0]):
             self.logger.info(f"Stock: {stock}, prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")

@@ -14,7 +14,7 @@ import logging
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
 
-stock_group = "snp500_finanTo2011"
+stock_group = "finanTo2011"
 assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_"+stock_group)
 assetspl: Dict[str, AssetDataPolars] = {}
 for ticker, asset in assets.items():
@@ -22,7 +22,7 @@ for ticker, asset in assets.items():
 
 #To free up RAM
 del assets
-cutoffDate = pd.Timestamp(year=2011, month=1, day=7, tz='UTC')
+cutoffDate = pd.Timestamp(year=2010, month=1, day=7, tz='UTC')
 for ticker, asset in assetspl.items():
     lastIdx = DPl(assetspl[ticker].adjClosePrice).getNextLowerOrEqualIndex(cutoffDate)
     if not assetspl[ticker].adjClosePrice['Date'].item(lastIdx) == cutoffDate:
@@ -54,12 +54,12 @@ params = {
     
     'Akin_test_quantile': 0.7,
     'Akin_feature_max': 800,
-    'Akin_itersteps': 5,
-    'Akin_pre_num_leaves': 512,
+    'Akin_itersteps': 6,
+    'Akin_pre_num_leaves': 1400,
     'Akin_pre_num_boost_round': 1000,
-    'Akin_pre_weight_truncation': 12,
-    'Akin_num_leaves': 512,
-    'Akin_num_boost_round': 1000,
+    'Akin_pre_weight_truncation': 8,
+    'Akin_num_leaves': 1400,
+    'Akin_num_boost_round': 10000,
     'Akin_top_highest': 10,
 }
 
@@ -82,6 +82,13 @@ logger = logging.getLogger(__name__)
 #    print(f"----------Date: {eval_date}----------")
 #    print(f"----------{akinML_binaries_live_name}----------")
 #
+#    CollectionModels.AkinDistriML_saveData_predict(
+#        assetspl = assetspl, 
+#        save_name = akinML_binaries_live_name,
+#        params = params,
+#        test_date = eval_date,
+#        logger = logger,
+#    ) 
 #    CollectionModels.AkinDistriML_loadUpData_predict(
 #        assetspl = assetspl, 
 #        loadup_name = akinML_binaries_live_name,
