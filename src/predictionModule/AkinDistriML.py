@@ -62,25 +62,24 @@ class AkinDistriML(IML):
         self.test_date = test_date
         
         trainingInterval_days = 365*4+60
-        testInterval_days = 2
+        testInterval_idx = 2
         self.print_OptunaBars = True
-        self.testDates = pd.date_range(self.test_date - pd.Timedelta(days=testInterval_days), self.test_date, freq='B')
         
-        if not self.testDates[-1] == self.test_date:
+        exampleAsset: AssetDataPolars = self.__assets[next(iter(self.__assets))]
+        testDateIdx = DPl(exampleAsset.shareprice).getNextLowerOrEqualIndex(self.test_date)
+        
+        if not pd.Timestamp(exampleAsset.shareprice["Date"].item(testDateIdx)) == self.test_date:
             self.logger.info("test_start_date is not a business day. Correcting to first business day in assets before test_start_date.")
-            asset: AssetDataPolars = self.__assets[next(iter(self.__assets))]
-            dateIdx = DPl(asset.shareprice).getNextLowerOrEqualIndex(self.test_date)
-            self.test_date = pd.Timestamp(asset.shareprice["Date"].item(dateIdx))
-            self.testDates = pd.date_range(self.test_date - pd.Timedelta(days=testInterval_days), self.test_date, freq='B')
+            self.test_date = pd.Timestamp(exampleAsset.shareprice["Date"].item(testDateIdx))
         
-        exampleTicker = next(iter(self.__assets))
-        aidx = DPl(self.__assets[exampleTicker].shareprice).getNextLowerOrEqualIndex(self.testDates[0])
-        aidx_m = aidx - self.params['idxAfterPrediction']
-        train_end_date = self.__assets[exampleTicker].shareprice["Date"].item(aidx_m)
+        self.testDates = pd.date_range(pd.Timestamp(exampleAsset.shareprice["Date"].item(testDateIdx+1-testInterval_idx)), self.test_date, freq='B')
+        
+        testDateIdx_m = testDateIdx - self.params['idxAfterPrediction']
+        train_end_date = pd.Timestamp(exampleAsset.shareprice["Date"].item(testDateIdx_m))
         train_start_date = train_end_date - pd.Timedelta(days=trainingInterval_days)
         self.trainDates = pd.date_range(train_start_date, train_end_date, freq='B')
         
-        assert self.__assets[exampleTicker].shareprice["Date"].last() >= max(self.testDates)
+        assert exampleAsset.shareprice["Date"].last() >= max(self.testDates)
         
         # Assign parameters to instance variables
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
@@ -387,26 +386,39 @@ class AkinDistriML(IML):
         )   
         return gbm
     
-    def __get_ksDis(self, mask_train, mask_test, mask_features):
+    def __get_ksDis(self, mask_train, mask_test, mask_features, weight: np.array = None):
         metric_distrEquality = np.zeros(mask_features.sum())
         
-        quantile_points = np.linspace(0.01, 0.99, 200)
-        qIndices_train = np.array(quantile_points * mask_train.sum()).astype(int)
-        qIndices_test = np.array(quantile_points * mask_test.sum()).astype(int)
+        if weight is None:
+            self.logger.info(f"  KS Distance calculation with no weight.")
+            weight = np.ones(mask_train.sum())
+        weight *= (mask_train.sum()/np.sum(weight))
         
-        train_sorted = np.sort(self.X_train[mask_train][:, mask_features], axis=0)
-        test_sorted = np.sort(self.X_test[mask_test][:, mask_features], axis=0)
-        train_quantiles = train_sorted[qIndices_train]
-        test_quantiles = test_sorted[qIndices_test]
+        threshold = 5
+        n_quantiles = mask_test.sum()//3
+        qIndices_train = np.array(np.linspace(threshold, mask_train.sum()-1-threshold, n_quantiles), dtype=int)
+        qIndices_test = np.array(np.linspace(threshold, mask_test.sum()-1-threshold, n_quantiles), dtype=int)
         
-        metric_distrEquality = np.mean(np.abs(train_quantiles - test_quantiles), axis=0)
+        train_argsort = np.argsort(self.X_train[mask_train][:, mask_features], axis=0)
+        train_sorted = np.sort(self.X_train[mask_train][:, mask_features], axis = 0)
+        test_sorted = np.sort(self.X_test[mask_test][:, mask_features], axis = 0)
+        for i in range(mask_features.sum()):
+            cs = np.cumsum(weight[train_argsort[:,i]])
+            cs *= ((mask_train.sum()-1)/cs[-1])
             
-        self.logger.info(f"  Train-Test Distri Equality: {np.quantile(metric_distrEquality, 0.9)}")
+            weightedQuantiles = np.array(cs[qIndices_train], dtype=int)
+            
+            train_quantiles = train_sorted[weightedQuantiles][:, i]
+            test_quantiles = test_sorted[qIndices_test][:, i]
+            
+            metric_distrEquality[i] = np.mean(np.abs(train_quantiles - test_quantiles))
+            
+        self.logger.info(f"  Train-Test Distri Equality: Mean: {np.mean(metric_distrEquality)}, Quantile 0.9: {np.quantile(metric_distrEquality, 0.9)}")
         
         res = np.zeros(len(mask_features), dtype=float)
         res[mask_features] = metric_distrEquality
         
-        del train_sorted, test_sorted, train_quantiles, test_quantiles # saving on RAM
+        del train_argsort, train_sorted, test_sorted  # saving on RAM
         
         return res
         
@@ -495,7 +507,10 @@ class AkinDistriML(IML):
             self.X_test[mask_test][:, indices_mask],
             n_bin = n_bin
         )
-        sample_weights /= np.sum(mask_train) / np.sum(sample_weights)
+        sample_weights *= (np.sum(mask_train) / np.sum(sample_weights))
+        
+        self.__get_ksDis(mask_train, mask_test, mask_features, sample_weights[mask_train])
+        
         self.logger.info(f"  Zeros Weight Ratio: {np.sum(sample_weights < 1e-6) / len(sample_weights)}")
         return sample_weights
         
@@ -564,9 +579,9 @@ class AkinDistriML(IML):
             'verbosity': -1,
             'n_jobs': -1,
             'is_unbalance': True,
-            'objective': 'quantile',
-            'alpha': 0.85,
-            'metric': 'quantile',
+            'objective': 'regression',
+            #'alpha': 0.85,
+            'metric': 'l2_root',
             'lambda_l1': 1.0,
             'lambda_l2': 1.0,
             'early_stopping_rounds': num_boost_round//10,
@@ -631,6 +646,7 @@ class AkinDistriML(IML):
                 n_bin = n_bin
             )
             sample_weights[mask_train] = sample_weights_loop
+            sample_weights[~mask_train] = 0
             
             # Estblish LGBM Instance
             lgbmInstance = self.__establishLGBMInstance(
@@ -663,11 +679,6 @@ class AkinDistriML(IML):
             mask_features[mask_features] = mask_features_loop
 
             endTime_loop = datetime.now()
-            self.__get_ksDis(
-                mask_train = mask_train, 
-                mask_test = mask_test,
-                mask_features = mask_features,
-            ) 
             self.logger.info(f"  Time elapsed: {endTime_loop - startTime_loop}.")
             self.logger.info("  Masked Training Label Distribution:")
             ModelAnalyzer().print_label_distribution(self.y_train[mask_train], logger=self.logger)

@@ -17,6 +17,7 @@ import numpy as np
 from typing import Dict
 import optuna
 import logging
+from datetime import datetime
 
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
 
@@ -338,7 +339,7 @@ class CollectionModels():
             test_date: pd.Timestamp,
             evaluateTestResults = True,
             params = None, 
-            logger = None):
+            logger: logging.Logger = None):
 
         akinML = AkinDistriML(assetspl,
                 params = params,
@@ -346,7 +347,10 @@ class CollectionModels():
                 gatherTestResults = evaluateTestResults, 
                 logger = logger)
 
+        startTime = datetime.now()
         akinML.prepareData()
+        endTime = datetime.now()
+        logger.info(f"Data Preparation completed in: {endTime - startTime}")
 
         akinML.save_data('src/predictionModule/bin', save_name)
         print(akinML.metadata)
@@ -359,7 +363,13 @@ class CollectionModels():
         return akinML.analyze()
     
     @staticmethod
-    def AkinDistriML_saveData_predict(assetspl: Dict[str, AssetDataPolars], save_name: str, test_date: pd.Timestamp, params = None, logger = None):
+    def AkinDistriML_saveData_predict(
+        assetspl: Dict[str, AssetDataPolars], 
+        save_name: str, 
+        test_date: pd.Timestamp, 
+        params = None, 
+        logger:logging.Logger = None
+    ):
         akinML = AkinDistriML(
             assetspl,
             params = params,
@@ -368,7 +378,10 @@ class CollectionModels():
             logger = logger
         )
 
+        startTime = datetime.now()
         akinML.prepareData()
+        endTime = datetime.now()
+        logger.info(f"Data Preparation completed in: {endTime - startTime}")
 
         akinML.save_data('src/predictionModule/bin', save_name)
         print(akinML.metadata)

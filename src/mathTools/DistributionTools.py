@@ -60,7 +60,7 @@ class DistributionTools():
 
         # Solve the nonnegative least-squares problem: min ||A_sparse*x - b||_2  s.t. x >= 0.
         # lsq_linear handles bounds and works efficiently with sparse A.
-        sol = lsq_linear(A_sparse, b, bounds=(0, num_sam_tr), lsmr_tol='auto', verbose=0)
+        sol = lsq_linear(A_sparse, b, bounds=(0, np.inf), lsmr_tol='auto', verbose=0)
         res = sol.x
         
         del A_sparse, b, rows, cols, data, b_vals, weights_sorted, lo, hi, p, bins, sorted_te, sorted_tr
