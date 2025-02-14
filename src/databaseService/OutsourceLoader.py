@@ -167,6 +167,9 @@ class OutsourceLoader:
 
             if not company_overview is None:
                 assetData.financials_annually = CleanData.financial_lastRow_fillWithCompanyOverview_AV(assetData.financials_annually, company_overview)
+                
+            assetData.financials_quarterly = CleanData.financial_lastRow_rmIfNanInKeyValues_AV(assetData.financials_quarterly)
+            assetData.financials_annually = CleanData.financial_lastRow_rmIfNanInKeyValues_AV(assetData.financials_annually)
             
         except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required

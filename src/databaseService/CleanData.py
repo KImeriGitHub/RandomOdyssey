@@ -105,6 +105,17 @@ class CleanData():
         return fin
     
     @staticmethod
+    def financial_lastRow_rmIfNanInKeyValues_AV(fin: pd.DataFrame) -> pd.DataFrame:
+        isMissing = False
+        isMissing = isMissing | np.isnan(fin.loc[len(fin)-1, 'totalRevenue'])
+        isMissing = isMissing | np.isnan(fin.loc[len(fin)-1, 'grossProfit'])
+        isMissing = isMissing | np.isnan(fin.loc[len(fin)-1, 'totalAssets'])
+        
+        if isMissing:
+            fin = fin.iloc[:-1]
+        return fin
+    
+    @staticmethod
     def fill_NAN_to_BusinessDays(s: pd.Series):
         # PRE: s has index as dates. They are sorted.
         # POST: Completes the dates to business days
