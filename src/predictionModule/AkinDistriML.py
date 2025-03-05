@@ -56,7 +56,7 @@ class AkinDistriML(IML):
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
         self.logger = logger
         
-        self.lagList = [1,2,3,5,7,10,13,16,21,45,60,102,200,255,290]
+        self.lagList = [1,2,3,5,7,10,15,30,60,115,200,290]
         self.featureColumnNames = []
         self.gatherTestResults = gatherTestResults
         self.test_date = test_date
@@ -119,11 +119,16 @@ class AkinDistriML(IML):
             raise ValueError("Asset does not have enough data to calculate target.")
         
         curAdjPrice: float = asset.adjClosePrice["AdjClose"].item(aidx)
-        futureLastPrice = asset.adjClosePrice["AdjClose"].item(aidx + self.idxAfterPrediction)
-        futureMeanPrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().mean()
-        futureMaxPrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().max()
-
-        futurePriceScaled = futureLastPrice/curAdjPrice
+        
+        futurePrice:float
+        if self.params['target_option'] == 'last':
+            futurePrice = asset.adjClosePrice["AdjClose"].item(aidx + self.idxAfterPrediction)
+        if self.params['target_option'] == 'mean':
+            futurePrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().mean()
+        if self.params['target_option'] == 'max':
+            futurePrice = asset.adjClosePrice["AdjClose"].slice(aidx+1, self.idxAfterPrediction).to_numpy().max()
+            
+        futurePriceScaled = futurePrice/curAdjPrice
         
         target = self.getTargetClassification([futurePriceScaled-1], self.classificationInterval)
         target_reg = futurePriceScaled-1
@@ -330,10 +335,13 @@ class AkinDistriML(IML):
             'metric': 'binary',
             'early_stopping_rounds': 2000//intscaler,
             'num_boost_round': 40000//intscaler,
-            #'min_data_in_leaf': study.best_trial.params['min_data_in_leaf'],
+            'min_data_in_leaf': self.params['Akin_min_data_in_leaf'],
             #'feature_fraction_bynode': study.best_trial.params['feature_fraction_bynode'],
             #'feature_fraction': study.best_trial.params['feature_fraction'],
             'num_leaves': 2048//intscaler, #study.best_trial.params['num_leaves'],
+            'max_depth': self.params['Akin_max_depth'],
+            'learning_rate': self.params['Akin_learning_rate'],
+            'ma'
             'random_state': 41,
         }
         lgbmInstance = lgb.LGBMClassifier(**best_params)
@@ -362,16 +370,21 @@ class AkinDistriML(IML):
             'objective': 'regression',
             #'alpha': 0.85,
             'metric': 'l2_root',  # NOTE: the string 'rsme' is not recognized, v 4.5.0
-            'lambda_l1': 1.0,
-            'lambda_l2': 1.0,
+            'lambda_l1': 0.5,
+            'lambda_l2': 0.5,
             'early_stopping_rounds': num_boost_round//10,
-            'feature_fraction': 1.0,
+            'feature_fraction': self.params['Akin_feature_fraction'],
             'num_leaves': num_leaves, 
-            'max_depth': int((np.log2(num_leaves) // 1) * 2),
+            'max_depth': self.params['Akin_max_depth'],
+            'learning_rate': self.params['Akin_learning_rate'],
+            'min_data_in_leaf': self.params['Akin_min_data_in_leaf'],
+            'min_gain_to_split': self.params['Akin_min_gain_to_split'],
+            'path_smooth': self.params['Akin_path_smooth'],
+            'min_sum_hessian_in_leaf': self.params['Akin_min_sum_hessian_in_leaf'],
             'random_state': 41,
         }   
         def print_eval_after_100(env):
-            if env.iteration % 10 == 0 or env.iteration == num_boost_round:
+            if env.iteration % 100 == 0 or env.iteration == num_boost_round:
                 results = [
                     f"{data_name}'s {eval_name}: {result}"
                     for data_name, eval_name, result, _ in env.evaluation_result_list
@@ -387,38 +400,24 @@ class AkinDistriML(IML):
         return gbm
     
     def __get_ksDis(self, mask_train, mask_test, mask_features, weight: np.array = None):
-        metric_distrEquality = np.zeros(mask_features.sum())
-        
         if weight is None:
             self.logger.info(f"  KS Distance calculation with no weight.")
-            weight = np.ones(mask_train.sum())
+            weight = np.zeros(len(mask_train))
+            weight[mask_train] = 1.0
         weight *= (mask_train.sum()/np.sum(weight))
         
-        threshold = 5
-        n_quantiles = mask_test.sum()//3
-        qIndices_train = np.array(np.linspace(threshold, mask_train.sum()-1-threshold, n_quantiles), dtype=int)
-        qIndices_test = np.array(np.linspace(threshold, mask_test.sum()-1-threshold, n_quantiles), dtype=int)
+        mask_sparsing = np.random.rand(mask_train.sum()) <= (3e4/np.sum(mask_train)) # for speedup
         
-        train_argsort = np.argsort(self.X_train[mask_train][:, mask_features], axis=0)
-        train_sorted = np.sort(self.X_train[mask_train][:, mask_features], axis = 0)
-        test_sorted = np.sort(self.X_test[mask_test][:, mask_features], axis = 0)
-        for i in range(mask_features.sum()):
-            cs = np.cumsum(weight[train_argsort[:,i]])
-            cs *= ((mask_train.sum()-1)/cs[-1])
+        ksDist = DistributionTools.ksDistance(
+            self.X_train[mask_train][mask_sparsing][:, mask_features], 
+            self.X_test[mask_test][:, mask_features], 
+            weights=weight[mask_train][mask_sparsing],
+            overwrite=True)
             
-            weightedQuantiles = np.array(cs[qIndices_train], dtype=int)
-            
-            train_quantiles = train_sorted[weightedQuantiles][:, i]
-            test_quantiles = test_sorted[qIndices_test][:, i]
-            
-            metric_distrEquality[i] = np.mean(np.abs(train_quantiles - test_quantiles))
-            
-        self.logger.info(f"  Train-Test Distri Equality: Mean: {np.mean(metric_distrEquality)}, Quantile 0.9: {np.quantile(metric_distrEquality, 0.9)}")
+        self.logger.info(f"  Train-Test Distri Equality: Mean: {np.mean(ksDist)}, Quantile 0.9: {np.quantile(ksDist, 0.9)}")
         
         res = np.zeros(len(mask_features), dtype=float)
-        res[mask_features] = metric_distrEquality
-        
-        del train_argsort, train_sorted, test_sorted  # saving on RAM
+        res[mask_features] = ksDist
         
         return res
         
@@ -448,6 +447,9 @@ class AkinDistriML(IML):
             
             if max_train - min_train > 3.5 * (max_test - min_test):
                 mask[i] = False
+                
+            if max_train < max_test or min_train > min_test:
+                mask[i] = False
             
         return mask
         
@@ -467,51 +469,58 @@ class AkinDistriML(IML):
 
         # Get distribution distances for each feature
         ksdis = self.__get_ksDis(mask_train, mask_test, mask_features)
-        weightedFeatures = self.__mask_weightedFeatures()
         
-        mask_colToAssimilate = mask_features & weightedFeatures
+        #mask_colToAssimilate = mask_features & self.__mask_weightedFeatures()
+        mask_colToAssimilate = np.ones(len(mask_features), dtype=bool)
         
         # Get feature which we want to make the same distribution between train and test
-        mask_FeatureTA = np.char.find(self.featureColumnNames, "FeatureTA") >= 0
+        mask_MathFeature = np.char.find(self.featureColumnNames, "MathFeature_Price_Diff") >= 0
         mask_FinData_quar = (np.char.find(self.featureColumnNames, "FinData_quar_") >= 0)
         #mask_FinData_ann = (np.char.find(self.featureColumnNames, "FinData_ann_") >= 0)
         #mask_FinData_metrics = (np.char.find(self.featureColumnNames, "FinData_metrics_") >= 0)
         #mask_Fourier = (np.char.find(self.featureColumnNames, "Fourier_Price_AbsCoeff") >= 0)
         #mask_MathFeature = (np.char.find(self.featureColumnNames, "MathFeature_Return") >= 0)
-        list_masks = [mask_colToAssimilate] #[mask_FeatureTA, mask_FinData_quar] #, mask_FinData_ann] # mask_FinData_metrics, mask_Fourier, mask_MathFeature]
+        list_masks = [mask_MathFeature] #[mask_FeatureTA, mask_FinData_quar] #, mask_FinData_ann] # mask_FinData_metrics, mask_Fourier, mask_MathFeature]
         n_masks = len(list_masks)
         
         # Non lag exclusion
-        mask_lagNotToExclude = np.zeros(len(mask_features), dtype=bool)
-        for d in []: # Not in use
+        mask_lagToExclude = np.zeros(len(mask_features), dtype=bool)
+        for d in [i for i in self.lagList if i > 15]: 
             pattern = re.compile(rf"_m{d}(?!\d)")
             matches = np.array([bool(pattern.search(name)) for name in self.featureColumnNames])
-            mask_lagNotToExclude |= matches
-        mask_colToAssimilate = mask_colToAssimilate & (~mask_lagNotToExclude)
+            mask_lagToExclude |= matches
+        mask_colToAssimilate = mask_colToAssimilate & (~mask_lagToExclude)
         
         # Get the top n_trunc features to assimilate for each mask
         splits: list = np.array_split(np.arange(n_trunc), n_masks)
         indices_mask = []
         for i in range(len(splits)):
             ksdis_i = ksdis.copy()
+            ksdis_i *= 1.0/ksdis_i.max()
             mask_toSort = list_masks[i] & mask_colToAssimilate
-            ksdis_i[~mask_toSort] = 0
+            ksdis_i[~mask_toSort] = 0.0
+            if ksdis_i.max() < 1e-1:
+                ksdis_i[mask_toSort] = 1.0
             ksdis_argsort = np.argsort(ksdis_i)
             indices_mask.extend(ksdis_argsort[-len(splits[i]):])
         
         for i in range(len(indices_mask)):
             self.logger.info(f"  Feature {i}: {self.featureColumnNames[indices_mask[i]]}")
         
-        sample_weights = DistributionTools.establishMatchingWeight(
+        sample_weights_loop = DistributionTools.establishMatchingWeight(
             self.X_train[mask_train][:, indices_mask],
             self.X_test[mask_test][:, indices_mask],
-            n_bin = n_bin
+            n_bin = n_bin,
+            minweight = 0.3
         )
+        sample_weights = np.zeros(len(mask_train))
+        sample_weights[mask_train] = sample_weights_loop
         sample_weights *= (np.sum(mask_train) / np.sum(sample_weights))
         
-        self.__get_ksDis(mask_train, mask_test, mask_features, sample_weights[mask_train])
+        self.__get_ksDis(mask_train, mask_test, mask_features, sample_weights)
         
-        self.logger.info(f"  Zeros Weight Ratio: {np.sum(sample_weights < 1e-6) / len(sample_weights)}")
+        self.logger.info(f"  Zeros Weight Ratio: {np.sum(sample_weights[mask_train] < 1e-6) / len(sample_weights[mask_train])}")
+        self.logger.info(f"  Negative Weight Ratio: {np.sum(sample_weights < -1e-5) / len(sample_weights)}") #For debugging
         return sample_weights
         
     def __establishAkinMask_Features(self, p_features: float, lgbmInstance: lgb.Booster, mask_train, mask_features):
@@ -539,7 +548,7 @@ class AkinDistriML(IML):
     
     def __establishAkinMask_Test(self, p_test, lgbmInstance: lgb.Booster, mask_test, mask_features):
         if p_test >= 1 - 1e-12:
-            return mask_test
+            return np.ones(mask_test.sum(), dtype=bool)
         
         y_pred = lgbmInstance.predict(self.X_test[mask_test][:, mask_features], num_iteration=lgbmInstance.best_iteration)
         
@@ -582,17 +591,22 @@ class AkinDistriML(IML):
             'objective': 'regression',
             #'alpha': 0.85,
             'metric': 'l2_root',
-            'lambda_l1': 1.0,
-            'lambda_l2': 1.0,
+            'lambda_l1': 0.5,
+            'lambda_l2': 0.5,
             'early_stopping_rounds': num_boost_round//10,
-            'feature_fraction': np.max([0.1, min(feature_max / mask_features.sum(), 1.0)]),
+            'feature_fraction': self.params['Akin_feature_fraction']*min([feature_max / mask_features.sum(), 1.0]),
             'num_leaves': num_leaves,
-            'max_depth': int((np.log2(num_leaves) // 1) * 2),
+            'max_depth': self.params['Akin_max_depth'],
+            'learning_rate': self.params['Akin_learning_rate'],
+            'min_data_in_leaf': self.params['Akin_min_data_in_leaf'],
+            'min_gain_to_split': self.params['Akin_min_gain_to_split'],
+            'path_smooth': self.params['Akin_path_smooth'],
+            'min_sum_hessian_in_leaf': self.params['Akin_min_sum_hessian_in_leaf'],
             'random_state': 41,
         }
         
         def print_eval_after_100(env):
-            if env.iteration % 10 == 0 or env.iteration == num_boost_round:
+            if env.iteration % 100 == 0 or env.iteration == num_boost_round:
                 results = [
                     f"{data_name}'s {eval_name}: {result}"
                     for data_name, eval_name, result, _ in env.evaluation_result_list
@@ -613,6 +627,97 @@ class AkinDistriML(IML):
             self.logger.info(f"  Accuracy at Test Mask: {np.abs(self.y_test_timeseries[mask_test]-y_pred).mean()}") 
         
         return gbm
+    
+    def applyFilter(self):
+        # 0, 1, 2, 3, 5, 7, 10, 15, 30, 60, 115, 200, 290
+        pHigh = [self.featureColumnNames.index("FeatureTA_High")]
+        for lag in [i for i in self.lagList if i<70]:
+            pHigh.append(self.featureColumnNames.index(f"FeatureTA_High_lag_m{lag}"))
+        pHigh_lag290 = self.featureColumnNames.index("FeatureTA_High_lag_m290")
+        
+        pDiff = [self.featureColumnNames.index("MathFeature_Price_Diff")]
+        for lag in [i for i in self.lagList if i<20]:  
+            pDiff.append(self.featureColumnNames.index(f"MathFeature_Price_Diff_lag_m{lag}"))
+            
+        pDiffDiff = [self.featureColumnNames.index("MathFeature_Price_DiffDiff")]
+        for lag in [i for i in self.lagList if i<6]:
+            pDiffDiff.append(self.featureColumnNames.index(f"MathFeature_Price_DiffDiff_lag_m{lag}")) 
+            
+        pGrossProfit = []
+        for lag in [i for i in self.lagList if i<7]:
+            pGrossProfit.append(self.featureColumnNames.index(f"FinData_quar_grossProfit_lagquot_qm{lag}"))
+            
+        pebit = []
+        for lag in [i for i in self.lagList if i<7]:
+            pebit.append(self.featureColumnNames.index(f"FinData_quar_ebit_lagquot_qm{lag}"))    
+            
+        pFourierSignCoeff = self.featureColumnNames.index(f"Fourier_Price_SignCoeff_1")
+        pFourierAbsCoeff = self.featureColumnNames.index(f"Fourier_Price_AbsCoeff_1")
+            
+        relPriceDiff_train: np.array = self.X_train[:, pDiff]
+        relPriceDiff_test: np.array = self.X_test[:, pDiff]
+        
+        highPrice_train = self.X_train[:, pHigh]
+        highPrice_test = self.X_test[:, pHigh]
+        
+        relPriceDiffDiff_train: np.array = self.X_train[:, pDiffDiff]
+        relPriceDiffDiff_test: np.array = self.X_test[:, pDiffDiff]
+            
+        mask_train = np.ones(self.X_train.shape[0], dtype=bool)
+        mask_test = np.ones(self.X_test.shape[0], dtype=bool)
+        
+        # Rising Action
+        #mask_train &= np.all(relPriceDiff_train[:,0:3]>0.01, axis=1)
+        #mask_test &= np.all(relPriceDiff_test[:,0:3]>0.01, axis=1)
+        #
+        #mask_train &= np.all(relPriceDiffDiff_train[:,0:2]>0.001, axis=1)
+        #mask_test &= np.all(relPriceDiffDiff_test[:,0:2]>0.001, axis=1)
+        #
+        #q_minDiff_train = np.quantile(np.min(relPriceDiff_train, axis=1), 0.6)
+        #q_minDiff_test = np.quantile(np.min(relPriceDiff_test[mask_test], axis=1), 0.95)
+        #mask_train &= np.min(relPriceDiff_train, axis=1) > q_minDiff_test
+        #mask_test &= np.min(relPriceDiff_test, axis=1) > q_minDiff_test
+        #
+        #q_minDiffDiff_train = np.quantile(np.min(relPriceDiffDiff_train, axis=1), 0.6)
+        #q_minDiffDiff_test = np.quantile(np.min(relPriceDiffDiff_test, axis=1), 0.95)
+        #mask_train &= np.min(relPriceDiffDiff_train, axis=1) > q_minDiffDiff_test
+        #mask_test &= np.min(relPriceDiffDiff_test, axis=1) > q_minDiffDiff_test
+        
+        # Up Down
+        #mask_train &= np.all(relPriceDiff_train[:,4]>0.01, axis=1)
+        
+        # High drop
+        #mask_train &= highPrice_train[:,-1] > 1.11
+        #mask_test &= highPrice_test[:,-1] > 1.11
+        #
+        #mask_train &= ((highPrice_train[:,6] > 0.98) 
+        #               & (highPrice_train[:,6] < 1.02) 
+        #               & (highPrice_train[:,4] < 0.95))
+        #mask_test &= ((highPrice_test[:,6] > 0.98) 
+        #              & (highPrice_test[:,6] < 1.02) 
+        #              & (highPrice_test[:,4] < 0.95))
+        
+        # Drop with good earnings
+        mask_train &= np.all(self.X_train[:,pebit] > 1.01, axis=1)
+        mask_test &= np.all(self.X_test[:,pebit] > 1.01, axis=1)
+        
+        mask_train &= (self.X_train[:, pHigh_lag290] - highPrice_train[:,0]) > 0
+        mask_test &= (self.X_test[:, pHigh_lag290] - highPrice_test[:,0]) > 0 
+        
+        #Fourier Coeffs
+        #mask_train &= (self.X_train[:, pFourierSignCoeff] > 0.5)
+        #mask_test &= (self.X_test[:, pFourierSignCoeff] > 0.5)
+        #q_AbsCoeff = np.quantile(self.X_test[mask_test][:, pFourierAbsCoeff], 0.90)
+        #mask_train &= (self.X_train[:, pFourierAbsCoeff] > q_AbsCoeff)
+        #mask_test &= (self.X_test[:, pFourierAbsCoeff] > q_AbsCoeff)
+        
+        
+        del relPriceDiff_train, relPriceDiff_test, relPriceDiffDiff_train, relPriceDiffDiff_test
+        
+        if mask_test.sum() < 2:
+            mask_test = np.ones(self.X_test.shape[0], dtype=bool)
+        
+        return mask_train, mask_test
         
     def establishMasks(self, 
             q_test: float, 
@@ -621,10 +726,14 @@ class AkinDistriML(IML):
             num_leaves:int = 256,
             num_boost_round:int = 5000,
             weight_truncation: int = 5,
-            n_bin = 15
+            n_bin = 15,
+            mask_train = None,
+            mask_test = None
         ):
-        mask_train = np.ones(self.X_train.shape[0], dtype=bool) #self.__establishMask_rmOutliers(self.X_train_norm, rm_ratio)
-        mask_test = np.ones(self.X_test.shape[0], dtype=bool) #self.__establishMask_rmOutliers(self.X_test_norm, rm_ratio)
+        if mask_train is None:
+            mask_train = np.ones(self.X_train.shape[0], dtype=bool)
+        if mask_test is None:
+            mask_test = np.ones(self.X_test.shape[0], dtype=bool)
         mask_features = np.ones(self.X_train.shape[1], dtype=bool)
         sample_weights = np.ones(self.X_train.shape[0], dtype=float)
         feature_importances = np.ones(self.X_train.shape[1], dtype=float)
@@ -638,15 +747,13 @@ class AkinDistriML(IML):
             startTime_loop = datetime.now()
 
             # Establish Weights
-            sample_weights_loop = self.__establishWeights(
+            sample_weights = self.__establishWeights(
                 mask_train = mask_train, 
                 mask_test = mask_test,
                 mask_features = mask_features,
                 n_trunc = weight_truncation,
                 n_bin = n_bin
             )
-            sample_weights[mask_train] = sample_weights_loop
-            sample_weights[~mask_train] = 0
             
             # Estblish LGBM Instance
             lgbmInstance = self.__establishLGBMInstance(
@@ -654,7 +761,7 @@ class AkinDistriML(IML):
                 mask_test = mask_test,
                 mask_features = mask_features,
                 feature_max = feature_max,
-                sample_weights = sample_weights[mask_train],
+                sample_weights = sample_weights,
                 num_leaves = num_leaves, 
                 num_boost_round = num_boost_round
             )
@@ -688,14 +795,13 @@ class AkinDistriML(IML):
                 
         # End of loop Establish Weights
         self.logger.info("End of Loop computation.")
-        sample_weights_loop = self.__establishWeights(
+        sample_weights = self.__establishWeights(
             mask_train = mask_train, 
             mask_test = mask_test,
             mask_features = mask_features,
             n_trunc = weight_truncation,
             n_bin = n_bin
         )
-        sample_weights[mask_train] = sample_weights_loop
         
         return mask_train, mask_test, mask_features, sample_weights
     
@@ -704,11 +810,6 @@ class AkinDistriML(IML):
             raise ValueError("evaluateTestResults is set to False. Cannot analyze per filter.")
         if not self.dataIsPrepared:
             raise ValueError("Data is not prepared. Please run prepareData() first.")
-        
-        scaler = StandardScaler()
-        scaler.fit(self.X_train)
-        self.X_train = scaler.transform(self.X_train)
-        self.X_test = scaler.transform(self.X_test)
         
         nTrain = self.X_train.shape[0]
         nTest = self.X_test.shape[0]
@@ -727,7 +828,15 @@ class AkinDistriML(IML):
         self.logger.info(f"feature_max: {feature_max}")
         self.logger.info(f"iterSteps: {itersteps}")
         
+        # Start establishing masks
         startTime = datetime.now()
+        mask_train, mask_test = self.applyFilter()
+        
+        scaler = StandardScaler()
+        scaler.fit(self.X_train)
+        self.X_train = scaler.transform(self.X_train)
+        self.X_test = scaler.transform(self.X_test)
+        
         mask_train, mask_test, mask_features, sample_weights = self.establishMasks(
             q_test=test_quantil, 
             feature_max=feature_max, 
@@ -735,6 +844,8 @@ class AkinDistriML(IML):
             num_leaves = num_leaves,
             num_boost_round = num_boost_round,
             weight_truncation = weight_truncation,
+            mask_train = mask_train,
+            mask_test = mask_test
         )        
         endTime = datetime.now()
         self.logger.info(f"Masking completed in {endTime - startTime}.")
@@ -773,23 +884,15 @@ class AkinDistriML(IML):
         self.logger.info("Overall Testing Label Distribution:")
         ModelAnalyzer().print_label_distribution(self.y_test, logger = self.logger)
             
-        if (
-            len(np.unique(masked_y_test)) < 2
-            or len(np.unique(masked_y_val)) < 2
-            or len(np.unique(masked_y_train)) < 2
-        ):
-            self.logger.info("STOPPED! Due to insufficient classes in masked.")
-            self.logger.info(f"Classes in masked training set:  {np.unique(masked_y_train)}")
-            self.logger.info(f"Classes in masked validation set:  {np.unique(masked_y_val)}")
-            self.logger.info(f"Classes in test set:  {np.unique(masked_y_test)}")
-            return
-        
-        self.logger.info("Masked Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_train, logger = self.logger)
-        self.logger.info("Masked Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_val, logger = self.logger)
-        self.logger.info("Masked Test Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_test, logger = self.logger)
+        if not len(np.unique(masked_y_train)) < 2:
+            self.logger.info("Masked Training Label Distribution:")
+            ModelAnalyzer().print_label_distribution(masked_y_train, logger = self.logger)
+        if not len(np.unique(masked_y_val)) < 2:
+            self.logger.info("Masked Validation Label Distribution:")
+            ModelAnalyzer().print_label_distribution(masked_y_val, logger = self.logger)
+        if not len(np.unique(masked_y_test)) < 2:
+            self.logger.info("Masked Test Label Distribution:")
+            ModelAnalyzer().print_label_distribution(masked_y_test, logger = self.logger)
         
         startTime = datetime.now()
         num_leaves = self.params['Akin_num_leaves']
@@ -846,12 +949,16 @@ class AkinDistriML(IML):
         for i, stock in enumerate(selected_stocks[:,0]):
             self.logger.info(f"Stock: {stock}, Date: {selected_stocks[i,1]}")
             self.logger.info(f"    prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
+            #check whether stock is self.__assets
+            if stock not in self.__assets:
+                self.logger.info(f"    Stock {stock} is not in the assets list.")
+                continue
             aidx = DPl(self.__assets[stock].shareprice).getNextLowerOrEqualIndex(self.test_date)
             self.logger.info(f"    start price: {self.__assets[stock].shareprice['Close'].item(aidx)}")
             self.logger.info(f"    end price: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction)}")
             self.logger.info(f"    ratio: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction) / self.__assets[stock].shareprice['Close'].item(aidx)}")
         
-        return accuracy_top_m_above_5
+        return np.mean(selected_true_values_reg)
                 
     def predict(self):
         if not self.dataIsPrepared:

@@ -26,9 +26,9 @@ class EstablishStocks:
 
         stockList: list = tickersDict[0]['stocks']
         stockList.extend(tickersDict[1]['stocks'])
-        stockList.extend(tickersDict[3]['stocks'])
+        stockList.extend(tickersDict[2]['stocks'])
         if operator != "alphaVantage": #Alpha Vantage has no Swiss Data
-            for ticker in tickersDict[2]['stocks']:
+            for ticker in tickersDict[3]['stocks']:
                 if isinstance(ticker, str) and ticker.lower()[0:1] == 'ch':
                     stockList.append(ticker)
                     continue
