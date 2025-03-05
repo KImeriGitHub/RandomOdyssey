@@ -2,6 +2,7 @@ import pandas as pd
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 from src.common.YamlTickerInOut import YamlTickerInOut
+from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DPd
 
 class GroupFinanTo2011(IGroup):
 
@@ -28,15 +29,15 @@ class GroupFinanTo2011(IGroup):
       return False
     
     # Check if the asset has no empty entries in the quarterly financials in the columns quarterly_columns and annual financials in the columns annual_columns for the last n entries
-    buffer_quar = 10
-    buffer_ann = 10
-    if asset.financials_quarterly[GroupFinanTo2011.compact_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
+    buffer_quar = 0
+    buffer_ann = 0
+    if asset.financials_quarterly[GroupFinanTo2011.quarterly_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
       return False
-    if asset.financials_annually[GroupFinanTo2011.compact_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
+    if asset.financials_annually[GroupFinanTo2011.annual_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
       return False
-    if all([asset.financials_quarterly[col].tail(quarterly_entries).isnull().sum() > 0 for col in GroupFinanTo2011.compact_columns]):
+    if all([asset.financials_quarterly[col].tail(quarterly_entries).isnull().sum() > 0 for col in GroupFinanTo2011.quarterly_columns]):
       return False
-    if all([asset.financials_annually[col].tail(annual_entries).isnull().sum() > 0 for col in GroupFinanTo2011.compact_columns]):
+    if all([asset.financials_annually[col].tail(annual_entries).isnull().sum() > 0 for col in GroupFinanTo2011.annual_columns]):
       return False
     
     adf: pd.DataFrame = asset.shareprice
@@ -44,8 +45,13 @@ class GroupFinanTo2011(IGroup):
     max_date: pd.Timestamp = adf.index.max()
     current_date: pd.Timestamp = pd.Timestamp.now(tz=adf.index.tz)
     #df_year = asset.financials_quarterly[asset.financials_quarterly['fiscalDateEnding'].dt.year == 2011]
-    return ((current_date - first_date).days >= 20 * 366.0) \
-      and ((current_date - max_date).days < 60) 
+    idx2008 = DPd(adf).getNextLowerOrEqualIndex(pd.Timestamp(year=2008, month=1, day=7, tz='UTC'))
+    idx2025 = DPd(adf).getNextLowerOrEqualIndex(pd.Timestamp(year=2024, month=12, day=13, tz='UTC'))
+
+    return (
+      ((current_date - first_date).days >= 20 * 366.0) 
+      and ((current_date - max_date).days < 60)
+      and (idx2025-idx2008 >= 255*16) )
   
   compact_columns = [
     'fiscalDateEnding',
