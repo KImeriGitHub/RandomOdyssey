@@ -635,6 +635,9 @@ class AkinDistriML(IML):
             pHigh.append(self.featureColumnNames.index(f"FeatureTA_High_lag_m{lag}"))
         pHigh_lag290 = self.featureColumnNames.index("FeatureTA_High_lag_m290")
         
+        pRSI = self.featureColumnNames.index("FeatureTA_momentum_stoch_rsi")
+        pWill = self.featureColumnNames.index("FeatureTA_momentum_wr")
+        
         pDiff = [self.featureColumnNames.index("MathFeature_Price_Diff")]
         for lag in [i for i in self.lagList if i<20]:  
             pDiff.append(self.featureColumnNames.index(f"MathFeature_Price_Diff_lag_m{lag}"))
@@ -653,6 +656,10 @@ class AkinDistriML(IML):
             
         pFourierSignCoeff = self.featureColumnNames.index(f"Fourier_Price_SignCoeff_1")
         pFourierAbsCoeff = self.featureColumnNames.index(f"Fourier_Price_AbsCoeff_1")
+        
+        pFourierRSME = [self.featureColumnNames.index(f"Fourier_Price_RSME")]
+        for lag in [i for i in self.lagList if i<31]:
+            pFourierRSME.append(self.featureColumnNames.index(f"Fourier_Price_lag_m{lag}_RSME"))
             
         relPriceDiff_train: np.array = self.X_train[:, pDiff]
         relPriceDiff_test: np.array = self.X_test[:, pDiff]
@@ -665,6 +672,10 @@ class AkinDistriML(IML):
             
         mask_train = np.ones(self.X_train.shape[0], dtype=bool)
         mask_test = np.ones(self.X_test.shape[0], dtype=bool)
+        
+        #No Mask: mean: 0.022024807853855206 variance: 0.003134114525982775
+        #mask_train = np.ones(self.X_train.shape[0], dtype=bool)
+        #mask_test = np.ones(self.X_test.shape[0], dtype=bool)
         
         # Rising Action
         #mask_train &= np.all(relPriceDiff_train[:,0:3]>0.01, axis=1)
@@ -687,22 +698,20 @@ class AkinDistriML(IML):
         #mask_train &= np.all(relPriceDiff_train[:,4]>0.01, axis=1)
         
         # High drop
-        #mask_train &= highPrice_train[:,-1] > 1.11
-        #mask_test &= highPrice_test[:,-1] > 1.11
+        #mask_train &= highPrice_train[:,-1] > 1.10
+        #mask_test &= highPrice_test[:,-1] > 1.10
         #
-        #mask_train &= ((highPrice_train[:,6] > 0.98) 
-        #               & (highPrice_train[:,6] < 1.02) 
+        #mask_train &= ((highPrice_train[:,6] > 0.975)  
         #               & (highPrice_train[:,4] < 0.95))
-        #mask_test &= ((highPrice_test[:,6] > 0.98) 
-        #              & (highPrice_test[:,6] < 1.02) 
+        #mask_test &= ((highPrice_test[:,6] > 0.975) 
         #              & (highPrice_test[:,4] < 0.95))
         
-        # Drop with good earnings
-        mask_train &= np.all(self.X_train[:,pebit] > 1.01, axis=1)
-        mask_test &= np.all(self.X_test[:,pebit] > 1.01, axis=1)
-        
-        mask_train &= (self.X_train[:, pHigh_lag290] - highPrice_train[:,0]) > 0
-        mask_test &= (self.X_test[:, pHigh_lag290] - highPrice_test[:,0]) > 0 
+        # Drop with good earnings: mean: 0.014446080534839487 rising with num of test samples
+        #mask_train &= np.all(self.X_train[:,pebit] > 1.01, axis=1)
+        #mask_test &= np.all(self.X_test[:,pebit] > 1.01, axis=1)
+        #
+        #mask_train &= (self.X_train[:, pHigh_lag290] - highPrice_train[:,0]) > 0
+        #mask_test &= (self.X_test[:, pHigh_lag290] - highPrice_test[:,0]) > 0 
         
         #Fourier Coeffs
         #mask_train &= (self.X_train[:, pFourierSignCoeff] > 0.5)
@@ -711,11 +720,34 @@ class AkinDistriML(IML):
         #mask_train &= (self.X_train[:, pFourierAbsCoeff] > q_AbsCoeff)
         #mask_test &= (self.X_test[:, pFourierAbsCoeff] > q_AbsCoeff)
         
+        #Fourier RSME mean: 0.008053981429322234
+        # sum_rsme_train = np.sum(self.X_train[:, pFourierRSME], axis=1)
+        # q_sum_rsme_train = np.quantile(sum_rsme_train, 0.1)
+        # mask_train &= np.sum(self.X_train[:, pFourierRSME], axis=1) <= q_sum_rsme_train
+        # mask_test &= np.sum(self.X_test[:, pFourierRSME], axis=1) <= q_sum_rsme_train
+        
+        # ebit up #mean: 0.016942354396377174 variance: 0.0015428399500718576
+        #mask_train &= np.all(self.X_train[:,pebit] > 1.02, axis=1)
+        #mask_test &= np.all(self.X_test[:,pebit] > 1.02, axis=1)
+        
+        # rsi extremes mean: 0.025896659439787667 variance: 0.002731234396566961
+        #q_up_train = np.quantile(self.X_train[:, pRSI], 0.90)
+        #q_down_train = np.quantile(self.X_train[:, pRSI], 0.10)
+        #mask_train = (self.X_train[:, pRSI] >= q_up_train) | (self.X_train[:, pRSI] <= q_down_train)
+        #mask_test = (self.X_test[:, pRSI] >= q_up_train) | (self.X_test[:, pRSI] <= q_down_train)
+        
+        # Williams R  returns mean: 0.015123735132773042   returns variance: 0.0017104937800201405
+        q_down_train = np.quantile(self.X_train[:, pWill], 0.10)
+        q_up_train = np.quantile(self.X_train[:, pWill], 0.90)
+        mask_train = (self.X_train[:, pWill] <= q_down_train) | (self.X_train[:, pWill] >= q_up_train)
+        mask_test = (self.X_test[:, pWill] <= q_down_train) | (self.X_test[:, pWill] >= q_up_train)
         
         del relPriceDiff_train, relPriceDiff_test, relPriceDiffDiff_train, relPriceDiffDiff_test
         
         if mask_test.sum() < 2:
-            mask_test = np.ones(self.X_test.shape[0], dtype=bool)
+            mask_test = np.zeros(self.X_test.shape[0], dtype=bool)
+            mask_test[0] = True
+            mask_test[1] = True
         
         return mask_train, mask_test
         
@@ -738,9 +770,9 @@ class AkinDistriML(IML):
         sample_weights = np.ones(self.X_train.shape[0], dtype=float)
         feature_importances = np.ones(self.X_train.shape[1], dtype=float)
         
-        p_test = q_test ** (1 / iterSteps)
+        p_test = q_test ** (1 / max(iterSteps,1))
         q_features = feature_max / self.X_train.shape[1]
-        p_features = q_features ** (1 / iterSteps)
+        p_features = q_features ** (1 / max(iterSteps,1))
         
         for i in range(iterSteps):
             self.logger.info(f"Establish Mask: Step {i+1}/{iterSteps}.")
@@ -805,147 +837,173 @@ class AkinDistriML(IML):
         
         return mask_train, mask_test, mask_features, sample_weights
     
-    def analyze(self):
-        if not self.gatherTestResults:
-            raise ValueError("evaluateTestResults is set to False. Cannot analyze per filter.")
+    def _pipeline(self, do_analyze=False):
+        """
+        Common pipeline steps shared by both analyze() and predict().
+        Returns a dictionary of all relevant masked data, trained model, and predictions.
+        """
         if not self.dataIsPrepared:
             raise ValueError("Data is not prepared. Please run prepareData() first.")
-        
+
+        # If we're analyzing, also ensure test results are gathered
+        if do_analyze and not self.gatherTestResults:
+            raise ValueError("evaluateTestResults is set to False. Cannot analyze per filter.")
+
+        # Basic parameters
         nTrain = self.X_train.shape[0]
         nTest = self.X_test.shape[0]
-        
-        test_quantil = self.params['Akin_test_quantile']
-        feature_max = self.params['Akin_feature_max']
-        itersteps = self.params['Akin_itersteps']
-        num_leaves = self.params['Akin_pre_num_leaves']
-        num_boost_round = self.params['Akin_pre_num_boost_round']
-        weight_truncation = self.params['Akin_pre_weight_truncation']
-        
-        self.logger.info(f"num_leaves: {num_leaves}")
-        self.logger.info(f"num_boost_round: {num_boost_round}")
+        test_quantil       = self.params['Akin_test_quantile']
+        feature_max        = self.params['Akin_feature_max']
+        itersteps          = self.params['Akin_itersteps']
+        pre_num_leaves     = self.params['Akin_pre_num_leaves']
+        pre_num_boost      = self.params['Akin_pre_num_boost_round']
+        weight_truncation  = self.params['Akin_pre_weight_truncation']
+        self.logger.info(f"num_leaves: {pre_num_leaves}")
+        self.logger.info(f"num_boost_round: {pre_num_boost}")
         self.logger.info(f"weight_truncation: {weight_truncation}")
         self.logger.info(f"test_quantil: {test_quantil}")
         self.logger.info(f"feature_max: {feature_max}")
         self.logger.info(f"iterSteps: {itersteps}")
-        
-        # Start establishing masks
+
+        # Filter
         startTime = datetime.now()
         mask_train, mask_test = self.applyFilter()
-        
+
+        # Scale
         scaler = StandardScaler()
         scaler.fit(self.X_train)
         self.X_train = scaler.transform(self.X_train)
-        self.X_test = scaler.transform(self.X_test)
-        
+        self.X_test  = scaler.transform(self.X_test)
+
+        # Establish masks
         mask_train, mask_test, mask_features, sample_weights = self.establishMasks(
-            q_test=test_quantil, 
-            feature_max=feature_max, 
-            iterSteps=itersteps,
-            num_leaves = num_leaves,
-            num_boost_round = num_boost_round,
-            weight_truncation = weight_truncation,
-            mask_train = mask_train,
-            mask_test = mask_test
-        )        
+            q_test           = test_quantil, 
+            feature_max      = feature_max, 
+            iterSteps        = itersteps,
+            num_leaves       = pre_num_leaves,
+            num_boost_round  = pre_num_boost,
+            weight_truncation= weight_truncation,
+            mask_train       = mask_train,
+            mask_test        = mask_test
+        )
+
         endTime = datetime.now()
         self.logger.info(f"Masking completed in {endTime - startTime}.")
-        
         self.logger.info(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
         self.logger.info(f"Test samples selected: {mask_test.sum()} out of {nTest}")
         self.logger.info(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
-        
-        #Establish validation set
-        # Random subsample for validation set
+
+        # Validation set
         mask_val = np.random.rand(np.sum(mask_train)) < 0.05
         if np.sum(mask_val) < 2:  
-            ValueError("Not enough data points to establish validation set")
-            
-        self.X_val = self.X_train[mask_train][mask_val]
-        self.y_val = self.y_train[mask_train][mask_val]
+            raise ValueError("Not enough data points to establish validation set")
+
+        self.X_val     = self.X_train[mask_train][mask_val]
+        self.y_val     = self.y_train[mask_train][mask_val]
         self.y_val_reg = self.y_train_timeseries[mask_train][mask_val]
-        
-        masked_X_train = self.X_train[mask_train][~mask_val][:, mask_features]
-        masked_y_train = self.y_train[mask_train][~mask_val]
+
+        # Prepare masked data
+        masked_X_train     = self.X_train[mask_train][~mask_val][:, mask_features]
+        masked_y_train     = self.y_train[mask_train][~mask_val]
         masked_y_train_reg = self.y_train_timeseries[mask_train][~mask_val]
-        masked_X_val = self.X_val[:, mask_features]
-        masked_y_val = self.y_val
-        masked_y_val_reg = self.y_val_reg
-        masked_X_test = self.X_test[mask_test][:, mask_features]
-        masked_y_test = self.y_test[mask_test]
-        masked_y_test_reg = self.y_test_timeseries[mask_test]
-        
-        masked_sample_weights_train = sample_weights[mask_train][~mask_val]
-            
+        masked_X_val       = self.X_val[:, mask_features]
+        masked_y_val       = self.y_val
+        masked_y_val_reg   = self.y_val_reg
+        masked_X_test      = self.X_test[mask_test][:, mask_features]
+        masked_sample_wt   = sample_weights[mask_train][~mask_val]
+
+        # Log distributions
         self.logger.info(f"Number of features: {len(self.featureColumnNames)}")
         self.logger.info("Overall Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_train, logger = self.logger)
+        ModelAnalyzer().print_label_distribution(self.y_train, logger=self.logger)
         self.logger.info("Overall Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_val, logger = self.logger)
-        self.logger.info("Overall Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_test, logger = self.logger)
-            
-        if not len(np.unique(masked_y_train)) < 2:
-            self.logger.info("Masked Training Label Distribution:")
-            ModelAnalyzer().print_label_distribution(masked_y_train, logger = self.logger)
-        if not len(np.unique(masked_y_val)) < 2:
-            self.logger.info("Masked Validation Label Distribution:")
-            ModelAnalyzer().print_label_distribution(masked_y_val, logger = self.logger)
-        if not len(np.unique(masked_y_test)) < 2:
-            self.logger.info("Masked Test Label Distribution:")
-            ModelAnalyzer().print_label_distribution(masked_y_test, logger = self.logger)
-        
-        startTime = datetime.now()
-        num_leaves = self.params['Akin_num_leaves']
+        ModelAnalyzer().print_label_distribution(self.y_val, logger=self.logger)
+        self.logger.info("Masked Training Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_train, logger=self.logger)
+        self.logger.info("Masked Validation Label Distribution:")
+        ModelAnalyzer().print_label_distribution(masked_y_val, logger=self.logger)
+
+        # Final training params
+        num_leaves      = self.params['Akin_num_leaves']
         num_boost_round = self.params['Akin_num_boost_round']
         self.logger.info(f"LGBM: num_leaves: {num_leaves}, num_boost_round: {num_boost_round}")
-        #lgbmPostOptuna, _ = self.__run_OptunaOnFiltered(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_X_test, enablePrint=True)
-        #lgbmInstance = self.__run_LGBM(masked_X_train, masked_y_train, masked_X_val, masked_y_val, masked_sample_weights_train)
-        lgbmInstance = self.__run_LGBM_reg(
+
+        # Train
+        startTime     = datetime.now()
+        lgbmInstance  = self.__run_LGBM_reg(
             masked_X_train, 
-            masked_y_train_reg, 
+            masked_y_train_reg,
             masked_X_val, 
             masked_y_val_reg, 
-            masked_sample_weights_train,
-            num_leaves = num_leaves, 
-            num_boost_round = num_boost_round
-        )
+            masked_sample_wt,
+            num_leaves      = num_leaves, 
+            num_boost_round = num_boost_round)
+
+        # Predictions
+        masked_y_pred_train_reg = lgbmInstance.predict(masked_X_train, num_iteration=lgbmInstance.best_iteration)
+        masked_y_pred_val_reg   = lgbmInstance.predict(masked_X_val,   num_iteration=lgbmInstance.best_iteration)
+        masked_y_pred_test_reg  = lgbmInstance.predict(masked_X_test,  num_iteration=lgbmInstance.best_iteration)
+        
         endTime = datetime.now()
         self.logger.info(f"LGBM completed in {endTime - startTime}.")
-        
+
+        # Feature importances
         masked_colnames = np.array(self.featureColumnNames)[mask_features]
-        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10, logger = self.logger)
-        
-        masked_y_pred_train_reg = lgbmInstance.predict(masked_X_train, num_iteration=lgbmInstance.best_iteration)
-        
-        masked_y_pred_val_reg = lgbmInstance.predict(masked_X_val, num_iteration=lgbmInstance.best_iteration)
-        
-        masked_y_pred_test_reg = lgbmInstance.predict(masked_X_test, num_iteration=lgbmInstance.best_iteration)
-        
+        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10, logger=self.logger)
+
+        # Log predicted distributions
         self.logger.info("Predicted Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05, logger = self.logger)
+        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05, logger=self.logger)
         self.logger.info("Predicted Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05, logger = self.logger)
+        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05, logger=self.logger)
+
+        # Return everything needed
+        return {
+            'lgbm': lgbmInstance,
+            'X_train': masked_X_train,
+            'y_train_reg': masked_y_train_reg,
+            'X_val': masked_X_val,
+            'y_val_reg': masked_y_val_reg,
+            'X_test': masked_X_test,
+            'y_pred_train_reg': masked_y_pred_train_reg,
+            'y_pred_val_reg': masked_y_pred_val_reg,
+            'y_pred_test_reg': masked_y_pred_test_reg,
+            'mask_test': mask_test,
+        }
+    
+    def analyze(self):
+        # Run common pipeline in "analyze" mode
+        data = self._pipeline(do_analyze=True)
+
+        # Additional analysis with test set
+        masked_y_test_reg: np.ndarray  = self.y_test_timeseries[data['mask_test']]
+        masked_y_pred_test_reg: np.ndarray = data['y_pred_test_reg']
+
+        # Log test label distribution & classification metrics
         self.logger.info("Predicted Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05, logger = self.logger)
-        
-        self.logger.info("Training Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_train_reg > 0.05, masked_y_train_reg > 0.05, None, logger = self.logger)
-        self.logger.info("Validation Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None, logger = self.logger)
+        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05, logger=self.logger)
         self.logger.info("Testing Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_test_reg > 0.05, masked_y_test_reg > 0.05, None, logger = self.logger)
-        
-        # Top m highest 
+        ModelAnalyzer().print_classification_metrics(
+            masked_y_pred_test_reg > 0.05,
+            masked_y_test_reg > 0.05,
+            None, 
+            logger=self.logger
+        )
+
+        # Top m analysis
         m = self.params['Akin_top_highest']
         top_m_indices = np.flip(np.argsort(masked_y_pred_test_reg)[-m:])
         selected_true_values_reg = masked_y_test_reg[top_m_indices]
-        accuracy_top_m_above_5 = np.mean(selected_true_values_reg > 0.05)
-        self.logger.info(f"Accuracy of top {m} to be over 5% in test set: {accuracy_top_m_above_5:.2%}")
+        selected_pred_values_reg = masked_y_pred_test_reg[top_m_indices]
+        accuracy_top_m_above_5   = np.mean(selected_true_values_reg > 0.05)
+        self.logger.info(f"Accuracy of top {m} to be over 5%: {accuracy_top_m_above_5:.2%}")
         self.logger.info(f"Mean value of top {m}: {np.mean(selected_true_values_reg)}")
         self.logger.info(f"Min value of top {m}: {np.min(selected_true_values_reg)}")
         self.logger.info(f"Max value of top {m}: {np.max(selected_true_values_reg)}")
-        
-        selected_stocks = self.meta_test[mask_test][top_m_indices]
+
+        # Optional: further stock-related logic
+        selected_stocks = self.meta_test[data['mask_test']][top_m_indices]  
+        midRatio_endRatio_list = []      
         for i, stock in enumerate(selected_stocks[:,0]):
             self.logger.info(f"Stock: {stock}, Date: {selected_stocks[i,1]}")
             self.logger.info(f"    prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
@@ -954,124 +1012,39 @@ class AkinDistriML(IML):
                 self.logger.info(f"    Stock {stock} is not in the assets list.")
                 continue
             aidx = DPl(self.__assets[stock].shareprice).getNextLowerOrEqualIndex(self.test_date)
-            self.logger.info(f"    start price: {self.__assets[stock].shareprice['Close'].item(aidx)}")
-            self.logger.info(f"    end price: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction)}")
-            self.logger.info(f"    ratio: {self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction) / self.__assets[stock].shareprice['Close'].item(aidx)}")
+            startPrice = self.__assets[stock].shareprice['Close'].item(aidx)
+            self.logger.info(f"    start price: {startPrice}")
+            midPrice = self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction//2)
+            self.logger.info(f"    mid price: {midPrice}")
+            endPrice = self.__assets[stock].shareprice['Close'].item(aidx+self.idxAfterPrediction)
+            self.logger.info(f"    end price: {endPrice}")
+            ratioPrice = endPrice / startPrice
+            self.logger.info(f"    ratio: {ratioPrice}")
+            
+            midRatio_endRatio_list.append((midPrice / startPrice, ratioPrice))
         
-        return np.mean(selected_true_values_reg)
+        return (
+            np.mean(selected_true_values_reg), 
+            np.mean(selected_pred_values_reg), 
+            np.mean(masked_y_test_reg),
+            np.mean(masked_y_pred_test_reg),
+            midRatio_endRatio_list
+        )
                 
     def predict(self):
-        if not self.dataIsPrepared:
-            raise ValueError("Data is not prepared. Please run prepareData() first.")
-        
-        scaler = StandardScaler()
-        scaler.fit(self.X_train)
-        self.X_train = scaler.transform(self.X_train)
-        self.X_test = scaler.transform(self.X_test)
-        
-        startTime = datetime.now()
-        nTrain = self.X_train.shape[0]
-        nTest = self.X_test.shape[0]
-        
-        test_quantil = self.params['Akin_test_quantile']
-        feature_max = self.params['Akin_feature_max']
-        itersteps = self.params['Akin_itersteps']
-        num_leaves = self.params['Akin_pre_num_leaves']
-        num_boost_round = self.params['Akin_pre_num_boost_round']
-        weight_truncation = self.params['Akin_pre_weight_truncation']
-        
-        self.logger.info(f"num_leaves: {num_leaves}")
-        self.logger.info(f"num_boost_round: {num_boost_round}")
-        self.logger.info(f"weight_truncation: {weight_truncation}")
-        self.logger.info(f"test_quantil: {test_quantil}")
-        self.logger.info(f"feature_max: {feature_max}")
-        self.logger.info(f"iterSteps: {itersteps}")
-        mask_train, mask_test, mask_features, sample_weights = self.establishMasks(
-            q_test=test_quantil, 
-            feature_max=feature_max, 
-            iterSteps=itersteps,
-            num_leaves = num_leaves,
-            num_boost_round = num_boost_round,
-            weight_truncation = weight_truncation,
-        )        
-        endTime = datetime.now()
-        self.logger.info(f"Masking completed in {endTime - startTime}.")
-        
-        self.logger.info(f"Training samples selected: {mask_train.sum()} out of {nTrain}")
-        self.logger.info(f"Test samples selected: {mask_test.sum()} out of {nTest}")
-        self.logger.info(f"Features selected: {mask_features.sum()} out of {self.X_test.shape[1]}")
-        
-        #Establish validation set
-        # Random subsample for validation set
-        mask_val = np.random.rand(np.sum(mask_train)) < 0.05
-        if np.sum(mask_val) < 2:  
-            ValueError("Not enough data points to establish validation set")
-            
-        self.X_val = self.X_train[mask_train][mask_val]
-        self.y_val = self.y_train[mask_train][mask_val]
-        self.y_val_reg = self.y_train_timeseries[mask_train][mask_val]
-        
-        masked_X_train = self.X_train[mask_train][~mask_val][:, mask_features]
-        masked_y_train = self.y_train[mask_train][~mask_val]
-        masked_y_train_reg = self.y_train_timeseries[mask_train][~mask_val]
-        masked_X_val = self.X_val[:, mask_features]
-        masked_y_val = self.y_val
-        masked_y_val_reg = self.y_val_reg
-        masked_X_test = self.X_test[mask_test][:, mask_features]
-        
-        masked_sample_weights_train = sample_weights[mask_train][~mask_val]
-            
-        self.logger.info(f"Number of features:  {len(self.featureColumnNames)}")
-        self.logger.info("Overall Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_train, logger = self.logger)
-        self.logger.info("Overall Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.y_val, logger = self.logger)
-        self.logger.info("Masked Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_train, logger = self.logger)
-        self.logger.info("Masked Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_val, logger = self.logger)
-        
-        startTime = datetime.now()
-        num_leaves = self.params['Akin_num_leaves']
-        num_boost_round = self.params['Akin_num_boost_round']
-        self.logger.info(f"LGBM: num_leaves: {num_leaves}, num_boost_round: {num_boost_round}")
-        lgbmInstance = self.__run_LGBM_reg(
-            masked_X_train, 
-            masked_y_train_reg, 
-            masked_X_val, 
-            masked_y_val_reg, 
-            masked_sample_weights_train,
-            num_leaves = num_leaves, 
-            num_boost_round = num_boost_round
-        )
-        endTime = datetime.now()
-        self.logger.info(f"LGBM completed in {endTime - startTime}.")
-        
-        masked_colnames = np.array(self.featureColumnNames)[mask_features]
-        ModelAnalyzer().print_feature_importance_LGBM(lgbmInstance, masked_colnames, 10, logger = self.logger)
-        
-        masked_y_pred_train_reg = lgbmInstance.predict(masked_X_train, num_iteration=lgbmInstance.best_iteration)
-        
-        masked_y_pred_val_reg = lgbmInstance.predict(masked_X_val, num_iteration=lgbmInstance.best_iteration)
-        
-        masked_y_pred_test_reg = lgbmInstance.predict(masked_X_test, num_iteration=lgbmInstance.best_iteration)
-        
-        self.logger.info("Predicted Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_train_reg > 0.05, logger = self.logger)
-        self.logger.info("Predicted Validation Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_val_reg > 0.05, logger = self.logger)
+        # Run common pipeline in "predict" mode (no test metrics needed)
+        data = self._pipeline(do_analyze=False)
+
+        # We can still show predicted test distribution if desired
         self.logger.info("Predicted Testing Label Distribution:")
-        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05, logger = self.logger)
-        
-        self.logger.info("Training Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_train_reg > 0.05, masked_y_train_reg > 0.05, None, logger = self.logger)
-        self.logger.info("Validation Masked Classification Metrics:")
-        ModelAnalyzer().print_classification_metrics(masked_y_pred_val_reg > 0.05, masked_y_val_reg > 0.05, None, logger = self.logger)
-        self.logger.info("")
-        
-        # Top m highest
+        masked_y_pred_test_reg: np.ndarray = data['y_pred_test_reg']
+        masked_y_errorpred_test_reg: np.ndarray = data['masked_y_errorpred_test_reg']
+        ModelAnalyzer().print_label_distribution(masked_y_pred_test_reg > 0.05, logger=self.logger)
+
+        # Maybe only top-m predictions, no analysis
         m = self.params['Akin_top_highest']
+        score_array   = masked_y_pred_test_reg / (1.0 + masked_y_errorpred_test_reg)
         top_m_indices = np.argsort(masked_y_pred_test_reg)[-m:][::-1]
-        selected_stocks = self.meta_test[mask_test][top_m_indices]
+        selected_stocks = self.meta_test[data['mask_test']][top_m_indices]
         for i, stock in enumerate(selected_stocks[:,0]):
             self.logger.info(f"Stock: {stock}, prediction: {masked_y_pred_test_reg[top_m_indices[i]]}")
