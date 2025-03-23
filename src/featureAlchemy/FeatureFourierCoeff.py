@@ -13,14 +13,21 @@ class FeatureFourierCoeff():
         'idxLengthOneMonth': 21,
         'fouriercutoff': 10,
         'multFactor': 8,
-        'monthsHorizon': 12,
     }
     
-    def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = [], params: dict = None):
+    def __init__(self, 
+            asset: AssetDataPolars, 
+            startDate: pd.Timestamp, 
+            endDate:pd.Timestamp, 
+            lagList: List[int] = [], 
+            monthHorizonList: List[int] = [],
+            params: dict = None
+        ):
         self.startDate = startDate
         self.endDate = endDate
         self.asset = asset
         self.lagList = lagList
+        self.monthHorizonList = monthHorizonList
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -28,20 +35,28 @@ class FeatureFourierCoeff():
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.fouriercutoff = self.params['fouriercutoff']
         self.multFactor = self.params['multFactor']
-        self.monthsHorizon = self.params['monthsHorizon']
+
+        if self.monthHorizonList == [] and isinstance(self.params['monthsHorizon'], (int, float)):
+            raise ValueError("Deprecation warning: monthsHorizonList should be provided as a list. 'monthsHorizon' is deprecated.")
         
         self.buffer = 21*12+10
         self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.startDate) - max(self.lagList, default=0)-self.buffer
         self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.endDate)
         
-        assert self.startIdx >= 0 + self.monthsHorizon * self.idxLengthOneMonth + self.buffer, "Start index is negative."
+        assert self.startIdx >= 0 + np.max(self.monthHorizonList) * self.idxLengthOneMonth + self.buffer, "Start index is negative."
         
-        self.PricesPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1))
-        self.PricesPreMatrix_abscoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
-        self.PricesPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
-        self.ReturnPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), 1))
-        self.ReturnPreMatrix_abscoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
-        self.ReturnPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1)))
+        n_mhl = len(self.monthHorizonList)
+        self.PricesPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_rsmeRatio = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_ampcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_phasecoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+
+        self.ReturnPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_rsmeRatio = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_ampcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_phasecoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
         self.__preprocess_fourierConst()
         
 
@@ -49,59 +64,81 @@ class FeatureFourierCoeff():
         startIdx = self.startIdx
         endIdx = self.endIdx
         
-        m = self.monthsHorizon
-        for idx in range(startIdx, endIdx+1):
-            pricesExt = self.asset.adjClosePrice['AdjClose'].slice(idx - m*self.idxLengthOneMonth - 1, m * self.idxLengthOneMonth + 2).to_numpy()
-            prices = pricesExt[1:]
-            returns = pricesExt[1:] / pricesExt[:-1]
-            returns_log = np.log((np.clip(returns, 1e-5, 1e5)))
-            
-            #Prices
-            _, res_cos, res_sin = SeriesExpansion.getFourierInterpCoeff(prices, self.multFactor, self.fouriercutoff)
-            _, rsme = SeriesExpansion.getFourierInterpFunct(res_cos, res_sin, prices)
-            
-            res_cos = np.array(res_cos)
-            res_sin = np.array(res_sin)
-            res_abs = np.sqrt(res_cos**2+ res_sin**2)
-            res_sign = (np.sign(res_cos)+1.0)/2.0
-            
-            self.PricesPreMatrix_rsme[idx,:] = rsme
-            self.PricesPreMatrix_abscoeff[idx,0:(2*self.fouriercutoff-1)] = res_abs[1:]
-            self.PricesPreMatrix_signcoeff[idx,0:(2*self.fouriercutoff-1)] = res_sign[1:]
-            
-            #Returns log
-            _, res_cos, res_sin = SeriesExpansion.getFourierInterpCoeff([0.0] + returns_log + [0.0], self.multFactor, self.fouriercutoff)
-            _, rsme = SeriesExpansion.getFourierInterpFunct(res_cos, res_sin, [0.0] + returns_log + [0.0])
-            
-            res_cos = np.array(res_cos)
-            res_sin = np.array(res_sin)
-            res_abs = np.sqrt(res_cos**2+ res_sin**2)
-            res_sign = (np.sign(res_cos)+1.0)/2.0
-            
-            self.ReturnPreMatrix_rsme[idx,:] = rsme
-            self.ReturnPreMatrix_abscoeff[idx,0:(2*self.fouriercutoff-1)] = res_abs[1:]
-            self.ReturnPreMatrix_signcoeff[idx,0:(2*self.fouriercutoff-1)] = res_sign[1:]
+        for m_idx, m_val in enumerate(self.monthHorizonList):
+            for idx in range(startIdx, endIdx+1):
+                pricesExt = self.asset.adjClosePrice['AdjClose'].slice(
+                    idx - m_val*self.idxLengthOneMonth - 1, 
+                    m_val * self.idxLengthOneMonth + 2).to_numpy()
+                prices = pricesExt[1:]
+                returns = pricesExt[1:] / pricesExt[:-1]
+                returns_log = np.log((np.clip(returns, 1e-5, 1e5)))
+
+                #Prices
+                _, res_cos, res_sin = SeriesExpansion.getFourierInterpCoeff(prices, self.multFactor, self.fouriercutoff)
+                _, rsme = SeriesExpansion.getFourierInterpFunct(res_cos, res_sin, prices)
+
+                res_cos = np.array(res_cos)
+                res_sin = np.array(res_sin)
+                res_amp = np.sqrt(res_cos**2+ res_sin**2)
+                res_phase = np.arctan2(res_sin, np.abs(res_cos))
+                res_sign = (np.sign(res_cos)+1.0)/2.0
+
+                self.PricesPreMatrix_rsme[idx,0:(self.fouriercutoff),m_idx]         = rsme[:-1]
+                self.PricesPreMatrix_rsmeRatio[idx,0:(self.fouriercutoff),m_idx]    = rsme[1:]/rsme[:-1]
+                self.PricesPreMatrix_ampcoeff[idx,0:(self.fouriercutoff),m_idx]     = res_amp[1:]
+                self.PricesPreMatrix_signcoeff[idx,0:(self.fouriercutoff),m_idx]    = res_sign[1:]
+                self.PricesPreMatrix_phasecoeff[idx,0:(self.fouriercutoff),m_idx]   = res_phase[1:]
+
+                #Returns log
+                _, res_cos, res_sin = SeriesExpansion.getFourierInterpCoeff([0.0] + returns_log + [0.0], self.multFactor, self.fouriercutoff)
+                _, rsme = SeriesExpansion.getFourierInterpFunct(res_cos, res_sin, [0.0] + returns_log + [0.0])
+
+                res_cos = np.array(res_cos)
+                res_sin = np.array(res_sin)
+                res_amp = np.sqrt(res_cos**2+ res_sin**2)
+                res_phase = np.arctan2(res_sin, np.abs(res_cos))
+                res_sign = (np.sign(res_cos)+1.0)/2.0
+
+                self.ReturnPreMatrix_rsme[idx,0:(self.fouriercutoff),m_idx]         = rsme[:-1]
+                self.ReturnPreMatrix_rsmeRatio[idx,0:(self.fouriercutoff),m_idx]    = rsme[1:]/rsme[:-1]
+                self.ReturnPreMatrix_ampcoeff[idx,0:(self.fouriercutoff),m_idx]     = res_amp[1:]
+                self.ReturnPreMatrix_signcoeff[idx,0:(self.fouriercutoff),m_idx]    = res_sign[1:]
+                self.ReturnPreMatrix_phasecoeff[idx,0:(self.fouriercutoff),m_idx]   = res_phase[1:]
     
     def getFeatureNames(self) -> list[str]:
-        pricesnames = ["Fourier_Price_RSME"] \
-            + [f"Fourier_Price_AbsCoeff_{i}" for i in range(1,self.fouriercutoff)] \
-            + [f"Fourier_Price_SignCoeff_{i}" for i in range(1,self.fouriercutoff)]
-        
-        returnnames = ["Fourier_ReturnLog_RSME"] \
-            + [f"Fourier_ReturnLog_AbsCoeff_{i}" for i in range(1,self.fouriercutoff)] \
-            + [f"Fourier_ReturnLog_SignCoeff_{i}" for i in range(1,self.fouriercutoff)]
+        res_names = []
+        for m in self.monthHorizonList:
+            res_names += (
+                  [f"Fourier_Price_SignCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)]
+                + [f"Fourier_Price_PhaseCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)]
+                + [f"Fourier_Price_RSMERatioCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
             
-        pricesnames_lag = []
-        returnnames_lag = []
-        for lag in self.lagList:
-            pricesnames_lag += [f"Fourier_Price_lag_m{lag}_RSME"] \
-                + [f"Fourier_Price_lag_m{lag}_AbsCoeff_{i}" for i in range(1,self.fouriercutoff)] \
-                + [f"Fourier_Price_lag_m{lag}_SignCoeff_{i}" for i in range(1,self.fouriercutoff)]
-            returnnames_lag += [f"Fourier_ReturnLog_lag_m{lag}_RSME"] \
-                + [f"Fourier_ReturnLog_lag_m{lag}_AbsCoeff_{i}" for i in range(1,self.fouriercutoff)] \
-                + [f"Fourier_ReturnLog_lag_m{lag}_SignCoeff_{i}" for i in range(1,self.fouriercutoff)]
+            res_names += (
+                  [f"Fourier_ReturnLog_SignCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)]
+                + [f"Fourier_ReturnLog_PhaseCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)]
+                + [f"Fourier_ReturnLog_RSMERatioCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
+
+            res_names += (
+                  [f"Fourier_Price_RSMECoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)] 
+                + [f"Fourier_Price_AmpCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
+
+            res_names += (
+                  [f"Fourier_ReturnLog_RSMECoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)] 
+                + [f"Fourier_ReturnLog_AmpCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
+
+            for lag in self.lagList:
+                res_names += (
+                      [f"Fourier_Price_RSMECoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)] 
+                    + [f"Fourier_Price_AmpCoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)])
+                res_names += (
+                      [f"Fourier_ReturnLog_RSMECoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)]
+                    + [f"Fourier_ReturnLog_AmpCoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)])
             
-        return pricesnames + returnnames+ pricesnames_lag + returnnames_lag
+        return res_names
+    
+    def getTimeFeatureNames(self) -> list[str]:
+        #todo
+        pass
     
     def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
         if idx is None:
@@ -111,22 +148,32 @@ class FeatureFourierCoeff():
         scalingfactor = scaleToNiveau/niveau
         
         features = []
-        features.append(self.PricesPreMatrix_rsme[idx,:] * scalingfactor)
-        features.append(self.PricesPreMatrix_abscoeff[idx,:] * scalingfactor)
-        features.append(self.PricesPreMatrix_signcoeff[idx,:])
-        features.append(self.ReturnPreMatrix_rsme[idx,:] * scaleToNiveau)
-        features.append(self.ReturnPreMatrix_abscoeff[idx,:] * scaleToNiveau)
-        features.append(self.ReturnPreMatrix_signcoeff[idx,:])
-        
-        for lag in self.lagList:
-            idx_lag = idx - lag
+        for m_idx, _ in enumerate(self.monthHorizonList):
+            features.extend(self.PricesPreMatrix_signcoeff[idx,:,m_idx])
+            features.extend((self.PricesPreMatrix_phasecoeff[idx,:,m_idx] * 2/np.pi)**10) #The values are too close to +- 1
+            features.extend(self.PricesPreMatrix_rsmeRatio[idx,:,m_idx])
             
-            features.append(self.PricesPreMatrix_rsme[idx_lag,:] * scalingfactor)
-            features.append(self.PricesPreMatrix_abscoeff[idx_lag,:] * scalingfactor)
-            features.append(self.PricesPreMatrix_signcoeff[idx_lag,:])
-            features.append(self.ReturnPreMatrix_rsme[idx_lag,:] * scaleToNiveau)
-            features.append(self.ReturnPreMatrix_abscoeff[idx_lag,:] * scaleToNiveau)
-            features.append(self.ReturnPreMatrix_signcoeff[idx_lag,:])
+            features.extend(self.ReturnPreMatrix_signcoeff[idx,:,m_idx])
+            features.extend((self.ReturnPreMatrix_phasecoeff[idx,:,m_idx] * 2/np.pi)**10) #The values are too close to +- 1
+            features.extend(self.ReturnPreMatrix_rsmeRatio[idx,:,m_idx])
 
-        features = np.concatenate(features)
+            features.extend(self.PricesPreMatrix_rsme[idx,:,m_idx] * scalingfactor)
+            features.extend(self.PricesPreMatrix_ampcoeff[idx,:,m_idx] * scalingfactor)
+
+            features.extend(self.ReturnPreMatrix_rsme[idx,:,m_idx] * scaleToNiveau)
+            features.extend(self.ReturnPreMatrix_ampcoeff[idx,:,m_idx] * scaleToNiveau)
+
+            for lag in self.lagList:
+                idx_lag = idx - lag
+
+                features.extend(self.PricesPreMatrix_rsme[idx_lag,:,m_idx] * scalingfactor)
+                features.extend(self.PricesPreMatrix_ampcoeff[idx_lag,:,m_idx] * scalingfactor)
+
+                features.extend(self.ReturnPreMatrix_rsme[idx_lag,:,m_idx] * scaleToNiveau)
+                features.extend(self.ReturnPreMatrix_ampcoeff[idx_lag,:,m_idx] * scaleToNiveau)
+
         return features
+    
+    def apply_timeseries(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
+        #todo
+        pass
