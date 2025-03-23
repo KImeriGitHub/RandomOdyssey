@@ -117,17 +117,17 @@ class SeriesExpansion():
         # Add fourier approximation error to the features
         N = len(resarr)
         t = np.linspace(-np.pi, 0, N)
-        f_reconstructed = np.zeros(N)
-        for n in range(0, len(res_cos)):
-            f_reconstructed += res_cos[n] * np.cos(n * t) + res_sin[n] * np.sin(n * t)
-        
         x = np.arange(N)
         fx0: float = resarr[0]
         fxend: float = resarr[N-1]
-        f_reconstructed += fx0 + (fxend-fx0)*(x/(N-1))
+
+        f_reconstructed = np.zeros(N)
+        rsme = np.zeros(len(res_cos))
+        for n in range(0, len(res_cos)):
+            f_reconstructed += res_cos[n] * np.cos(n * t) + res_sin[n] * np.sin(n * t)
+
+            # Lift the reconstruction to the original function
+            f_lifted = f_reconstructed + fx0 + (fxend-fx0)*(x/(N-1))
+            rsme[n] = np.sqrt(np.mean(np.abs(f_lifted - resarr) ** 2))
         
-        # Calculate the mean squared error between the original and reconstructed functions
-        absErrorVector = np.abs(resarr - f_reconstructed)
-        #return (np.mean(absErrorVector ** 2)) # squared mean error
-        #return (np.mean(absErrorVector)) # absolute mean error
-        return f_reconstructed, np.sqrt(np.mean(absErrorVector)) # root absolute mean error
+        return f_lifted, rsme
