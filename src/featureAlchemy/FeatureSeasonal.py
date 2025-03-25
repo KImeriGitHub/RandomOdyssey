@@ -11,6 +11,7 @@ class FeatureSeasonal():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'monthsHorizon': 12,
+        'timesteps': 10,
     }
     
     def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = [], params: dict = None):
@@ -24,6 +25,7 @@ class FeatureSeasonal():
 
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.monthsHorizon = self.params['monthsHorizon']
+        self.timesteps = self.params['timesteps']
         
         self.holidate_dates: list[pd.Timestamp] = self.__USHolidays()
         
@@ -54,22 +56,31 @@ class FeatureSeasonal():
         
         for lag in self.lagList:
             features_names.extend([
-                f"Seasonal_year_lag_m{lag}",
-                f"Seasonal_month_lag_m{lag}",
-                f"Seasonal_day_lag_m{lag}",
-                f"Seasonal_day_of_week_lag_m{lag}",
-                f"Seasonal_quarter_lag_m{lag}",
+                #f"Seasonal_year_lag_m{lag}",
+                #f"Seasonal_month_lag_m{lag}",
+                #f"Seasonal_day_lag_m{lag}",
+                #f"Seasonal_day_of_week_lag_m{lag}",
+                #f"Seasonal_quarter_lag_m{lag}",
                 f"Seasonal_week_of_year_lag_m{lag}",
-                f"Seasonal_is_month_start_lag_m{lag}",
-                f"Seasonal_is_month_end_lag_m{lag}",
-                f"Seasonal_is_year_start_lag_m{lag}",
-                f"Seasonal_is_year_end_lag_m{lag}",
-                f"Seasonal_week_part_lag_m{lag}",
+                #f"Seasonal_is_month_start_lag_m{lag}",
+                #f"Seasonal_is_month_end_lag_m{lag}",
+                #f"Seasonal_is_year_start_lag_m{lag}",
+                #f"Seasonal_is_year_end_lag_m{lag}",
+                #f"Seasonal_week_part_lag_m{lag}",
                 f"Seasonal_days_to_next_holiday_lag_m{lag}",
                 f"Seasonal_days_since_last_holiday_lag_m{lag}",
             ])
             
         return features_names
+    
+    def getTimeFeatureNames(self) -> list[str]:
+        res_names = []
+        
+        res_names += ["Seasonal_day_of_week"]
+        res_names += ["Seasonal_week_of_year"]
+        res_names += ["Seasonal_days_to_nearest_holiday"]
+        
+        return res_names
     
     def apply(self, date: pd.Timestamp, scaleToNiveau: float):
         """
@@ -134,12 +145,37 @@ class FeatureSeasonal():
                 np.max([np.min([(h - date_lag).days for h in self.holidate_dates if h >= date_lag]),90]),
                 np.max([np.min([(date_lag - h).days for h in self.holidate_dates if h <= date_lag]),90]),
             ])
+            features_raw_lag = features_raw_lag * unifyingFactorArray
+            # Selected features 
+            features_raw_lag = features_raw_lag[[5,11,12]]
             
-            features_raw = np.concatenate([features_raw, features_raw_lag * unifyingFactorArray])
+            features_raw = np.concatenate([features_raw, features_raw_lag])
+            
         
         features = features_raw * scaleToNiveau
         return features
     
+    def apply_timeseries(self, date: pd.Timestamp) -> np.ndarray:
+        if not isinstance(date, pd.Timestamp):
+            raise ValueError("The input must be a pandas Timestamp object.")
+        # Ensure timestamp is timezone-aware (if not already)
+        date = date.tz_localize('UTC') if date.tz is None else date
+        
+        coreLen = len(self.getTimeFeatureNames())
+        featuresMat = np.zeros((self.timesteps, coreLen))
+        
+        for ts in range(0, self.timesteps):
+            date_lag = date - pd.Timedelta(days = ((self.timesteps - 1) - ts))
+            
+            featuresMat[ts, 0] = date_lag.dayofweek/6.0 # Monday=0, Sunday=6
+            featuresMat[ts, 1] = (date_lag.isocalendar()[1]-1)/51.0 # Week number of the year
+            featuresMat[ts, 2] = np.tanh(min([(date_lag-h).days for h in self.holidate_dates], key=lambda x: (abs(x), -x)))/2.0+0.5
+            
+        return featuresMat
+        
+        
+        
+        
     
 """ 
 For future non-US uses, the following might help:
