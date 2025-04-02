@@ -153,7 +153,7 @@ class FeatureSeasonal():
             
         
         features = features_raw * scaleToNiveau
-        return features
+        return features.astype(np.float32)
     
     def apply_timeseries(self, date: pd.Timestamp) -> np.ndarray:
         if not isinstance(date, pd.Timestamp):
@@ -171,7 +171,7 @@ class FeatureSeasonal():
             featuresMat[ts, 1] = (date_lag.isocalendar()[1]-1)/51.0 # Week number of the year
             featuresMat[ts, 2] = np.tanh(min([(date_lag-h).days for h in self.holidate_dates], key=lambda x: (abs(x), -x)))/2.0+0.5
             
-        return featuresMat
+        return featuresMat.astype(np.float32)
         
         
         

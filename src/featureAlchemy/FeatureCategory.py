@@ -37,6 +37,9 @@ class FeatureCategory():
             
         return features_names
     
+    def getTimeFeatureNames(self) -> list[str]:
+        return []
+    
     def apply(self, scaleToNiveau: float):
         sector = self.asset.sector
         
@@ -44,3 +47,6 @@ class FeatureCategory():
         features = np.array([1.0 if category == sector else 0.0 for category in self.cat])
         
         return features*scaleToNiveau
+    
+    def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
+        return np.array([[]])
