@@ -176,7 +176,7 @@ class FeatureFourierCoeff():
                 
                 enuCounter += 4
 
-        return features.flatten('F')
+        return features.flatten('F').astype(np.float32)
     
     def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
         if idx is None:
@@ -187,10 +187,10 @@ class FeatureFourierCoeff():
         
         MH_val = np.min(self.monthHorizonList)
         MH_val_idx = self.monthHorizonList.index(MH_val)
-            
+        
         for ts in range(0, self.timesteps):
             idx_ts = idx - (self.timesteps - 1) + ts
             featuresMat[ts, 0:4] = np.tanh(self.PricesPreMatrix_rsme[idx_ts, :, MH_val_idx])
             featuresMat[ts, 4:8] = np.tanh(self.PricesPreMatrix_rsmeRatio[idx_ts, :, MH_val_idx] - 0.5)
             
-        return featuresMat
+        return featuresMat.astype(np.float32)
