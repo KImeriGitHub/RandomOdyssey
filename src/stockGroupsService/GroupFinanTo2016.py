@@ -76,6 +76,8 @@ class GroupFinanTo2016(IGroup):
     'ebitda',
     'totalAssets',
     'totalCurrentLiabilities',
+    'totalShareholderEquity',
+    'commonStockSharesOutstanding',
     'operatingCashflow',
     'profitLoss',
   ]
@@ -89,6 +91,7 @@ class GroupFinanTo2016(IGroup):
     'ebitda',
     'totalAssets',
     'totalCurrentLiabilities',
+    'totalShareholderEquity',
     'operatingCashflow',
     'profitLoss',
   ]
