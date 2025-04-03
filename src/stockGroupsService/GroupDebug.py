@@ -19,7 +19,6 @@ class GroupDebug(IGroup):
     "CDNS",
     "CSCO",
     "CTSH",
-    "CMCSA",
     "CSX",
     "EA",
     "EXC",
