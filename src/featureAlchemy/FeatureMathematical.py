@@ -25,7 +25,7 @@ class FeatureMathematical():
         self.lagList = lagList
         self.monthHorizonList = monthHorizonList
 
-        self.timeseries_steps = [3,7]
+        self.timeseries_ivalList = [3,7]
 
         self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
@@ -101,7 +101,7 @@ class FeatureMathematical():
     
     def getTimeFeatureNames(self) -> list[str]:
         featureNames = ['MathFeature_TradedPrice']
-        for i in range(len(self.timeseries_steps)):
+        for i in range(len(self.timeseries_ivalList)):
             featureNames.append(f"MathFeature_TradedPrice_sp{i}")
 
         featureNames.extend([
@@ -132,7 +132,7 @@ class FeatureMathematical():
             (self.priceAdjustments.item(idx) * niveau) * scalingfactor,
         ])
 
-        for i, m in enumerate(self.monthHorizonList):
+        for i, _ in enumerate(self.monthHorizonList):
             mathFeatures.extend([
                 (self.drawdown[i].item(idx) * niveau) * scalingfactor,
                 (self.drawup[i].item(idx) * niveau) * scalingfactor,
@@ -165,7 +165,7 @@ class FeatureMathematical():
             idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
         if idx-max(self.lagList, default=0) < 0 + 4:
             raise ValueError("Lag is too far back.")
-        if idx - self.timesteps * 7 < 0:
+        if idx - self.timesteps * np.max(self.timeseries_ivalList) < 0:
             raise ValueError("Not enough data for time series.")
         
         coreLen = len(self.getTimeFeatureNames())
@@ -177,7 +177,7 @@ class FeatureMathematical():
             idx_ts = idx - (self.timesteps - 1) + ts
 
             featuresMat[ts, 0] = np.tanh(self.prices.item(idx_ts) * adjFactor / niveau - 1.0)/2.0 + 0.5
-            for i, sp in enumerate(self.timeseries_steps):
+            for i, sp in enumerate(self.timeseries_ivalList):
                 idx_ts_sp = idx - ((self.timesteps - 1) - ts) * sp
                 featuresMat[ts, i+1] = np.tanh(self.prices.item(idx_ts_sp) * adjFactor / niveau - 1.0)/2.0 + 0.5
 
