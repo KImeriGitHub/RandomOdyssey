@@ -119,6 +119,10 @@ class TAIndicators():
         'others_dr',      # Daily Return: already used in MathFeature
         'others_cr',      # Cumulative Return: already used in MathFeature
     ]
+    
+    tacolumns_selectionTimeseries = [
+        
+    ]
         
     def __init__(self, df):
         """
@@ -227,11 +231,29 @@ class TAIndicators():
             list[str]: List of column names.
         """
         
-        return (self.tacolumns_ScaledToClose + 
-               self.tacolumns_ScaledSpecial + 
-               self.tacolumns_SpecialPreprocessed + 
-               self.tacolumns_DivideByHundreds + 
-               self.tacolumns_AsIs)
+        return (
+            self.tacolumns_ScaledToClose + 
+            self.tacolumns_ScaledSpecial + 
+            self.tacolumns_SpecialPreprocessed + 
+            self.tacolumns_DivideByHundreds + 
+            self.tacolumns_AsIs
+        )
+        
+    def getTAColumnNames_timeseries(self) -> list[str]:
+        """
+        Get the column names of the DataFrame that are time series.
+
+        Returns:
+            list[str]: List of time series column names.
+        """
+        
+        return (
+            self.tacolumns_ScaledToClose + 
+            self.tacolumns_ScaledSpecial + 
+            self.tacolumns_SpecialPreprocessed + 
+            self.tacolumns_DivideByHundreds + 
+            self.tacolumns_AsIs
+        )
         
     def getReScaledDataFrame(self, curClosePrice: float, curVolume: float) -> pl.DataFrame:
         """
@@ -249,6 +271,7 @@ class TAIndicators():
         tadata_rescaled = self.tadata.with_columns(
             [(pl.col(col) / curClosePrice).alias(col) for col in self.tacolumns_ScaledToClose]
         )
+        
         # tacolumns_ScaledSpecial
         tadata_rescaled = tadata_rescaled.with_columns([
             (pl.col('Volume') / curVolume).alias('Volume'),

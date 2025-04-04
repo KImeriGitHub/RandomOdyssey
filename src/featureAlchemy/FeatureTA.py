@@ -8,7 +8,6 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as 
 from src.mathTools.TAIndicators import TAIndicators
 
 class FeatureTA():
-    
     def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = []):
         self.asset = asset
         self.startDate = startDate
@@ -24,6 +23,7 @@ class FeatureTA():
         
         self.taindic = TAIndicators(asset.shareprice.slice(self.startIdx, self.endIdx - self.startIdx + 1))
         self.ColumnToUse = self.taindic.getTAColumnNames()
+        self.ColumnToUse_timeseries = self.taindic.getTAColumnNames_timeseries()
     
     def getFeatureNames(self) -> list[str]:
         res_raw = [f"FeatureTA_{col}" for col in self.ColumnToUse]
@@ -34,6 +34,11 @@ class FeatureTA():
                 res_lag.append(f'FeatureTA_{col}_lag_m{lag}')
         
         return res_raw + res_lag
+    
+    def getTimeFeatureNames(self) -> list[str]:
+        res = self.ColumnToUse_timeseries
+        
+        return res
     
     def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None):
         if idx is None:
