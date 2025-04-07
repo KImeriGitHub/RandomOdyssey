@@ -10,6 +10,8 @@ src/database/*
 secrets/*
 !secrets/.gitignore
 
+tools/*
+
 src/stockGroups/bin/*
 !src/stockGroups/bin/__init__.py
 
