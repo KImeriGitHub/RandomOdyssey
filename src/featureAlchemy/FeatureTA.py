@@ -8,7 +8,23 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as 
 from src.mathTools.TAIndicators import TAIndicators
 
 class FeatureTA():
-    def __init__(self, asset: AssetDataPolars, startDate: pd.Timestamp, endDate:pd.Timestamp, lagList: List[int] = []):
+    DEFAULT_PARAMS = {
+        'idxLengthOneMonth': 21,
+        'timesteps': 10,
+    }
+    
+    def __init__(self, 
+            asset: AssetDataPolars, 
+            startDate: pd.Timestamp, 
+            endDate:pd.Timestamp, 
+            lagList: List[int] = [], 
+            params: dict = None
+        ):
+        
+        self.params = {**self.DEFAULT_PARAMS, **(params or {})}
+        self.timesteps = self.params['timesteps']
+        self.idxLengthOneMonth = self.params['idxLengthOneMonth']
+        
         self.asset = asset
         self.startDate = startDate
         self.endDate = endDate
@@ -36,7 +52,7 @@ class FeatureTA():
         return res_raw + res_lag
     
     def getTimeFeatureNames(self) -> list[str]:
-        res = self.ColumnToUse_timeseries
+        res = [f"FeatureTA_{col}"  for col in self.ColumnToUse_timeseries]
         
         return res
     
@@ -66,4 +82,27 @@ class FeatureTA():
             lagIdx_adj = idx_adj - lag
             features = np.concatenate([features, np.array(curTAdf.row(lagIdx_adj))])
         
-        return features * scalingfactor
+        return (features * scalingfactor).astype(np.float32) 
+    
+    def apply_timeseries(self, date: pd.Timestamp, idx: int = None):
+        if idx is None:
+            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+        if idx  < self.startIdx:
+            raise ValueError("Date is too old.")
+        
+        coreLen = len(self.ColumnToUse_timeseries)
+        featuresMat = np.zeros((self.timesteps, coreLen))
+        
+        curClose = self.asset.shareprice['Close'].item(idx)
+        curVol = self.asset.volume['Volume'].item(idx)
+        
+        if not curVol >= 2:
+            curVol = 1
+        
+        curTAdf = self.taindic.getReScaledDataFrame_timeseries(curClose, curVol)
+        curTAdf = curTAdf.select(self.ColumnToUse_timeseries)
+        
+        idx_adj = idx - self.startIdx
+        featuresMat = np.array(curTAdf.slice(idx_adj-self.timesteps+1, self.timesteps))
+        
+        return featuresMat.astype(np.float32) 

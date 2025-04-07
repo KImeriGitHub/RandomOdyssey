@@ -2,19 +2,8 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from ta import add_all_ta_features
-from sklearn.preprocessing import MinMaxScaler
-import warnings
 
 class TAIndicators():
-    """
-    A class to compute technical analysis (TA) indicators and perform scaling operations on them.
-
-    Attributes:
-        tacolumns_to_minmax (list): List of TA indicator columns to be scaled using Min-Max scaling.
-        tacolumns_to_keep (list): List of TA indicator columns to be kept for analysis.
-        columns_to_del (list): List of columns to delete from the DataFrame.
-    """
-    
     tacolumns_SpecialPreprocessed = [
         'volume_em',                    # Ease of Movement: divide by 100 then sigmoid. needs more testing
         'volume_sma_em',                # ?: divide by 500 then sigmoid. needs more testing
@@ -121,7 +110,46 @@ class TAIndicators():
     ]
     
     tacolumns_selectionTimeseries = [
+        #special
+        'volume_nvi',
+        'Volume',
+        'momentum_roc',
+        'trend_aroon_ind',
+        'momentum_pvo',
+        'momentum_stoch_rsi',
+        'momentum_stoch_rsi_k',
+        'momentum_stoch_rsi_d',
+        'volume_cmf',
         
+        # to close
+        'High',
+        'Low',
+        'trend_macd',
+        'trend_macd_signal',
+        'trend_sma_slow',
+        'trend_ema_fast',
+        'trend_ema_slow',
+        'volatility_atr',
+        'volatility_bbm',
+        'momentum_ao',
+        'trend_visual_ichimoku_b',
+        
+        # already sigmoided
+        'trend_adx',
+        'trend_kst',
+        'trend_kst_sig',
+        'trend_kst_diff',
+        'momentum_ppo',
+        
+        # rolling maxed
+        'volume_obv',
+        'volume_vpt',
+        
+        #to clip
+        'trend_mass_index',
+        'trend_stc',
+        'volatility_ui',
+        'momentum_stoch',
     ]
         
     def __init__(self, df):
@@ -224,13 +252,6 @@ class TAIndicators():
         )
         
     def getTAColumnNames(self) -> list[str]:
-        """
-        Get the column names of the DataFrame.
-
-        Returns:
-            list[str]: List of column names.
-        """
-        
         return (
             self.tacolumns_ScaledToClose + 
             self.tacolumns_ScaledSpecial + 
@@ -240,35 +261,16 @@ class TAIndicators():
         )
         
     def getTAColumnNames_timeseries(self) -> list[str]:
-        """
-        Get the column names of the DataFrame that are time series.
-
-        Returns:
-            list[str]: List of time series column names.
-        """
-        
-        return (
-            self.tacolumns_ScaledToClose + 
-            self.tacolumns_ScaledSpecial + 
-            self.tacolumns_SpecialPreprocessed + 
-            self.tacolumns_DivideByHundreds + 
-            self.tacolumns_AsIs
-        )
+        return self.tacolumns_selectionTimeseries
         
     def getReScaledDataFrame(self, curClosePrice: float, curVolume: float) -> pl.DataFrame:
-        """
-        Rescale the technical indicators based on the current close price and volume.
-
-        Parameters:
-            curClosePrice (float): Current close price of the asset.
-            curVolume (float): Current volume of the asset.
-
-        Returns:
-            pl.DataFrame: DataFrame containing rescaled technical indicators.
-        """
+        colNames = self.getTAColumnNames()
+        
         # Scale the TA indicators based on the current close price and volume
+        tadata_rescaled = self.tadata.select(colNames)
+        
         # tacolumns_ScaledToClose
-        tadata_rescaled = self.tadata.with_columns(
+        tadata_rescaled = tadata_rescaled.with_columns(
             [(pl.col(col) / curClosePrice).alias(col) for col in self.tacolumns_ScaledToClose]
         )
         
@@ -276,6 +278,76 @@ class TAIndicators():
         tadata_rescaled = tadata_rescaled.with_columns([
             (pl.col('Volume') / curVolume).alias('Volume'),
             (pl.col("volume_adi") / (curVolume * curClosePrice)).alias("volume_adi"),
+        ])
+        
+        return tadata_rescaled
+    
+    def getReScaledDataFrame_timeseries(self, curClosePrice: float, curVolume: float) -> pl.DataFrame:
+        
+        def tanh_R(col: pl.Expr) -> pl.Expr:
+            return col.tanh()/2.0 + 0.5
+        def tanh_Rplus(col: pl.Expr, scale=1.0) -> pl.Expr:
+            return (col/scale).tanh()/2.0 + 0.5
+        def tanh_R_centerOne(col: pl.Expr) -> pl.Expr:
+            return (col-1.0).tanh()/2.0 + 0.5
+        def clipExpr(col: pl.Expr) -> pl.Expr:
+            return col.clip(0, 1)
+        def lin_m1to1(col: pl.Expr) -> pl.Expr:
+            return ((col + 1.0) / 2.0).clip(0, 1)
+        
+        colNamesTs = self.getTAColumnNames_timeseries()
+        
+        tadata_rescaled = self.tadata.select(colNamesTs)
+        
+        # tacolumns_ScaledToClose
+        tadata_rescaled = tadata_rescaled.with_columns([
+            tanh_R_centerOne(pl.col("High") / curClosePrice).alias("High"),
+            tanh_R_centerOne(pl.col("Low") / curClosePrice).alias("Low"),
+            tanh_R_centerOne(pl.col("trend_macd") / curClosePrice).alias("trend_macd"),
+            tanh_R_centerOne(pl.col("trend_macd_signal") / curClosePrice).alias("trend_macd_signal"),
+            tanh_R_centerOne(pl.col("trend_sma_slow") / curClosePrice).alias("trend_sma_slow"), 
+            tanh_R_centerOne(pl.col("trend_ema_fast") / curClosePrice).alias("trend_ema_fast"),
+            tanh_R_centerOne(pl.col("trend_ema_slow") / curClosePrice).alias("trend_ema_slow"),
+            tanh_R_centerOne(pl.col("volatility_atr") / curClosePrice).alias("volatility_atr"),
+            tanh_R_centerOne(pl.col("volatility_bbm") / curClosePrice).alias("volatility_bbm"),
+            tanh_R_centerOne(pl.col("momentum_ao") / curClosePrice).alias("momentum_ao"),
+            tanh_R_centerOne(pl.col("trend_visual_ichimoku_b") / curClosePrice).alias("trend_visual_ichimoku_b"),
+        ])
+        
+        #special 
+        tadata_rescaled = tadata_rescaled.with_columns([
+            tanh_R(pl.col('volume_nvi').diff(n=21).fill_null(0)).alias('volume_nvi'),  #TODO: MH instead of diff would be better
+            tanh_R_centerOne(pl.col('Volume') / (curVolume + 1e-8)).alias('Volume'),
+            lin_m1to1(pl.col('momentum_roc')).alias('momentum_roc'),
+            lin_m1to1(pl.col('trend_aroon_ind')).alias('trend_aroon_ind'),
+            lin_m1to1(pl.col('momentum_pvo')).alias('momentum_pvo'),
+            clipExpr(pl.col('momentum_stoch_rsi')).alias('momentum_stoch_rsi'),
+            clipExpr(pl.col('momentum_stoch_rsi_k')).alias('momentum_stoch_rsi_k'),
+            clipExpr(pl.col('momentum_stoch_rsi_d')).alias('momentum_stoch_rsi_d'),
+            lin_m1to1(pl.col('volume_cmf')).alias('volume_cmf'),
+        ])
+        
+        # sigmoided
+        tadata_rescaled = tadata_rescaled.with_columns([
+            clipExpr(pl.col('trend_adx')).alias('trend_adx'),
+            clipExpr(pl.col('trend_kst')).alias('trend_kst'),
+            clipExpr(pl.col('trend_kst_sig')).alias('trend_kst_sig'),
+            clipExpr(pl.col('trend_kst_diff')).alias('trend_kst_diff'),
+            clipExpr(pl.col('momentum_ppo')).alias('momentum_ppo'),
+        ])
+        
+        # rolling maxed
+        tadata_rescaled = tadata_rescaled.with_columns([
+            clipExpr(pl.col('volume_obv')).alias('volume_obv'),
+            tanh_Rplus(pl.col('volume_vpt'), 100.0).alias('volume_vpt'),
+        ])
+        
+        # to clip
+        tadata_rescaled = tadata_rescaled.with_columns([
+            clipExpr(pl.col("trend_mass_index")).alias("trend_mass_index"),
+            clipExpr(pl.col("trend_stc")).alias("trend_stc"),
+            clipExpr(pl.col("volatility_ui")).alias("volatility_ui"),
+            clipExpr(pl.col("momentum_stoch")).alias("momentum_stoch"),
         ])
         
         return tadata_rescaled
