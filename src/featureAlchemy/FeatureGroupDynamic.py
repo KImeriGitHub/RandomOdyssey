@@ -42,14 +42,20 @@ class FeatureGroupDynamic():
         self.tickers = list(self.assetspl.keys())
         self.nAssets = len(self.tickers)
         
+        exampleAsset = self.assetspl[self.tickers[0]]
+        
         #preprocess
-        self.business_days = pd.date_range(start=self.startRecord, end=endDate, freq="B")
+        exampleTicker_rec_idx = DPl(exampleAsset.shareprice).getNextLowerOrEqualIndex(self.startRecord)
+        exampleTicker_end_idx = DPl(exampleAsset.shareprice).getNextLowerOrEqualIndex(self.endDate)
+        self.business_days = exampleAsset.shareprice["Date"].slice(exampleTicker_rec_idx, exampleTicker_end_idx - exampleTicker_rec_idx + 1).to_numpy()
+        self.business_days = np.array([pd.Timestamp(x, tz ="UTC") for x in self.business_days])
         first_bd_rec = self.business_days[0]
         self.first_bd_date = self.business_days[self.business_days <= self.startDate][-1]
         last_bd = self.business_days[-1]
         self.nDates = len(self.business_days)
         
-        self.sdate_idx = self.business_days.get_loc(self.first_bd_date)
+        self.sdate_idx = np.where(self.business_days >= self.startDate)[0][0]
+        assert self.sdate_idx > 0, "Start date must be in the business days."
         
         self.idxAssets_startDate = {}
         self.idxAssets_startRec = {}
@@ -63,10 +69,7 @@ class FeatureGroupDynamic():
         
         # asserts
         assert np.all([self.idxAssets_startRec[ticker] > 0 for ticker in self.idxAssets_startRec.keys()]), "All assets must have a start date greater than 0."
-        assert (
-            np.all([(self.idxAssets_end[ticker]-self.idxAssets_startRec[ticker]+1) == self.nDates for ticker in self.idxAssets_startRec.keys()]), 
-            "All assets must have the same number of dates."
-        )
+        assert np.all([(self.idxAssets_end[ticker]-self.idxAssets_startRec[ticker]+1) == self.nDates for ticker in self.idxAssets_startRec.keys()]), "All assets must have the same number of dates."
         
     def __preprocess(self):
         self.avgVolume = np.zeros((self.nDates))
