@@ -15,6 +15,9 @@ tools/*
 src/stockGroups/bin/*
 !src/stockGroups/bin/__init__.py
 
+src/featureAlchemy/bin/*
+!src/featureAlchemy/bin/__init__.py
+
 src/predictionmodule/bin/*
 !src/predictionmodule/bin/__init__.py
 
