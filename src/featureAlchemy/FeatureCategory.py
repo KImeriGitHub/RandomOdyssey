@@ -8,6 +8,10 @@ from src.common.AssetDataPolars import AssetDataPolars
 class FeatureCategory():
     operator = "alphavantage"
     
+    DEFAULT_PARAMS = {
+        'timesteps': 10,
+    }
+    
     # Class-level default parameters
     cat_alphavantage = [
         'other', 
@@ -27,8 +31,10 @@ class FeatureCategory():
         'consumer-cyclical'
     ]
     
-    def __init__(self, asset: AssetDataPolars):
+    def __init__(self, asset: AssetDataPolars, params: dict = None):
         self.asset = asset
+        self.params = {**self.DEFAULT_PARAMS, **(params or {})}
+        self.timesteps = self.params['timesteps']
         
         self.cat = self.cat_alphavantage if self.operator == "alphavantage" else self.cat_yfinance
     
@@ -49,4 +55,4 @@ class FeatureCategory():
         return features*scaleToNiveau
     
     def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
-        return np.empty((0, 0), dtype=np.float32)
+        return np.empty((self.timesteps, 0), dtype=np.float32)
