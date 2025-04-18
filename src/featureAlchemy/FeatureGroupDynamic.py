@@ -22,16 +22,6 @@ class FeatureGroupDynamic():
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
         
-        # --- Input Validation Asserts ---
-        assert isinstance(assetspl, dict) and assetspl, "assetspl must be a non-empty dictionary"
-        assert all(isinstance(ticker, str) for ticker in assetspl.keys()), "Asset keys must be strings (tickers)"
-        assert all(isinstance(asset, AssetDataPolars) for asset in assetspl.values()), "Asset values must be AssetDataPolars instances"
-        assert isinstance(startDate, pd.Timestamp), "startDate must be a pandas Timestamp"
-        assert isinstance(endDate, pd.Timestamp), "endDate must be a pandas Timestamp"
-        assert startDate <= endDate, "startDate must be less than or equal to endDate"
-        assert isinstance(lagList, list) and all(isinstance(lag, int) and lag > 0 for lag in lagList), "lagList must be a list of positive integers"
-        assert isinstance(monthHorizonList, list) and all(isinstance(h, int) and h > 0 for h in monthHorizonList), "monthHorizonList must be a list of positive integers"
-        
         self.assetspl = assetspl
         self.startDate = startDate
         self.endDate = endDate
@@ -60,7 +50,7 @@ class FeatureGroupDynamic():
         self.nDates = len(self.business_days)
         
         self.sdate_idx = self.business_days.get_loc(self.first_bd_date)
-                
+        
         self.idxAssets_startDate = {}
         self.idxAssets_startRec = {}
         self.idxAssets_end = {}
@@ -170,11 +160,11 @@ class FeatureGroupDynamic():
                     idx_ticker_adj_lag = idx_dict[ticker] - self.idxAssets_startRec[ticker] - lag
                     idx_ticker_adj_lag_MH = idx_dict[ticker] - self.idxAssets_startRec[ticker] - lag - m * self.idxLengthOneMonth
                     features.append(self.weightedIndex[idx_ticker_adj_lag]/self.weightedIndex[max(idx_ticker_adj_lag_MH-1, 0)]-1.0) #"FeatureGroup_WeightedIndexMHPct_lag_m{lag}_MH_{m}"
-                    
+            
             features = np.array(features, dtype=np.float32)
             self.featureDict[ticker] = features
         
-        #TODO: Cointegration features,
+        #TODO: Cointegration features, autocorrelation
         
         return self.featureDict
         
