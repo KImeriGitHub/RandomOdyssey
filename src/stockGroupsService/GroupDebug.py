@@ -28,7 +28,6 @@ class GroupDebug(IGroup):
     "INTU",
     "ISRG",
     "KLAC",
-    "LRCX",
     "MAR",
     "MU",
     "MSFT",
