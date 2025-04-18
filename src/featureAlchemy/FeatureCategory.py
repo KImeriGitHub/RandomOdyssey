@@ -49,4 +49,4 @@ class FeatureCategory():
         return features*scaleToNiveau
     
     def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
-        return np.array([[]])
+        return np.empty((0, 0), dtype=np.float32)
