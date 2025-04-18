@@ -90,7 +90,6 @@ class FeatureFinancialData():
         'totalCurrentLiabilities',
         'totalShareholderEquity',
         'operatingCashflow',
-        'profitLoss',
     ]
     
     catav_ann_lag = [
@@ -101,7 +100,6 @@ class FeatureFinancialData():
         'totalCurrentLiabilities',
         'totalShareholderEquity',
         'operatingCashflow',
-        'profitLoss',
     ]
     
     catav_binary = [
