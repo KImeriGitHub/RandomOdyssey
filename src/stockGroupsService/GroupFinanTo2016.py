@@ -59,7 +59,6 @@ class GroupFinanTo2016(IGroup):
     'totalRevenue',
     'ebitda',
     'totalAssets',
-    'profitLoss',
   ]
 
   quarterly_columns = [
@@ -79,7 +78,6 @@ class GroupFinanTo2016(IGroup):
     'totalShareholderEquity',
     'commonStockSharesOutstanding',
     'operatingCashflow',
-    'profitLoss',
   ]
     
   annual_columns = [
@@ -93,5 +91,4 @@ class GroupFinanTo2016(IGroup):
     'totalCurrentLiabilities',
     'totalShareholderEquity',
     'operatingCashflow',
-    'profitLoss',
   ]
