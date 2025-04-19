@@ -3,6 +3,7 @@ import pandas as pd
 import polars as pl
 from typing import Dict, List
 import itertools
+import logging
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
@@ -22,7 +23,6 @@ class FeatureMain():
         'idxLengthOneMonth': 21,
         'fouriercutoff': 15,
         'multFactor': 8,
-        'monthsHorizon': 13,
         'timesteps': 15,
     }
 
@@ -32,13 +32,20 @@ class FeatureMain():
                  endDate:pd.Timestamp, 
                  lagList: List[int],
                  monthHorizonList: List[int],
-                 params: dict = None):
+                 params: dict = None,
+                 logger: logging.Logger = None):
         
         self.assets = assets
         self.startDate = startDate
         self.endDate = endDate
         self.lagList = lagList
         self.monthHorizonList = monthHorizonList
+        
+        if logger is None:
+            logging.basicConfig(level=logging.INFO, format="%(message)s")
+            self.logger = logging.getLogger(__name__)
+        else:   
+            self.logger = logger
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -47,7 +54,6 @@ class FeatureMain():
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.fouriercutoff = self.params['fouriercutoff']
         self.multFactor = self.params['multFactor']
-        self.monthsHorizon = self.params['monthsHorizon']
         self.timesteps = self.params['timesteps']
         
         # get business days
@@ -76,7 +82,7 @@ class FeatureMain():
         assert np.all([(self.idxAssets_end[ticker]-self.idxAssets_start[ticker]+1) == self.nDates for ticker in self.idxAssets_start.keys()]), "All assets must have the same number of dates."
         
         self.FGD = FeatureGroupDynamic(self.assets, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
-        print(f"FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
+        self.logger.info(f"  FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
     
     def getTreeFeatures(self) -> pl.DataFrame:
         # 1) gather feature‑name lists
@@ -96,13 +102,14 @@ class FeatureMain():
         # 2) preallocate arrays
         nD, nA, nF = self.nDates, self.nAssets, len(flat_features)
         arr     = np.empty((nD, nA, nF), dtype=np.float32)
+        metaarr = np.empty((nD, nA, 3), dtype=object)  # [date,ticker,close]
         
         # 3) fill arrays
         niveau = 1.0
         idx_dict = self.idxAssets_start.copy()
         FGD_tick_date = {date: self.FGD.apply(date, {k: v + i for k, v in idx_dict.items()}) for i, date in enumerate(self.business_days)}
         for tidx, ticker in enumerate(self.assets.keys()):
-            print(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
+            self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
             FC = FeatureCategory(self.assets[ticker], self.params)
             FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
             FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
@@ -111,7 +118,10 @@ class FeatureMain():
             FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
             idx_dict = {k: v + 1 for k, v in idx_dict.items()}
             for date_idx, date in enumerate(self.business_days):
-                print(f"Processing date {date} ({date_idx+1}/{self.nDates})")
+                metaarr[date_idx, tidx, 0] = date
+                metaarr[date_idx, tidx, 1] = ticker
+                metaarr[date_idx, tidx, 2] = self.assets[ticker].shareprice["Close"].item(self.idxAssets_start[ticker] + date_idx)
+
                 arr_loop = [
                     FC.apply(niveau),
                     FM.apply(date, niveau, self.idxAssets_start[ticker] + date_idx),
@@ -124,22 +134,10 @@ class FeatureMain():
                 arr[date_idx, tidx, :] = np.concatenate(arr_loop)
                 
         # 4) reshape to (nD*nA, nF) and build Polars DataFrame
-        arr_flat = arr.reshape(nD * nA, nF)
-        dates    = np.repeat(self.business_days, self.nAssets)
-        tickers  = np.tile(list(self.assets.keys()), self.nDates)
-        close    = np.array([
-            self.assets[ticker].shareprice["Close"].item(self.idxAssets_start[ticker] + i)
-            for ticker in self.assets.keys() for i in range(self.nDates)
-        ])
-
-        df = pl.DataFrame({
-            "date":   dates,
-            "ticker": tickers,
-            "close": close,
-            **{feat: arr_flat[:, i] for i, feat in enumerate(flat_features)}
-        })
+        metaarr  = metaarr.reshape(nD * nA, 3)
+        arr = arr.reshape(nD * nA, nF)
         
-        return df
+        return metaarr, arr, flat_features
         
     def getTimeFeatures(self) -> tuple[np.array, np.array]:
         # 1) gather feature‑name lists
@@ -165,7 +163,7 @@ class FeatureMain():
         idx_dict = self.idxAssets_start.copy()
         FGD_tick_date = {date: self.FGD.apply_timeseries(date, {k: v + i for k, v in idx_dict.items()}) for i, date in enumerate(self.business_days)}
         for tidx, ticker in enumerate(self.assets.keys()):
-            print(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
+            self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
             FC = FeatureCategory(self.assets[ticker], self.params)
             FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
             FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
@@ -174,7 +172,6 @@ class FeatureMain():
             FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
             idx_dict = {k: v + 1 for k, v in idx_dict.items()}
             for date_idx, date in enumerate(self.business_days):
-                print(f"Processing date {date} ({date_idx+1}/{self.nDates})")
                 metaarr[date_idx, tidx, 0] = date
                 metaarr[date_idx, tidx, 1] = ticker
                 metaarr[date_idx, tidx, 2] = self.assets[ticker].shareprice["Close"].item(self.idxAssets_start[ticker] + date_idx)

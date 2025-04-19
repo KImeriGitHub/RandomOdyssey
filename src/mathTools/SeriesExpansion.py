@@ -115,19 +115,23 @@ class SeriesExpansion():
     @staticmethod
     def getFourierInterpFunct(res_cos, res_sin, resarr: np.array):
         # Add fourier approximation error to the features
-        N = len(resarr)
-        t = np.linspace(-np.pi, 0, N)
-        x = np.arange(N)
-        fx0: float = resarr[0]
-        fxend: float = resarr[N-1]
-
-        f_reconstructed = np.zeros(N)
-        rsme = np.zeros(len(res_cos))
-        for n in range(0, len(res_cos)):
-            f_reconstructed += res_cos[n] * np.cos(n * t) + res_sin[n] * np.sin(n * t)
-
-            # Lift the reconstruction to the original function
-            f_lifted = f_reconstructed + fx0 + (fxend-fx0)*(x/(N-1))
-            rsme[n] = np.sqrt(np.mean(np.abs(f_lifted - resarr) ** 2))
-        
+        N  = resarr.size
+        M  = len(res_cos)                      # number of Fourier terms
+        t  = np.linspace(-np.pi, 0.0, N)       # shape (N,)
+        x  = np.arange(N)
+        fx0, fxend = resarr[0], resarr[-1]
+        lift = fx0 + (fxend - fx0) * (x / (N - 1))   # shape (N,)
+    
+        # ---- pre‑compute trig matrices ----------------------------------------
+        n   = np.arange(M)[:, None]            # shape (M,1)
+        trig = (np.asarray(res_cos)[:, None] * np.cos(n * t) +
+                np.asarray(res_sin)[:, None] * np.sin(n * t))   # shape (M,N)
+    
+        # ---- cumulative reconstruction & error --------------------------------
+        f_rec_cum = np.cumsum(trig, axis=0)           # shape (M,N)
+        f_lifted_cum = f_rec_cum + lift               # broadcast
+        diff = f_lifted_cum - resarr                  # broadcast
+        rsme = np.sqrt(np.mean(diff**2, axis=1))      # shape (M,)
+    
+        f_lifted = f_lifted_cum[-1]                   # final reconstruction
         return f_lifted, rsme
