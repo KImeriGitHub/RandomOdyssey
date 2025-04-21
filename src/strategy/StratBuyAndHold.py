@@ -30,6 +30,6 @@ class StratBuyAndHold(IStrategy):
             if asset is not None:
                 priceData = asset.shareprice[self.__assetdateIdx[targetTicker]]
                 if not priceData.empty:
-                    price: float = float(priceData['Adj Close'])
+                    price: float = float(priceData['AdjClose'])
                     quantity = np.floor((cashPerStock - ActionCost().buy(cashPerStock)) / price)
                     self.__portfolio.buy(targetTicker, quantity, price)
