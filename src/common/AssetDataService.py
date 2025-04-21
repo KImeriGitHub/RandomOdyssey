@@ -12,7 +12,7 @@ class AssetDataService:
     @staticmethod
     def defaultInstance(ticker: str = "", isin: str = "") -> AssetData:
         # Define column schemas for each DataFrame
-        shareprice_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume', 'Dividends', 'Splits']
+        shareprice_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'AdjClose', 'Volume', 'Dividends', 'Splits']
         quarterly_cols = [
             'quarter', 'reportedDate', 'reportedEPS', 'estimatedEPS', 'surprise',
             'surprisePercentage', 'reportTime', 'grossProfit', 'totalRevenue', 'ebit',
