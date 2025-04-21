@@ -14,14 +14,14 @@ class AssetDataService:
         # Define column schemas for each DataFrame
         shareprice_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'AdjClose', 'Volume', 'Dividends', 'Splits']
         quarterly_cols = [
-            'quarter', 'reportedDate', 'reportedEPS', 'estimatedEPS', 'surprise',
+            'fiscalDateEnding', 'reportedDate', 'reportedEPS', 'estimatedEPS', 'surprise',
             'surprisePercentage', 'reportTime', 'grossProfit', 'totalRevenue', 'ebit',
             'ebitda', 'totalAssets', 'totalCurrentLiabilities',
             'totalShareholderEquity', 'commonStockSharesOutstanding',
             'operatingCashflow', 'profitLoss'
         ]
         annual_cols = [
-            'year', 'reportedEPS', 'grossProfit', 'totalRevenue', 'ebit', 'ebitda',
+            'fiscalDateEnding', 'reportedEPS', 'grossProfit', 'totalRevenue', 'ebit', 'ebitda',
             'totalAssets', 'totalCurrentLiabilities', 'totalShareholderEquity',
             'operatingCashflow', 'profitLoss'
         ]
@@ -113,3 +113,16 @@ class AssetDataService:
         adpl.financials_annually = pl.from_pandas(ad.financials_annually)
 
         return adpl
+    
+    @staticmethod
+    def copy(ad: AssetData) -> AssetData:
+        # Create a new instance of AssetData with the same attributes
+        return AssetData(
+            ticker=ad.ticker,
+            isin=ad.isin,
+            about=ad.about.copy() if ad.about else {},
+            sector=ad.sector,
+            shareprice=ad.shareprice.copy(),
+            financials_quarterly=ad.financials_quarterly.copy(),
+            financials_annually=ad.financials_annually.copy()
+        )

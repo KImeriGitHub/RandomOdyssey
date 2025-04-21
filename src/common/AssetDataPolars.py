@@ -37,7 +37,7 @@ class AssetDataPolars:
     ##############
     financials_quarterly: pl.DataFrame = None 
     # Columns
-    #  'quarter'                      : str  (YYYY-1, YYYY-2, YYYY-3, YYYY-4)
+    #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
     #  'reportedDate'                 : str  (YYYY-MM-DD)
     #  'reportedEPS'                  : float
     #  'estimatedEPS'                 : str  (YYYY-MM-DD)
@@ -57,7 +57,7 @@ class AssetDataPolars:
     
     financials_annually: pl.DataFrame = None
     # Columns
-    #  'year'                         : str (YYYY)
+    #  'fiscalDateEnding'             : str (YYYY-MM-DD)
     #  'reportedEPS'                  : float
     #  'grossProfit'                  : float
     #  'totalRevenue'                 : float
