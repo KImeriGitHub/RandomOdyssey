@@ -95,11 +95,10 @@ class CleanData():
     def financial_lastRow_removeIfOutOfFiscal(fin: pd.DataFrame) -> pd.DataFrame:
         # Remove last row if the date difference between last to second is not equal to the difference between second to third and third to fourth
         if len(fin) > 3:
-            m1 = fin.iloc[-1]['fiscalDateEnding'].month
-            m2 = fin.iloc[-2]['fiscalDateEnding'].month
-            d1 = fin.iloc[-1]['fiscalDateEnding'].day
-            d2 = fin.iloc[-2]['fiscalDateEnding'].day
-            if m1 != m2 and d1 != d2:
+            date_m1 = fin.iloc[-1]['fiscalDateEnding']
+            date_m2 = fin.iloc[-2]['fiscalDateEnding']
+            date_m3 = fin.iloc[-3]['fiscalDateEnding']
+            if (date_m1 - date_m2) < (date_m2-date_m3) * 0.95:
                 fin = fin.iloc[:-1]
 
         return fin
