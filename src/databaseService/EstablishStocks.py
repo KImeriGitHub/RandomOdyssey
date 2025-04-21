@@ -1,69 +1,68 @@
 import time
 import numpy as np
+import logging
 from src.common.AssetData import AssetData
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.YamlTickerInOut import YamlTickerInOut 
 from src.databaseService.OutsourceLoader import OutsourceLoader
+from src.common.AssetDataService import AssetDataService
+
+logger = logging.getLogger(__name__)
 
 class EstablishStocks:
     def __init__(self, 
-                 dirPathManualTicker: str, 
-                 dirPathLoadedTicker:str, 
-                 manualYamlName: str, 
-                 loadedYamlName: str,
+                 tickerList: list[str],
                  operator: str = "yfinance",
                  apiKey: str = ""):
-        self.dirPathToManualTicker = dirPathManualTicker
-        self.dirPathToLoadedTicker = dirPathLoadedTicker
-        self.manualYamlName = manualYamlName
-        self.loadedYamlName = loadedYamlName
+        self.tickerList = tickerList
         self.operator = operator
         self.apiKey = apiKey
-
-    def __stockList(self, operator: str = "") -> list:
-        # Generate list of all stocks
-        tickersDict = YamlTickerInOut(self.dirPathToManualTicker).loadFromFile(self.manualYamlName)
-
-        stockList: list = tickersDict[0]['stocks']
-        stockList.extend(tickersDict[1]['stocks'])
-        stockList.extend(tickersDict[2]['stocks'])
-        if operator != "alphaVantage": #Alpha Vantage has no Swiss Data
-            for ticker in tickersDict[3]['stocks']:
-                if isinstance(ticker, str) and ticker.lower()[0:1] == 'ch':
-                    stockList.append(ticker)
-                    continue
-                if isinstance(ticker, str) and ticker.lower()[0:1] == 'us':
-                    continue # discard
-                if isinstance(ticker, str) and ticker.lower().endswith('.sw'):
-                    stockList.append(ticker)
-                    continue # discard
-                stockList.append(ticker+'.SW')
-            
-        if not stockList:
-            raise ValueError("No stocks found in the YAML file.")
-        
-        return stockList
     
-    def loadSaveAssets(self):
-        stockList = self.__stockList()
-        stockList = np.unique(stockList)
-        fileOut = AssetFileInOut("src/database")
+    def updateAssets(self):
+        stockList: list[str] = np.unique(self.tickerList).tolist()
+        fileInOut = AssetFileInOut("src/database")
+        yamlInOut = YamlTickerInOut("src/stockGroups")
         outsourceLoader = OutsourceLoader(outsourceOperator=self.operator, api_key=self.apiKey)
-        allTickersYamlList = []
+        
+        allTickersYamlList = yamlInOut.loadFromFile("group_all")
+        
+        # Make sure its a list of strings
+        assert isinstance(allTickersYamlList, list), "Not a list"
+        assert all(isinstance(t, str) for t in allTickersYamlList), "Not all strings"
+        
         for ticker in stockList:
+            tStart = time.time()
+            is_new_asset = False
+            
+            # Load current asset from database
+            if fileInOut.exists(ticker):
+                asset: AssetData = fileInOut.loadFromFile(ticker)
+                allTickersYamlList.append(asset.ticker) if asset.ticker not in allTickersYamlList else None
+            else:
+                asset: AssetData = AssetDataService.defaultInstance(ticker=ticker)
+                is_new_asset = True
+            
+            # Try updating asset data
             try:
-                ticker = str(ticker)
-                tStart = time.time()
-                asset: AssetData = outsourceLoader.load(ticker=ticker)
-                fileOut.saveToFile(asset)
-                print(f"Got Stock data for {ticker}.")
-                allTickersYamlList.append(asset.ticker)
+                asset_new: AssetData = outsourceLoader.update(asset = asset, ticker=ticker)
+                
+                fileInOut.saveToFile(asset_new)
+                if is_new_asset:
+                    allTickersYamlList.append(asset_new.ticker)
+                
+                logger.info(f"Got Stock data for {ticker}.")
+                
+                # Delay due to max api calls
                 tEnd = time.time()
                 if self.operator == "alphaVantage":
-                    time.sleep(max(8.5 - (tEnd-tStart),0)) # due to max api calls
+                    time.sleep(max(8.5 - (tEnd-tStart),0))
                 if self.operator == "yfinance":
                     time.sleep(max(2 - (tEnd-tStart),0))
-            except:
-                print(f"EXCEPTION. Stock data for {ticker} not retrievable.")
+            
+            except Exception as e:
+                logger.info(f"EXCEPTION. Stock data for {ticker} not retrievable. Error message: {e}")
+                
         
-        YamlTickerInOut(self.dirPathToLoadedTicker).saveToFile(allTickersYamlList, self.loadedYamlName)
+        # Save all tickers to YAML file
+        allTickersYamlList = np.unique(allTickersYamlList).tolist()
+        yamlInOut.saveToFile(allTickersYamlList, "group_all")

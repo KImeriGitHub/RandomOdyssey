@@ -1,4 +1,3 @@
-# RandomOdyssey\src\common\AssetFileInOut.py
 import os
 import pandas as pd
 from src.common.AssetData import AssetData
@@ -29,3 +28,13 @@ class AssetFileInOut:
             filename += '.pkl'
         file_path = os.path.join(self.directoryPath, f"{filename}")
         return pd.read_pickle(file_path)
+
+    def exists(self, tickername: str) -> bool:
+        """
+        Return True if a file named <tickername>.pkl (or <tickername> if you already included .pkl)
+        exists in the directory.
+        """
+        if not tickername.lower().endswith('.pkl'):
+            tickername += '.pkl'
+        file_path = os.path.join(self.directoryPath, tickername)
+        return os.path.isfile(file_path)
