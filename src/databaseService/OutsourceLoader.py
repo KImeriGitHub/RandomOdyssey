@@ -64,7 +64,7 @@ class OutsourceLoader:
         try:
             company_overview, _ = fd.get_company_overview(symbol=tickerHandle)
             
-            assetData.about = company_overview.to_dict(orient='records')[0]
+            new_asset.about = company_overview.to_dict(orient='records')[0]
             catDict = {
                 'OTHER': 'other', 
                 'MANUFACTURING':'industrials', 
@@ -75,7 +75,7 @@ class OutsourceLoader:
                 'ENERGY & TRANSPORTATION': 'energy', 
                 'TRADE & SERVICES': 'consumer-cyclical', 
             }
-            assetData.sector = catDict[company_overview["Sector"].iloc[0]]
+            new_asset.sector = catDict[company_overview["Sector"].iloc[0]]
         except (requests.exceptions.RequestException, ValueError, KeyError) as e:
             # Log the error or pass as required
             logger.info(f"API call company_overview failed for {tickerHandle}: {str(e)}")
@@ -102,16 +102,15 @@ class OutsourceLoader:
 
             financials_annually, financials_quarterly = parser.to_pandas()
             
-            assetData.financials_quarterly = CleanData.financial_fiscalDateIncongruence(assetData.financials_quarterly, daysDiscrep = 15)
-            assetData.financials_annually = CleanData.financial_fiscalDateIncongruence(assetData.financials_annually, daysDiscrep = 60)
+            financials_quarterly['reportedDate'] = financials_quarterly['reportedDate'].apply(lambda ts: str(ts.date()))
+            financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quarterly, daysDiscrep = 15)
+            financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually, daysDiscrep = 60)
             financials_annually = CleanData.financial_lastRow_removeIfOutOfFiscal(financials_annually)
             
-            if not company_overview is None:
-                assetData.financials_annually = CleanData.financial_lastRow_fillWithCompanyOverview_AV(assetData.financials_annually, company_overview)
-                
-            assetData.financials_quarterly = CleanData.financial_lastRow_rmIfNanInKeyValues_AV(assetData.financials_quarterly)
-            assetData.financials_annually = CleanData.financial_lastRow_rmIfNanInKeyValues_AV(assetData.financials_annually)
+            mergerService.merge_financials(financials_annually, financials_quarterly)
             
         except (requests.exceptions.RequestException, ValueError, KeyError, ImportError) as e:
             # Log the error or pass as required
             logger.info(f"API call fundametal data failed for {tickerHandle} due to error: {str(e)}")
+            
+        return new_asset
