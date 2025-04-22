@@ -52,7 +52,6 @@ class AssetData:
     #  'totalShareholderEquity'       : float
     #  'commonStockSharesOutstanding' : float
     #  'operatingCashflow'            : float
-    #  'profitLoss'                   : float
     
     financials_annually: pd.DataFrame = None
     # Columns
@@ -66,6 +65,5 @@ class AssetData:
     #  'totalCurrentLiabilities'      : float
     #  'totalShareholderEquity'       : float
     #  'operatingCashflow'            : float
-    #  'profitLoss'                   : float
 
     

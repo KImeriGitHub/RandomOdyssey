@@ -48,7 +48,6 @@ class FeatureFinancialData():
         'totalShareholderEquity',
         'operatingCashflow',
         'changeInOperatingLiabilities',
-        'profitLoss',
         'cashflowFromInvestment',
         'commonStockSharesOutstanding',
     ]
@@ -74,7 +73,6 @@ class FeatureFinancialData():
         'totalShareholderEquity',
         'operatingCashflow',
         'changeInOperatingLiabilities',
-        'profitLoss',
         'cashflowFromInvestment',
     ]
     

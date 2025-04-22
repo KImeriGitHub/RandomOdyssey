@@ -18,12 +18,12 @@ class AssetDataService:
             'surprisePercentage', 'reportTime', 'grossProfit', 'totalRevenue', 'ebit',
             'ebitda', 'totalAssets', 'totalCurrentLiabilities',
             'totalShareholderEquity', 'commonStockSharesOutstanding',
-            'operatingCashflow', 'profitLoss'
+            'operatingCashflow'
         ]
         annual_cols = [
             'fiscalDateEnding', 'reportedEPS', 'grossProfit', 'totalRevenue', 'ebit', 'ebitda',
             'totalAssets', 'totalCurrentLiabilities', 'totalShareholderEquity',
-            'operatingCashflow', 'profitLoss'
+            'operatingCashflow'
         ]
 
         # Create empty DataFrames with specified columns

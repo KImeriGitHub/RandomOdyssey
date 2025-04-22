@@ -53,7 +53,6 @@ class AssetDataPolars:
     #  'totalShareholderEquity'       : float
     #  'commonStockSharesOutstanding' : float
     #  'operatingCashflow'            : float
-    #  'profitLoss'                   : float
     
     financials_annually: pl.DataFrame = None
     # Columns
@@ -67,4 +66,3 @@ class AssetDataPolars:
     #  'totalCurrentLiabilities'      : float
     #  'totalShareholderEquity'       : float
     #  'operatingCashflow'            : float
-    #  'profitLoss'                   : float
