@@ -62,11 +62,9 @@
 - CAH
 - CAT
 - CB
-- CBRE
 - CCI
 - CCL
 - CDNS
-- CE
 - CHD
 - CHRW
 - CI
@@ -88,7 +86,6 @@
 - CPRT
 - CPT
 - CRL
-- CRM
 - CSCO
 - CSGP
 - CSX
@@ -105,11 +102,9 @@
 - DHI
 - DHR
 - DIS
-- DLR
 - DLTR
 - DOC
 - DOV
-- DPZ
 - DRI
 - DTE
 - DUK
@@ -138,7 +133,6 @@
 - EW
 - EXC
 - EXPD
-- EXR
 - F
 - FAST
 - FCX
@@ -159,7 +153,6 @@
 - GIS
 - GL
 - GLW
-- GOOGL
 - GPC
 - GPN
 - GRMN
@@ -221,7 +214,6 @@
 - LOW
 - LRCX
 - LUV
-- LVS
 - MAA
 - MAR
 - MAS
@@ -235,7 +227,6 @@
 - MGM
 - MHK
 - MKC
-- MKTX
 - MLM
 - MMC
 - MMM
@@ -243,7 +234,6 @@
 - MO
 - MOH
 - MOS
-- MPWR
 - MRK
 - MS
 - MSFT
@@ -260,6 +250,7 @@
 - NKE
 - NOC
 - NRG
+- NSC
 - NTAP
 - NTRS
 - NUE

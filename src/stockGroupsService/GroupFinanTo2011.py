@@ -1,95 +1,109 @@
 import pandas as pd
+from datetime import datetime, timedelta
+
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DPd
 
+import logging
+logger = logging.getLogger(__name__)
+
 class GroupFinanTo2011(IGroup):
 
-  def groupName(self) -> str:
-   return "group_finanTo2011"
+    def groupName(self) -> str:
+        return "group_finanTo2011"
 
-  def checkAsset(self, asset: AssetData) -> bool:
-    quarterly_entries = 4*13
-    annual_entries = 13
-    
-    if asset.financials_quarterly is None:
-      return False
-    if asset.financials_annually is None:
-      return False
-    if not asset.financials_quarterly.columns.__contains__('fiscalDateEnding'):
-      return False
-    if not asset.financials_annually.columns.__contains__('fiscalDateEnding'):
-      return False
-    if len(asset.financials_annually) < annual_entries:
-      return False
-    if len(asset.financials_quarterly) < quarterly_entries:
-      return False
-    if asset.financials_quarterly["reportedEPS"].tail(quarterly_entries).isnull().sum() > 0:
-      return False
-    
-    # Check if the asset has no empty entries in the quarterly financials in the columns quarterly_columns and annual financials in the columns annual_columns for the last n entries
-    buffer_quar = 0
-    buffer_ann = 0
-    if asset.financials_quarterly[GroupFinanTo2011.quarterly_columns].tail(quarterly_entries).isnull().sum().sum() > buffer_quar:
-      return False
-    if asset.financials_annually[GroupFinanTo2011.annual_columns].tail(annual_entries).isnull().sum().sum() > buffer_ann:
-      return False
-    if all([asset.financials_quarterly[col].tail(quarterly_entries).isnull().sum() > 0 for col in GroupFinanTo2011.quarterly_columns]):
-      return False
-    if all([asset.financials_annually[col].tail(annual_entries).isnull().sum() > 0 for col in GroupFinanTo2011.annual_columns]):
-      return False
-    
-    adf: pd.DataFrame = asset.shareprice
-    first_date: pd.Timestamp = adf.index.min()
-    max_date: pd.Timestamp = adf.index.max()
-    current_date: pd.Timestamp = pd.Timestamp.now(tz=adf.index.tz)
-    #df_year = asset.financials_quarterly[asset.financials_quarterly['fiscalDateEnding'].dt.year == 2011]
-    idx2008 = DPd(adf).getNextLowerOrEqualIndex(pd.Timestamp(year=2008, month=1, day=7, tz='UTC'))
-    idx2025 = DPd(adf).getNextLowerOrEqualIndex(pd.Timestamp(year=2024, month=12, day=13, tz='UTC'))
-
-    return (
-      ((current_date - first_date).days >= 20 * 366.0) 
-      and ((current_date - max_date).days < 60)
-      and (idx2025-idx2008 >= 255*16) )
+    def checkAsset(self, asset: AssetData, year: int = 2011) -> bool:
+        start: pd.Timestamp = pd.to_datetime(f'{year}-01-01')
+        today: pd.Timestamp = pd.to_datetime(datetime.now())
+        annual_entries = today.year - start.year
+        quarterly_entries = (today.year - start.year) * 4 + (today.month - start.month) // 3 + 1
   
-  compact_columns = [
-    'fiscalDateEnding',
-    'reportedEPS',
-    'grossProfit',
-    'totalRevenue',
-    'ebitda',
-    'totalAssets',
-  ]
+        if asset.financials_quarterly is None:
+            return False
+        if asset.financials_annually is None:
+            return False
+        if not asset.financials_quarterly.columns.__contains__('fiscalDateEnding'):
+            return False
+        if not asset.financials_annually.columns.__contains__('fiscalDateEnding'):
+            return False
+        if len(asset.financials_annually) < annual_entries:
+            return False
+        if len(asset.financials_quarterly) < quarterly_entries:
+            return False
+  
+        # Check if the asset has no empty entries in the annual financials
+        mask_ann = asset.financials_annually['fiscalDateEnding'].apply(lambda ts: pd.to_datetime(ts)) >= start
+        if asset.financials_annually[mask_ann].isnull().any().any():
+            return False
+  
+        # Check if the asset has no empty entries in the quarterly financials except for the last row if date within 30 days
+        df = asset.financials_quarterly.copy()
+        mask_quar = df['fiscalDateEnding'].apply(lambda ts: pd.to_datetime(ts)) >= start
+        df['fiscalDateEnding'] = pd.to_datetime(df['fiscalDateEnding'])
+        last_date = df['fiscalDateEnding'].max()
+        cutoff = today - pd.Timedelta(days=30)
+        if last_date >= cutoff:
+            # allow NaNs only in the last row
+            mask = df['fiscalDateEnding'] == last_date
+            df_hist: pd.DataFrame = df.loc[~mask & mask_quar]
+            if df_hist.isnull().any().any():
+                return False
+        else:
+            if df[mask_quar].isnull().any().any():
+                return False
+  
+        sp: pd.DataFrame = asset.shareprice.copy()
+        sp['Date'] = pd.to_datetime(sp['Date'])
+        df = sp[sp['Date'] >= start]
+  
+        # Check if the shareprice has more than 250*years entries
+        if df.empty:
+            return False
+  
+        last: pd.Timestamp = df['Date'].max()
+  
+        if last < today - pd.Timedelta(days=20):
+            logging.warning(f"Last date in shareprice is too old: {last}")
+            return False
+  
+        years = (last - start).days / 365.0
+        required = int(250 * years)
+  
+        if len(df) < required:
+            return False
+  
+        return True
 
-  quarterly_columns = [
-    'fiscalDateEnding',
-    'reportedDate',
-    'reportedEPS',
-    'estimatedEPS',
-    'surprise',
-    'surprisePercentage',
-    'reportTime',
-    'grossProfit',
-    'totalRevenue',
-    'ebit',
-    'ebitda',
-    'totalAssets',
-    'totalCurrentLiabilities',
-    'totalShareholderEquity',
-    'commonStockSharesOutstanding',
-    'operatingCashflow',
-  ]
-    
-  annual_columns = [
-    'fiscalDateEnding',
-    'reportedEPS',
-    'grossProfit',
-    'totalRevenue',
-    'ebit',
-    'ebitda',
-    'totalAssets',
-    'totalCurrentLiabilities',
-    'totalShareholderEquity',
-    'operatingCashflow',
-  ]
+    quarterly_columns = [
+        'fiscalDateEnding'            
+        'reportedDate'                
+        'reportedEPS'                 
+        'estimatedEPS'                
+        'surprise'                    
+        'surprisePercentage'          
+        'reportTime'                  
+        'grossProfit'                 
+        'totalRevenue'                
+        'ebit'                        
+        'ebitda'                      
+        'totalAssets'                 
+        'totalCurrentLiabilities'     
+        'totalShareholderEquity'      
+        'commonStockSharesOutstanding'
+        'operatingCashflow'           
+    ]
+
+    annual_columns = [
+        'fiscalDateEnding'        
+        'reportedEPS'             
+        'grossProfit'             
+        'totalRevenue'            
+        'ebit'                    
+        'ebitda'                  
+        'totalAssets'             
+        'totalCurrentLiabilities' 
+        'totalShareholderEquity'  
+        'operatingCashflow'       
+    ]

@@ -103,7 +103,7 @@ class Merger_AV():
         full_ann = full_ann[cols_ann]
         full_quar = full_quar[cols_quar]
 
-        is_updated_ann = False
+        cn_updated_ann = 0
         for _, new in full_ann.iterrows():
             date: dt.date = new['fiscalDateEnding']
             mask = existing_ann['fiscalDateEnding'] == date
@@ -112,7 +112,7 @@ class Merger_AV():
                 for col in existing_ann.columns.drop('fiscalDateEnding'):
                     if pd.isna(existing_ann.at[ex_idx, col]):
                         existing_ann.at[ex_idx, col] = new[col]
-                        is_updated_ann = True
+                        cn_updated_ann += 1
             else:
                 # 2) A has not that date: check if any in same year
                 year_mask = existing_ann['fiscalDateEnding'].apply(lambda d: d.year) == date.year
@@ -124,13 +124,13 @@ class Merger_AV():
                         pass
                     else:
                         existing_ann = pd.concat([existing_ann, pd.DataFrame([new], columns=existing_ann.columns)], ignore_index=True)
-                    is_updated_ann = True
+                    cn_updated_ann += 1
                 else:
                     # 2b) some entry in that year → log and skip
                     logger.info(f"  DB annual fiscal date differs from new date. Year {date.year}.")
         
         today = dt.now().date()
-        is_updated_quar = False
+        cn_updated_quar = 0
         for _, new in full_quar.iterrows():
             date = new['fiscalDateEnding']
             mask = existing_quar['fiscalDateEnding'] == date
@@ -138,7 +138,7 @@ class Merger_AV():
                 for col in existing_quar.columns.drop('fiscalDateEnding'):
                     if pd.isna(existing_quar.loc[mask, col].iloc[0]):
                         existing_quar.loc[mask, col] = new[col]
-                        is_updated_quar = True
+                        cn_updated_quar += 1
             else:
                 age = (today - date).days
                 if 0 <= age <= 31:
@@ -149,7 +149,7 @@ class Merger_AV():
                     else:
                         existing_quar = pd.concat([existing_quar, pd.DataFrame([new], columns=existing_quar.columns)], ignore_index=True)
                     logger.info(f"  New quarterly fiscal statement in last month.")
-                    is_updated_quar = True
+                    cn_updated_quar += 1
                     
                 else:
                     q = (date.month - 1) // 3 + 1
@@ -162,7 +162,7 @@ class Merger_AV():
                             pass
                         else:
                             existing_quar = pd.concat([existing_quar, pd.DataFrame([new], columns=existing_quar.columns)], ignore_index=True)
-                        is_updated_quar = True
+                        cn_updated_quar += 1
                     else:
                         logger.info(f"  DB quarterly fiscal date differs from new date. Year {date.year} month {date.month}.")
             
@@ -171,10 +171,10 @@ class Merger_AV():
         existing_ann['fiscalDateEnding']  = existing_ann['fiscalDateEnding'].apply(lambda ts: str(ts))
         existing_quar['fiscalDateEnding'] = existing_quar['fiscalDateEnding'].apply(lambda ts: str(ts))
         
-        if is_updated_quar:
-            logger.info(f"  Updated {len(existing_quar)} quarterly financial statements for ticker {self.asset.ticker}.")
-        if is_updated_ann:
-            logger.info(f"  Updated {len(existing_ann)} annual financial statements for ticker {self.asset.ticker}.")
+        if cn_updated_quar>0:
+            logger.info(f"  Updated quarterly financial statements on {len(cn_updated_quar)} rows for ticker {self.asset.ticker}.")
+        if cn_updated_ann>0:
+            logger.info(f"  Updated annual financial statements on {len(cn_updated_ann)} rows for ticker {self.asset.ticker}.")
             
         self.asset.financials_annually = existing_ann
         self.asset.financials_quarterly = existing_quar

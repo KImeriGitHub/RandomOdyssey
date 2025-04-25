@@ -6,6 +6,9 @@ from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 
+import logging
+logger = logging.getLogger(__name__)
+
 class GroupManager:
     def __init__(self, databasePath: str, stockGroupPath: str, groupClasses: List[IGroup]):
         self.databasePath = databasePath
@@ -24,7 +27,7 @@ class GroupManager:
         assets: Dict[str, AssetData] = {}
         for ticker in all_stocks_list:
             assets[ticker] = AssetFileInOut(self.databasePath).loadFromFile(ticker)
-            print(f"Processing asset: {assets[ticker].ticker}")
+            logger.info(f"Processing asset: {assets[ticker].ticker}")
             for criterion in self.groupClasses:
                 if criterion.checkAsset(assets[ticker]):
                     group_lists[criterion.groupName()].append(assets[ticker].ticker)

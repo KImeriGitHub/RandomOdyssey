@@ -9,10 +9,7 @@
 - ABEV
 - ABG
 - ABM
-- ABR
 - ABT
-- ACAD
-- ACCS
 - ACGL
 - ACHC
 - ACHV
@@ -47,12 +44,10 @@
 - AGI
 - AGM
 - AGM-A
-- AGO
 - AGX
 - AGYS
 - AHT
 - AIG
-- AIM
 - AIN
 - AIOT
 - AIR
@@ -75,10 +70,8 @@
 - ALKS
 - ALL
 - ALNT
-- ALNY
 - ALOT
 - ALRS
-- ALTO
 - ALTS
 - ALV
 - ALX
@@ -90,7 +83,6 @@
 - AMGN
 - AMKR
 - AMN
-- AMPG
 - AMRN
 - AMS
 - AMSC
@@ -101,7 +93,6 @@
 - AN
 - ANDE
 - ANF
-- ANGO
 - ANIK
 - ANIP
 - ANIX
@@ -118,7 +109,6 @@
 - APT
 - APWC
 - ARCB
-- ARCC
 - ARE
 - ARKR
 - ARL
@@ -163,7 +153,6 @@
 - AVNW
 - AVT
 - AVY
-- AWH
 - AWR
 - AWRE
 - AWX
@@ -178,7 +167,6 @@
 - AYI
 - AZN
 - AZO
-- AZPN
 - AZTA
 - AZZ
 - BA
@@ -187,7 +175,6 @@
 - BALL
 - BANC
 - BANF
-- BANFP
 - BANR
 - BAP
 - BAX
@@ -197,7 +184,6 @@
 - BBGI
 - BBSI
 - BBVA
-- BBW
 - BBWI
 - BBY
 - BC
@@ -205,7 +191,6 @@
 - BCE
 - BCH
 - BCLI
-- BCML
 - BCO
 - BCPC
 - BCRX
@@ -214,7 +199,6 @@
 - BDL
 - BDN
 - BDX
-- BECN
 - BELFA
 - BELFB
 - BEN
@@ -246,11 +230,9 @@
 - BLDP
 - BLFS
 - BLK
-- BLKB
 - BLX
 - BMI
 - BMO
-- BMRA
 - BMRC
 - BMRN
 - BMY
@@ -282,8 +264,6 @@
 - BUSE
 - BVN
 - BWA
-- BWEN
-- BXC
 - BXMT
 - BXP
 - BYD
@@ -316,7 +296,6 @@
 - CBAN
 - CBAT
 - CBFV
-- CBRE
 - CBRL
 - CBSH
 - CBT
@@ -333,12 +312,10 @@
 - CCRD
 - CCRN
 - CCU
-- CCZ
 - CDE
 - CDNS
 - CDP
 - CDZI
-- CE
 - CECO
 - CENT
 - CENX
@@ -350,7 +327,6 @@
 - CFR
 - CGEN
 - CGNX
-- CHCI
 - CHCO
 - CHD
 - CHDN
@@ -392,7 +368,6 @@
 - CMCT
 - CME
 - CMI
-- CMLS
 - CMP
 - CMS
 - CMT
@@ -405,14 +380,12 @@
 - CNOB
 - CNP
 - CNQ
-- CNS
 - CNTY
 - CNVS
 - CNX
 - CNXN
 - COF
 - COFS
-- COHN
 - COHR
 - COHU
 - COKE
@@ -421,7 +394,6 @@
 - COO
 - COP
 - COR
-- CORT
 - COST
 - CP
 - CPB
@@ -435,15 +407,12 @@
 - CRAI
 - CRD-A
 - CRD-B
-- CRDF
-- CREG
 - CRESY
 - CRH
 - CRI
 - CRIS
 - CRK
 - CRL
-- CRM
 - CRMT
 - CRNT
 - CRS
@@ -451,6 +420,7 @@
 - CRUS
 - CRVL
 - CRWS
+- CSCI
 - CSCO
 - CSGP
 - CSGS
@@ -468,14 +438,11 @@
 - CTRA
 - CTS
 - CTSH
-- CUBE
 - CUK
 - CULP
-- CUTR
 - CUZ
 - CVBF
 - CVCO
-- CVGI
 - CVGW
 - CVLG
 - CVM
@@ -492,13 +459,10 @@
 - CX
 - CXT
 - CXW
-- CYCC
 - CYD
 - CYH
-- CYTK
 - CZFS
 - CZNC
-- CZWI
 - D
 - DAIO
 - DAKT
@@ -531,20 +495,15 @@
 - DIT
 - DJCO
 - DKS
-- DLB
 - DLHC
-- DLR
 - DLTR
 - DLX
 - DMLP
-- DMRC
-- DNN
 - DOC
 - DOMH
 - DORM
 - DOV
 - DOX
-- DPZ
 - DRD
 - DRI
 - DRRX
@@ -552,11 +511,9 @@
 - DSGX
 - DSS
 - DSWL
-- DSX
 - DTE
 - DUK
 - DVA
-- DVAX
 - DVN
 - DWSN
 - DX
@@ -570,7 +527,6 @@
 - EBAY
 - EBF
 - EBMT
-- EBTC
 - ECL
 - ECPG
 - ED
@@ -597,14 +553,11 @@
 - ELTK
 - ELV
 - EME
-- EMKR
 - EML
 - EMN
 - EMR
 - ENB
-- ENG
 - ENR
-- ENS
 - ENTG
 - ENZ
 - EOG
@@ -643,15 +596,12 @@
 - EXP
 - EXPD
 - EXPO
-- EXR
 - EXTR
-- EYPT
 - EZPW
 - F
 - FARM
 - FARO
 - FAST
-- FBMS
 - FBNC
 - FBP
 - FC
@@ -694,10 +644,8 @@
 - FLO
 - FLR
 - FLS
-- FLUX
 - FLWS
 - FLXS
-- FMAO
 - FMBH
 - FMC
 - FMNB
@@ -723,7 +671,6 @@
 - FSS
 - FSTR
 - FTEK
-- FTFT
 - FTI
 - FUL
 - FULT
@@ -773,7 +720,6 @@
 - GILD
 - GILT
 - GIS
-- GJH
 - GL
 - GLAD
 - GLBZ
@@ -782,12 +728,9 @@
 - GME
 - GNSS
 - GNTX
-- GNW
 - GOGL
 - GOLD
-- GOLLQ
 - GOOD
-- GOOGL
 - GPC
 - GPI
 - GPK
@@ -795,7 +738,6 @@
 - GRC
 - GRMN
 - GROW
-- GRVY
 - GS
 - GSBC
 - GSK
@@ -811,7 +753,6 @@
 - HAFC
 - HAIN
 - HAL
-- HALO
 - HAS
 - HBAN
 - HBIO
@@ -832,7 +773,6 @@
 - HIHO
 - HIW
 - HL
-- HLF
 - HLIO
 - HLIT
 - HLX
@@ -863,13 +803,10 @@
 - HSTM
 - HSY
 - HTBK
-- HTH
 - HTLD
 - HUBG
 - HUM
-- HUN
 - HURC
-- HURN
 - HUSA
 - HVT
 - HVT-A
@@ -910,7 +847,6 @@
 - IMNN
 - IMO
 - IMOS
-- INBK
 - INCY
 - INDB
 - INFY
@@ -925,7 +861,6 @@
 - INTT
 - INTU
 - INUV
-- INVA
 - INVE
 - INVX
 - IONS
@@ -947,14 +882,12 @@
 - ITT
 - ITUB
 - ITW
-- IVAC
 - IVZ
 - IX
 - J
 - JACK
 - JAKK
 - JBHT
-- JBK
 - JBL
 - JBLU
 - JBSS
@@ -984,7 +917,6 @@
 - KEQU
 - KEX
 - KEY
-- KFFB
 - KFRC
 - KFS
 - KFY
@@ -1005,9 +937,7 @@
 - KOSS
 - KR
 - KRC
-- KRG
 - KRMD
-- KRNY
 - KRO
 - KSS
 - KT
@@ -1023,8 +953,6 @@
 - LAMR
 - LANC
 - LARK
-- LBTYA
-- LBTYB
 - LCII
 - LCNB
 - LCTX
@@ -1039,10 +967,8 @@
 - LFCR
 - LFMD
 - LFUS
-- LFVN
 - LGL
 - LGND
-- LGTY
 - LH
 - LHX
 - LII
@@ -1061,7 +987,6 @@
 - LODE
 - LOGI
 - LOW
-- LPL
 - LPSN
 - LPTH
 - LPX
@@ -1075,7 +1000,6 @@
 - LTRX
 - LUMN
 - LUV
-- LVS
 - LWAY
 - LXP
 - LXRX
@@ -1104,7 +1028,6 @@
 - MBWM
 - MCD
 - MCHP
-- MCHX
 - MCK
 - MCO
 - MCRI
@@ -1122,7 +1045,6 @@
 - MET
 - MFA
 - MFC
-- MFIC
 - MFIN
 - MGA
 - MGEE
@@ -1139,7 +1061,6 @@
 - MKC-V
 - MKL
 - MKSI
-- MKTX
 - MLAB
 - MLI
 - MLKN
@@ -1153,7 +1074,6 @@
 - MMS
 - MMSI
 - MNDO
-- MNKD
 - MNRO
 - MNST
 - MO
@@ -1167,7 +1087,6 @@
 - MOV
 - MPAA
 - MPB
-- MPWR
 - MPX
 - MRCY
 - MRK
@@ -1212,13 +1131,11 @@
 - NBR
 - NBTB
 - NC
-- NCTY
 - NDAQ
 - NDSN
 - NEE
 - NEM
 - NEN
-- NEO
 - NEOG
 - NEON
 - NEU
@@ -1226,7 +1143,6 @@
 - NFG
 - NFLX
 - NG
-- NGD
 - NGG
 - NGS
 - NHC
@@ -1255,6 +1171,7 @@
 - NRIM
 - NRP
 - NRT
+- NSC
 - NSIT
 - NSP
 - NSSC
@@ -1285,7 +1202,6 @@
 - NWPX
 - NX
 - NXST
-- NYMT
 - NYT
 - O
 - OBLG
@@ -1297,7 +1213,6 @@
 - OFG
 - OFIX
 - OGE
-- OGEN
 - OHI
 - OI
 - OII
@@ -1321,7 +1236,6 @@
 - OPK
 - OPOF
 - OPY
-- ORA
 - ORCL
 - ORI
 - ORKA
@@ -1348,7 +1262,6 @@
 - PATK
 - PAYX
 - PB
-- PBH
 - PBHC
 - PBI
 - PBR
@@ -1372,7 +1285,6 @@
 - PESI
 - PETS
 - PFBC
-- PFC
 - PFE
 - PFG
 - PFIS
@@ -1388,6 +1300,7 @@
 - PII
 - PIPR
 - PKBK
+- PKE
 - PKG
 - PKOH
 - PKX
@@ -1427,10 +1340,8 @@
 - PRPH
 - PRPO
 - PRSO
-- PRSU
 - PRU
 - PSA
-- PSEC
 - PSMT
 - PSO
 - PSTV
@@ -1443,7 +1354,6 @@
 - PWOD
 - PWR
 - PXLW
-- PYT
 - PZZA
 - QCOM
 - QCRH
@@ -1500,6 +1410,7 @@
 - RMTI
 - RNR
 - RNST
+- RNTX
 - ROCK
 - ROG
 - ROK
@@ -1522,7 +1433,6 @@
 - RY
 - RYAAY
 - RYN
-- SA
 - SAFT
 - SAH
 - SAIA
@@ -1530,7 +1440,6 @@
 - SAN
 - SANM
 - SAP
-- SASR
 - SAVA
 - SBAC
 - SBCF
@@ -1552,12 +1461,10 @@
 - SCVL
 - SEB
 - SEE
-- SEED
 - SEIC
 - SENEA
 - SENEB
 - SF
-- SFL
 - SFNC
 - SFST
 - SGA
@@ -1570,7 +1477,6 @@
 - SHEL
 - SHEN
 - SHG
-- SHO
 - SHOO
 - SHW
 - SHYF
@@ -1619,16 +1525,13 @@
 - SNX
 - SNY
 - SO
-- SOHO
 - SOHU
 - SON
 - SONY
-- SPCB
 - SPG
 - SPGI
 - SPH
 - SPNS
-- SPOK
 - SPTN
 - SPXC
 - SQM
@@ -1656,19 +1559,16 @@
 - STRA
 - STRL
 - STRM
-- STRR
 - STRS
 - STRT
 - STT
 - STX
-- STXS
 - STZ
 - SU
 - SUI
 - SUNE
 - SUP
 - SVC
-- SVRA
 - SVT
 - SWBI
 - SWK
@@ -1735,7 +1635,6 @@
 - TMP
 - TNC
 - TOL
-- TOPS
 - TOWN
 - TPC
 - TPL
@@ -1779,7 +1678,6 @@
 - TXMD
 - TXN
 - TXNM
-- TXRH
 - TXT
 - TYL
 - TZOO
@@ -1788,7 +1686,6 @@
 - UBFO
 - UBSI
 - UCB
-- UCTT
 - UDR
 - UEIC
 - UFCS
@@ -1840,7 +1737,6 @@
 - VABK
 - VALE
 - VALU
-- VBFC
 - VCEL
 - VECO
 - VEON
@@ -1859,7 +1755,6 @@
 - VMI
 - VNO
 - VOD
-- VOXX
 - VRE
 - VRNT
 - VRSN
@@ -1885,7 +1780,6 @@
 - WELL
 - WEN
 - WERN
-- WEX
 - WEYS
 - WF
 - WFC
@@ -1898,7 +1792,6 @@
 - WKC
 - WKSP
 - WLFC
-- WLK
 - WLY
 - WLYB
 - WM
@@ -1922,7 +1815,6 @@
 - WT
 - WTBA
 - WTFC
-- WTI
 - WTM
 - WTRG
 - WTS
