@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
-import polars as pl
-from typing import Dict, List
+import datetime
+from typing import List
 
 from src.common.AssetDataPolars import AssetDataPolars
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 from src.mathTools.TAIndicators import TAIndicators
 
 class FeatureTA():
@@ -15,8 +15,8 @@ class FeatureTA():
     
     def __init__(self, 
             asset: AssetDataPolars, 
-            startDate: pd.Timestamp, 
-            endDate:pd.Timestamp, 
+            startDate: datetime.date, 
+            endDate: datetime.date, 
             lagList: List[int] = [], 
             params: dict = None
         ):
@@ -31,8 +31,8 @@ class FeatureTA():
         self.lagList = lagList
         
         self.buffer = 21*12+10  # 12 months + 10 days (see also rolling buffer in TAIndicators)
-        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.startDate) - max(self.lagList, default=0) - self.buffer
-        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.endDate)
+        self.startIdx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(self.startDate) - max(self.lagList, default=0) - self.buffer
+        self.endIdx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(self.endDate)
         
         if self.startIdx < 0:
             raise ValueError("Start Date is too old or lag too long.")
@@ -58,13 +58,13 @@ class FeatureTA():
     
     def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None):
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(date)
             
         if idx  < self.startIdx:
             raise ValueError("Date is too old.")
         
         curClose = self.asset.shareprice['Close'].item(idx)
-        curVol = self.asset.volume['Volume'].item(idx)
+        curVol = self.asset.shareprice['Volume'].item(idx)
         
         if not curVol >= 2:
             curVol = 1
@@ -84,9 +84,9 @@ class FeatureTA():
         
         return (features * scalingfactor).astype(np.float32) 
     
-    def apply_timeseries(self, date: pd.Timestamp, idx: int = None):
+    def apply_timeseries(self, date: datetime.date, idx: int = None):
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(date)
         if idx  < self.startIdx:
             raise ValueError("Date is too old.")
         
@@ -94,7 +94,7 @@ class FeatureTA():
         featuresMat = np.zeros((self.timesteps, coreLen))
         
         curClose = self.asset.shareprice['Close'].item(idx)
-        curVol = self.asset.volume['Volume'].item(idx)
+        curVol = self.asset.shareprice['Volume'].item(idx)
         
         if not curVol >= 2:
             curVol = 1

@@ -1,11 +1,10 @@
 import numpy as np
-import pandas as pd
-import polars as pl
-from typing import Dict, List
+import datetime
+from typing import List
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
 class FeatureFourierCoeff():
     # Class-level default parameters
@@ -18,8 +17,8 @@ class FeatureFourierCoeff():
     
     def __init__(self, 
             asset: AssetDataPolars, 
-            startDate: pd.Timestamp, 
-            endDate:pd.Timestamp, 
+            startDate: datetime.date, 
+            endDate: datetime.date, 
             lagList: List[int] = [], 
             monthHorizonList: List[int] = [],
             params: dict = None
@@ -41,22 +40,23 @@ class FeatureFourierCoeff():
         if self.monthHorizonList == [] and isinstance(self.params['monthsHorizon'], (int, float)):
             raise ValueError("Deprecation warning: monthsHorizonList should be provided as a list. 'monthsHorizon' is deprecated.")
         
-        self.buffer = 21*12+10
-        self.startIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.startDate) - max(self.lagList, default=0) - self.buffer
-        self.endIdx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(self.endDate)
+        self.buffer = 10
+        self.startIdx = (DOps(self.asset.shareprice).getNextLowerOrEqualIndex(self.startDate) 
+                - max(self.lagList, default=0) - max(self.monthHorizonList, default=0) * self.idxLengthOneMonth - self.buffer)
+        self.endIdx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(self.endDate)
         
-        assert self.startIdx >= 0 + np.max(self.monthHorizonList) * self.idxLengthOneMonth + self.buffer, "Start index is negative."
+        assert self.startIdx >= 0, "Start index is negative."
         
         n_mhl = len(self.monthHorizonList)
-        self.PricesPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
-        self.PricesPreMatrix_rsmeRatio = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
-        self.PricesPreMatrix_ampcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
-        self.PricesPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_rsme = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_rsmeRatio = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_ampcoeff = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.PricesPreMatrix_signcoeff = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
 
-        self.ReturnPreMatrix_rsme = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
-        self.ReturnPreMatrix_rsmeRatio = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
-        self.ReturnPreMatrix_ampcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
-        self.ReturnPreMatrix_signcoeff = np.zeros((self.asset.adjClosePrice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_rsme = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_rsmeRatio = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_ampcoeff = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
+        self.ReturnPreMatrix_signcoeff = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
         self.__preprocess_fourierConst()
         
     def __preprocess_fourierConst(self):
@@ -64,10 +64,14 @@ class FeatureFourierCoeff():
         endIdx = self.endIdx
         
         for m_idx, m_val in enumerate(self.monthHorizonList):
+            pricesExt_dict = {
+                idx: self.asset.shareprice['AdjClose'].slice(
+                    idx - m_val*self.idxLengthOneMonth - 1, m_val * self.idxLengthOneMonth + 2
+                    ).to_numpy() 
+                for idx in range(startIdx, endIdx+1)
+            }
             for idx in range(startIdx, endIdx+1):
-                pricesExt = self.asset.adjClosePrice['AdjClose'].slice(
-                    idx - m_val*self.idxLengthOneMonth - 1,
-                    m_val * self.idxLengthOneMonth + 2).to_numpy()
+                pricesExt = pricesExt_dict[idx]
                 prices = pricesExt[1:]
                 returns = pricesExt[1:] / pricesExt[:-1]
                 returns_log = np.log((np.clip(returns, 1e-5, 1e5)))
@@ -140,15 +144,15 @@ class FeatureFourierCoeff():
         return res_names
         
         
-    def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
+    def apply(self, date: datetime.date, scaleToNiveau: float, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(date)
         
         MHL_len = len(self.monthHorizonList)
         coreLen = len(self.getFeatureNames()) // MHL_len // (self.fouriercutoff-1)
         features = np.full((self.fouriercutoff-1, coreLen, MHL_len), np.nan)
         
-        niveau = self.asset.adjClosePrice['AdjClose'].item(idx)
+        niveau = self.asset.shareprice['AdjClose'].item(idx)
         scalingfactor = scaleToNiveau/niveau
         
         for m_idx, _ in enumerate(self.monthHorizonList):
@@ -178,9 +182,9 @@ class FeatureFourierCoeff():
 
         return features.flatten('F').astype(np.float32)
     
-    def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
+    def apply_timeseries(self, date: datetime.date, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(date)
         
         coreLen = len(self.getTimeFeatureNames())
         featuresMat = np.zeros((self.timesteps, coreLen))

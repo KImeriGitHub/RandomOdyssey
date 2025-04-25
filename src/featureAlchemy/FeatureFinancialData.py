@@ -4,7 +4,7 @@ import polars as pl
 from typing import List
 
 from src.common.AssetDataPolars import AssetDataPolars
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
 class FeatureFinancialData():
     """
@@ -114,9 +114,12 @@ class FeatureFinancialData():
         self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         
-        self.fin_quar = self.asset.financials_quarterly
-        self.fin_ann = self.asset.financials_annually
+        self.fin_quar = self.asset.financials_quarterly.clone()
+        self.fin_ann = self.asset.financials_annually.clone()
         self.shareprice = self.asset.shareprice.clone()
+        
+        self.fin_quar = self.fin_quar.with_columns(pl.all().forward_fill())
+        self.fin_ann = self.fin_ann.with_columns(pl.all().forward_fill())
         
         #Columns to use at feature
         self.columns_toFeature_quar = []  # corresponds to columns in self.fin_quar
@@ -361,28 +364,23 @@ class FeatureFinancialData():
     def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
         # Find shareprice index if idx not provided
         if idx is None:
-            idx = DPl(self.shareprice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.shareprice).getNextLowerOrEqualIndex(date)
         
         # Get corresponding row indexes
         q_idx = self.shareprice["q_idx"][idx]
         a_idx = self.shareprice["a_idx"][idx]
         
-        features_quar = list(self.fin_quar[self.columns_toFeature_quar].row(q_idx))
-        features_ann = list(self.fin_ann[self.columns_toFeature_ann].row(a_idx))
-        features_metrics = list(self.shareprice[self.columns_toFeature_metric].row(idx))
-                
-        features = np.array(
-            features_quar +
-            features_ann +
-            features_metrics
+        features = np.concatenate(
+            (self.fin_quar[self.columns_toFeature_quar].row(q_idx),
+            self.fin_ann[self.columns_toFeature_ann].row(a_idx),
+            self.shareprice[self.columns_toFeature_metric].row(idx))
         )
         
-        features = np.nan_to_num(features.astype(float), nan=0.0, posinf=0.0, neginf=0.0)
         return (features * scaleToNiveau).astype(np.float32)
     
     def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.shareprice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.shareprice).getNextLowerOrEqualIndex(date)
         if idx - (self.num_quar_lag + 1.6) * 3 * self.idxLengthOneMonth < 0:
             raise ValueError("Lag is too far back.")
             
@@ -403,7 +401,7 @@ class FeatureFinancialData():
             
             featuresMat[ts, 0] = np.tanh((valList[0] - np.log(20.0))/np.log(10.0))/2.0 + 0.5 if not isnanList[0] else 0  # 20 is a avg value, 10 good ival value for pe ratio
             featuresMat[ts, 1] = np.tanh((valList[1] - np.log(20.0))/np.log(10.0))/2.0 + 0.5 if not isnanList[1] else 0 # 20 is a avg value, 10 good ival value for pe ratios
-            featuresMat[ts, 2] = np.tanh((valList[2] - np.log( 6.0))/np.log( 2.0))/2.0 + 0.5  if not isnanList[2] else 0 # 6 is a avg value, 2 good ival value for pe ratios
+            featuresMat[ts, 2] = np.tanh((valList[2] - np.log( 6.0))/np.log( 2.0))/2.0 + 0.5 if not isnanList[2] else 0 # 6 is a avg value, 2 good ival value for pe ratios
             featuresMat[ts, 3] = np.tanh(valList[3]/niveau - 1.0)/2.0 + 0.5 if not isnanList[3] else 0
             featuresMat[ts, 4] = np.tanh(valList[4]/niveau - 1.0)/2.0 + 0.5 if not isnanList[4] else 0
             featuresMat[ts, 5] = np.tanh(valList[5])  if not isnanList[5] else 0  # daysToReport; ought to be between 0 and 1 already

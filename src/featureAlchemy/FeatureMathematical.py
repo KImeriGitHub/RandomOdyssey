@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import Dict, List
+import datetime
+from typing import List
 
 from src.common.AssetDataPolars import AssetDataPolars
-from src.mathTools.SeriesExpansion import SeriesExpansion
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
 class FeatureMathematical():
     DEFAULT_PARAMS = {
@@ -33,7 +33,7 @@ class FeatureMathematical():
         #preprocess
         self.tradedPrice = self.asset.shareprice["Close"]
         self.tradedPrice_log = self.tradedPrice.log()
-        self.prices = self.asset.adjClosePrice["AdjClose"] #Note: Can be negative #Note: Be wary of leakage
+        self.prices = self.asset.shareprice["AdjClose"] #Note: Can be negative #Note: Be wary of leakage
         self.pricesElevated = self.prices - self.prices.min() + 1.0
         self.prices_Diff = self.prices.diff()
         self.prices_DiffDiff = self.prices_Diff.diff()
@@ -111,9 +111,9 @@ class FeatureMathematical():
 
         return featureNames
     
-    def apply(self, date: pd.Timestamp, scaleToNiveau: float, idx: int = None) -> np.ndarray:
+    def apply(self, date: datetime.date, scaleToNiveau: float, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(date)
         if idx-max(self.lagList, default=0) < 0 + 4:
             raise ValueError("Lag is too far back.")
         
@@ -160,9 +160,9 @@ class FeatureMathematical():
         
         return features.astype(np.float32)
     
-    def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
+    def apply_timeseries(self, date: datetime.date, idx: int = None) -> np.ndarray:
         if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+            idx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(date)
         if idx-max(self.lagList, default=0) < 0 + 4:
             raise ValueError("Lag is too far back.")
         if idx - self.timesteps * np.max(self.timeseries_ivalList) < 0:

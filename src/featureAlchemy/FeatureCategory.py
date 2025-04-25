@@ -4,6 +4,7 @@ import polars as pl
 from typing import Dict
 
 from src.common.AssetDataPolars import AssetDataPolars
+from src.common.YamlTickerInOut import YamlTickerInOut
 
 class FeatureCategory():
     operator = "alphavantage"
@@ -37,9 +38,12 @@ class FeatureCategory():
         self.timesteps = self.params['timesteps']
         
         self.cat = self.cat_alphavantage if self.operator == "alphavantage" else self.cat_yfinance
+        self.snp500tickers: list[str] = YamlTickerInOut("src/tickerSelection").loadFromFile("snp500.yaml")["snp500tickers"]
+        self.nas100tickers: list[str] = YamlTickerInOut("src/tickerSelection").loadFromFile("nas100.yaml")["nas100tickers"]
     
     def getFeatureNames(self) -> list[str]:
         features_names = ["Category_" + val for val in self.cat]
+        features_names += ["Category_inSnP500", "Category_inNas100"]
             
         return features_names
     
@@ -50,7 +54,10 @@ class FeatureCategory():
         sector = self.asset.sector
         
         # Create a one-hot encoding where the category matches the sector
-        features = np.array([1.0 if category == sector else 0.0 for category in self.cat])
+        features = np.zeros(len(self.cat)+2, dtype=np.float32)
+        features[:len(self.cat)] = np.array([1.0 if category == sector else 0.0 for category in self.cat])
+        features[len(self.cat)] = self.asset.ticker in self.snp500tickers
+        features[len(self.cat)+1] = self.asset.ticker in self.nas100tickers
         
         return features*scaleToNiveau
     

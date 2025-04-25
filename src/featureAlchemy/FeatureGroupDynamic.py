@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
 import polars as pl
+import datetime
 from typing import Dict, List
 
 from src.common.AssetDataPolars import AssetDataPolars
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
 class FeatureGroupDynamic():
     DEFAULT_PARAMS = {
@@ -14,8 +15,8 @@ class FeatureGroupDynamic():
 
     def __init__(self, 
             assetspl: Dict[str, AssetDataPolars], 
-            startDate: pd.Timestamp, 
-            endDate:pd.Timestamp, 
+            startDate: datetime.date, 
+            endDate: datetime.date, 
             lagList: List[int] = [],
             monthHorizonList: List[int] = [],
             params: dict = None):
@@ -34,9 +35,9 @@ class FeatureGroupDynamic():
         idx_to_days_factor = 365.0/255.0
         self.buffer = 2*self.idxLengthOneMonth
         self.startRecord = startDate - pd.Timedelta(
-            days = (int)(max(self.lagList, default=0)*idx_to_days_factor) 
-            + np.max(self.monthHorizonList) * self.idxLengthOneMonth 
-            + self.buffer
+            days = int(max(self.lagList, default=0)*idx_to_days_factor
+                + max(self.monthHorizonList, default=0) * self.idxLengthOneMonth 
+                + self.buffer)
             )
 
         self.tickers = list(self.assetspl.keys())
@@ -45,31 +46,35 @@ class FeatureGroupDynamic():
         exampleAsset = self.assetspl[self.tickers[0]]
         
         #preprocess
-        exampleTicker_rec_idx = DPl(exampleAsset.shareprice).getNextLowerOrEqualIndex(self.startRecord)
-        exampleTicker_end_idx = DPl(exampleAsset.shareprice).getNextLowerOrEqualIndex(self.endDate)
-        self.business_days = exampleAsset.shareprice["Date"].slice(exampleTicker_rec_idx, exampleTicker_end_idx - exampleTicker_rec_idx + 1).to_numpy()
-        self.business_days = np.array([pd.Timestamp(x, tz ="UTC") for x in self.business_days])
-        first_bd_rec = self.business_days[0]
-        self.first_bd_date = self.business_days[self.business_days <= self.startDate][-1]
-        last_bd = self.business_days[-1]
+        self.business_days= pd.bdate_range(start=self.startRecord, end=self.endDate).date.tolist()  
+        self.startBDate = self.business_days[0]
+        self.endBDate = self.business_days[-1]
         self.nDates = len(self.business_days)
         
-        self.sdate_idx = np.where(self.business_days >= self.startDate)[0][0]
-        assert self.sdate_idx > 0, "Start date must be in the business days."
+        self.idxAssets: Dict[str, List[int]] = {ticker: DOps(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndices(self.business_days) for ticker in self.tickers}
         
-        self.idxAssets_startDate = {}
-        self.idxAssets_startRec = {}
-        self.idxAssets_end = {}
-        for ticker, _ in self.assetspl.items():
-            self.idxAssets_startRec[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(first_bd_rec)
-            self.idxAssets_startDate[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(self.first_bd_date)
-            self.idxAssets_end[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(last_bd)
+        #self.business_days = exampleAsset.shareprice["Date"].slice(exampleTicker_rec_idx, exampleTicker_end_idx - exampleTicker_rec_idx + 1).to_numpy()
+        #self.business_days = np.array([pd.Timestamp(x, tz ="UTC") for x in self.business_days])
+        #first_bd_rec = self.business_days[0]
+        #self.first_bd_date = self.business_days[self.business_days <= self.startDate][-1]
+        #last_bd = self.business_days[-1]
+        #
+        #self.sdate_idx = np.where(self.business_days >= self.startDate)[0][0]
+        #assert self.sdate_idx > 0, "Start date must be in the business days."
+        #
+        #self.idxAssets_startDate = {}
+        #self.idxAssets_startRec = {}
+        #self.idxAssets_end = {}
+        #for ticker, _ in self.assetspl.items():
+        #    self.idxAssets_startRec[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(first_bd_rec)
+        #    self.idxAssets_startDate[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(self.first_bd_date)
+        #    self.idxAssets_end[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(last_bd)
             
         self.__preprocess()
         
         # asserts
-        assert np.all([self.idxAssets_startRec[ticker] > 0 for ticker in self.idxAssets_startRec.keys()]), "All assets must have a start date greater than 0."
-        assert np.all([(self.idxAssets_end[ticker]-self.idxAssets_startRec[ticker]+1) == self.nDates for ticker in self.idxAssets_startRec.keys()]), "All assets must have the same number of dates."
+        #assert np.all([self.idxAssets_startRec[ticker] > 0 for ticker in self.idxAssets_startRec.keys()]), "All assets must have a start date greater than 0."
+        #assert np.all([(self.idxAssets_end[ticker]-self.idxAssets_startRec[ticker]+1) == self.nDates for ticker in self.idxAssets_startRec.keys()]), "All assets must have the same number of dates."
         
     def __preprocess(self):
         self.avgVolume = np.zeros((self.nDates))
@@ -82,7 +87,7 @@ class FeatureGroupDynamic():
         
         self.weightPerAsset = {}  #TODO: ideally using outstanding shares instead of volume
         window_size = 6*self.idxLengthOneMonth
-        for ticker in self.idxAssets_startRec.keys():
+        for ticker in self.tickers:
             self.weightPerAsset[ticker] = (
                 self.assetspl[ticker].shareprice["Volume"]
                 .rolling_mean(window_size = window_size)
@@ -90,24 +95,24 @@ class FeatureGroupDynamic():
             )
         sumPerDate = np.zeros((self.nDates))
         for i, _ in enumerate(self.business_days):
-            sumPerDate[i] = np.sum([self.weightPerAsset[ticker][self.idxAssets_startRec[ticker] + i] for ticker in self.idxAssets_startRec.keys()])
-        for ticker in self.idxAssets_startRec.keys():
+            sumPerDate[i] = np.sum([self.weightPerAsset[ticker][self.idxAssets[ticker][i]] for ticker in self.tickers])
+        for ticker in self.tickers:
             for i, _ in enumerate(self.business_days):
-                assetIdx = self.idxAssets_startRec[ticker] + i
+                assetIdx = self.idxAssets[ticker][i]
                 self.weightPerAsset[ticker][assetIdx] = self.weightPerAsset[ticker][assetIdx] / sumPerDate[i]
                 
         # weightedIndex is close price times weight and then sum over all assets
         self.weightedIndex = np.zeros((self.nDates))
         for i, _ in enumerate(self.business_days):
-            self.weightedIndex[i] = np.sum([self.assetspl[ticker].shareprice["Close"].item(self.idxAssets_startRec[ticker] + i) 
-                                        * self.weightPerAsset[ticker][self.idxAssets_startRec[ticker] + i] for ticker in self.idxAssets_startRec.keys()])
+            self.weightedIndex[i] = np.sum([self.assetspl[ticker].shareprice["Close"].item(self.idxAssets[ticker][i]) 
+                        * self.weightPerAsset[ticker][self.idxAssets[ticker][i]] for ticker in self.tickers])
         
         #Group Dynamics
         self.allReturnsPct = np.zeros((self.nDates, self.nAssets))
         self.allVolumes = np.zeros((self.nDates, self.nAssets))
         for i, _ in enumerate(self.business_days):
-            self.allReturnsPct[i] = np.array([self.assetspl[ticker].shareprice["Close"].pct_change().item(self.idxAssets_startRec[ticker] + i) for ticker in self.idxAssets_startRec.keys()])
-            self.allVolumes[i] = np.array([self.assetspl[ticker].shareprice["Volume"].item(self.idxAssets_startRec[ticker] + i) for ticker in self.idxAssets_startRec.keys()])
+            self.allReturnsPct[i] = np.array([self.assetspl[ticker].shareprice["Close"].pct_change().item(self.idxAssets[ticker][i]) for ticker in self.tickers])
+            self.allVolumes[i] = np.array([self.assetspl[ticker].shareprice["Volume"].item(self.idxAssets[ticker][i]) for ticker in self.tickers])
 
             self.minVolume[i] = np.min(self.allVolumes[i])
             self.maxVolume[i] = np.max(self.allVolumes[i])
@@ -122,23 +127,23 @@ class FeatureGroupDynamic():
         self.featureDict_VolGrRk: Dict[str, np.array] = {}
         self.featureDict_WeightedIndexPct: Dict[str, np.array] = {}
         for ticker, asset in self.assetspl.items():
-            closePct: np.array = asset.shareprice["Close"].pct_change().slice(self.idxAssets_startRec[ticker], self.nDates).to_numpy()
-            curVol: np.array = asset.shareprice["Volume"].slice(self.idxAssets_startRec[ticker], self.nDates).to_numpy()
+            closePct: np.array = asset.shareprice["Close"].pct_change().gather(self.idxAssets[ticker]).to_numpy()
+            curVol: np.array = asset.shareprice["Volume"].gather(self.idxAssets[ticker]).to_numpy()
             self.featureDict_RetGrLvl[ticker] = ((closePct-self.minReturnPct) / (self.maxReturnPct-self.minReturnPct))
             self.featureDict_VolGrLvl[ticker] = ((curVol-self.minVolume) / (self.maxVolume-self.minVolume))
             self.featureDict_RetGrRk[ticker] = (np.sum(self.allReturnsPct[:,:] <= closePct[:, None], axis=1) / self.nAssets)
             self.featureDict_VolGrRk[ticker] = (np.sum(self.allVolumes[:,:] <= curVol[:, None], axis=1) / self.nAssets)
         
-    def apply(self, date: pd.Timestamp, idx_dict: Dict[str, int] = None) -> Dict[str, np.ndarray]:
+    def apply(self, date: datetime.date, idx_dict: Dict[str, int] = None) -> Dict[str, np.ndarray]:
         if idx_dict is None:
             idx_dict: Dict[str, int] = {}
             for ticker, asset in self.assetspl.items():
-                idx_dict[ticker] = DPl(asset.shareprice).getNextLowerOrEqualIndex(date)
+                idx_dict[ticker] = DOps(asset.shareprice).getNextLowerOrEqualIndex(date)
                 
         self.featureDict: Dict[str, np.array] = {}
         for ticker, asset in self.assetspl.items():
             features: List[float] = []
-            idx_ticker_adj = idx_dict[ticker] - self.idxAssets_startRec[ticker]
+            idx_ticker_adj = idx_dict[ticker] - self.idxAssets[ticker][0]
             features.append(self.featureDict_RetGrLvl[ticker][idx_ticker_adj]) #"FeatureGroup_RetGrLvl"
             features.append(self.featureDict_VolGrLvl[ticker][idx_ticker_adj]) #"FeatureGroup_VolGrLvl"
             features.append(self.featureDict_RetGrRk[ticker][idx_ticker_adj]) #"FeatureGroup_RetGrRk"
@@ -149,7 +154,7 @@ class FeatureGroupDynamic():
             features.append(self.weightedIndex[idx_ticker_adj]/self.weightedIndex[max(idx_ticker_adj-1, 0)]-1) #"FeatureGroup_WeightedIndexPct"
             
             for lag in self.lagList:
-                idx_ticker_adj_lag = idx_dict[ticker] - self.idxAssets_startRec[ticker] - lag
+                idx_ticker_adj_lag = idx_dict[ticker] - lag - self.idxAssets[ticker][0]
                 features.append(self.featureDict_RetGrLvl[ticker][idx_ticker_adj_lag]) #"FeatureGroup_RetGrLvl_lag_m{lag}"
                 features.append(self.featureDict_VolGrLvl[ticker][idx_ticker_adj_lag]) #"FeatureGroup_VolGrLvl_lag_m{lag}"
                 features.append(self.featureDict_RetGrRk[ticker][idx_ticker_adj_lag]) #"FeatureGroup_RetGrRk_lag_m{lag}"
@@ -160,8 +165,8 @@ class FeatureGroupDynamic():
                 
             for lag in self.lagList:
                 for m in self.monthHorizonList:
-                    idx_ticker_adj_lag = idx_dict[ticker] - self.idxAssets_startRec[ticker] - lag
-                    idx_ticker_adj_lag_MH = idx_dict[ticker] - self.idxAssets_startRec[ticker] - lag - m * self.idxLengthOneMonth
+                    idx_ticker_adj_lag    = idx_dict[ticker] - self.idxAssets[ticker][0] - lag
+                    idx_ticker_adj_lag_MH = idx_dict[ticker] - self.idxAssets[ticker][0] - lag - m * self.idxLengthOneMonth
                     features.append(self.weightedIndex[idx_ticker_adj_lag]/self.weightedIndex[max(idx_ticker_adj_lag_MH-1, 0)]-1.0) #"FeatureGroup_WeightedIndexMHPct_lag_m{lag}_MH_{m}"
             
             features = np.array(features, dtype=np.float32)
@@ -201,13 +206,13 @@ class FeatureGroupDynamic():
         if idx_dict is None:
             idx_dict: Dict[str, int] = {}
             for ticker, asset in self.assetspl.items():
-                idx_dict[ticker] = DPl(asset.shareprice).getNextLowerOrEqualIndex(date)
+                idx_dict[ticker] = DOps(asset.shareprice).getNextLowerOrEqualIndex(date)
                 
         self.featureDict: Dict[str, np.array] = {}
         for ticker, asset in self.assetspl.items():
             features: List[np.array] = []
             
-            idx_ticker_adj = idx_dict[ticker] - self.idxAssets_startRec[ticker]
+            idx_ticker_adj = idx_dict[ticker] - self.idxAssets[ticker][0]
             s = idx_ticker_adj-self.timesteps+1
             e = idx_ticker_adj+1
             features.append(np.clip(self.featureDict_RetGrLvl[ticker][s:e],0.0,1.0)) #"FeatureGroup_RetGrLvl"
