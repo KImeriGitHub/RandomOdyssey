@@ -3,6 +3,9 @@ from datetime import datetime
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 
+from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
+from src.stockGroupsService.GroupOver20Years import GroupOver20Years
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -51,10 +54,13 @@ class GroupDebug(IGroup):
         return "group_debug"
 
     def checkAsset(self, asset: AssetData) -> bool:
-        max_date: pd.Timestamp = pd.to_datetime(asset.shareprice["Date"]).max()
-        today: pd.Timestamp = pd.to_datetime(datetime.now())
-        
-        if max_date < today - pd.Timedelta(days=20):
-            logging.warning(f"Last date in shareprice is too old: {max_date}")
+        if GroupFinanTo2011.checkAsset(self, asset) == False:
             return False
+        
+        if GroupOver20Years.checkAsset(self, asset) == False:
+            return False
+        
+        if asset.ticker not in self.tickers:
+            return False
+        
         return True

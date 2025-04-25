@@ -2,7 +2,6 @@ from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 from src.common.YamlTickerInOut import YamlTickerInOut
 from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DPd
 
 import logging
 logger = logging.getLogger(__name__)

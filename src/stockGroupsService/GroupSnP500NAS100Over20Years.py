@@ -1,10 +1,6 @@
-import pandas as pd
-from datetime import datetime, timedelta
-
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 from src.common.YamlTickerInOut import YamlTickerInOut
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPandas as DPd
 from src.stockGroupsService.GroupOver20Years import GroupOver20Years
 
 class GroupSnP500NAS100Over20Years(IGroup):
