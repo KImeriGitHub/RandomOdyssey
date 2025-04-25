@@ -22,7 +22,7 @@ class AssetDataPolars:
     ###########################
     shareprice: pl.DataFrame = None
     # Columns 
-    #  'Date'      : str (YYYY-MM-DD)
+    #  'Date'      : datetime.date
     #  'Open'      : float
     #  'High'      : float
     #  'Low'       : float
@@ -37,10 +37,10 @@ class AssetDataPolars:
     ##############
     financials_quarterly: pl.DataFrame = None 
     # Columns
-    #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
-    #  'reportedDate'                 : str  (YYYY-MM-DD)
+    #  'fiscalDateEnding'             : datetime.date
+    #  'reportedDate'                 : datetime.date
     #  'reportedEPS'                  : float
-    #  'estimatedEPS'                 : str  (YYYY-MM-DD)
+    #  'estimatedEPS'                 : float
     #  'surprise'                     : float
     #  'surprisePercentage'           : float
     #  'reportTime'                   : str  ('pre_market', 'post-market')
@@ -56,7 +56,7 @@ class AssetDataPolars:
     
     financials_annually: pl.DataFrame = None
     # Columns
-    #  'fiscalDateEnding'             : str (YYYY-MM-DD)
+    #  'fiscalDateEnding'             : datetime.date
     #  'reportedEPS'                  : float
     #  'grossProfit'                  : float
     #  'totalRevenue'                 : float

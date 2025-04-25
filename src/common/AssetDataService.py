@@ -93,26 +93,27 @@ class AssetDataService:
     
     @staticmethod
     def to_polars(ad: AssetData) -> AssetDataPolars:
-        # Initialize Polars instance with empty DataFrames matching schema
-        shareprice_cols = ad.shareprice.columns.tolist()
-        quarterly_cols = ad.financials_quarterly.columns.tolist()
-        annual_cols = ad.financials_annually.columns.tolist()
+        # Convert Pandas → Polars and cast date columns properly
+        sp = pl.from_pandas(ad.shareprice).with_columns(
+            pl.col("Date").cast(pl.Date)
+        )
+        fq = pl.from_pandas(ad.financials_quarterly).with_columns([
+            pl.col("fiscalDateEnding").cast(pl.Date),
+            pl.col("reportedDate").cast(pl.Date),
+        ])
+        fa = pl.from_pandas(ad.financials_annually).with_columns(
+            pl.col("fiscalDateEnding").cast(pl.Date)
+        )
 
-        adpl = AssetDataPolars(
+        return AssetDataPolars(
             ticker=ad.ticker,
             isin=ad.isin,
             about=ad.about or {},
             sector=ad.sector or "",
-            shareprice=pl.DataFrame({col: [] for col in shareprice_cols}),
-            financials_quarterly=pl.DataFrame({col: [] for col in quarterly_cols}),
-            financials_annually=pl.DataFrame({col: [] for col in annual_cols}),
+            shareprice=sp,
+            financials_quarterly=fq,
+            financials_annually=fa,
         )
-        # Convert Pandas to Polars
-        adpl.shareprice = pl.from_pandas(ad.shareprice)
-        adpl.financials_quarterly = pl.from_pandas(ad.financials_quarterly)
-        adpl.financials_annually = pl.from_pandas(ad.financials_annually)
-
-        return adpl
     
     @staticmethod
     def copy(ad: AssetData) -> AssetData:
