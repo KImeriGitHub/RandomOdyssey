@@ -1,176 +1,88 @@
 import pandas as pd
 import polars as pl
 import numpy as np
-
-class DataFrameTimeOperationsPandas:
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
-
-        index = self.df.index
-        # Check if index is datetime
-        is_datetime = pd.api.types.is_datetime64_any_dtype(index)
-        if is_datetime:
-            is_sorted = index.is_monotonic_increasing
-            has_timezone = index.tz is not None
-
-    def getIndex(self, targetDate: pd.Timestamp, timeDelta: pd.Timedelta = pd.Timedelta(days=0.5)) -> int:
-        index = self.df.index
-
-        lenIndex = len(index)
-
-        left, right = 0, lenIndex - 1
-
-        while left <= right:
-            mid = (left + right) // 2
-            currentDate = index[mid]
-
-            # Check if the difference is within the delta
-            if abs(currentDate - targetDate) <= timeDelta:
-                return mid
-
-            # Adjust the search range
-            if currentDate < targetDate:
-                left = mid + 1
-            else:
-                right = mid - 1
-
-        return -1
+import datetime
+import bisect
+from typing import Iterable, Optional
     
-    def getNextLowerOrEqualIndex(self, targetDate: pd.Timestamp) -> int:
-        """
-            Get the index of the closest date that is lower or equal than the target date
-        """
-        # Get the index of dates
-        dateIndex = self.df.index
-
-        # Check boundary conditions
-        if targetDate < dateIndex[0]:
-            return -1
-        if targetDate >= dateIndex[-1]:
-            return len(dateIndex)-1
-
-        # Bisection method to find the closest row
-        low, high = 0, len(dateIndex) - 1
-        while low <= high:
-            mid = (low + high) // 2
-            if dateIndex[mid] == targetDate:
-                return mid
-            elif dateIndex[mid] < targetDate:
-                low = mid + 1
-            else:
-                high = mid - 1
-
-        # The closest smaller date is at index `high` after the loop
-        return high
-
-    def inbetween(self,
-                  startDate: pd.Timestamp, 
-                  endDate: pd.Timestamp,
-                  timeDelta: pd.Timedelta = pd.Timedelta(days=0)):
-        """
-            Returns dataframe of slice with dates between and including the start and end date
-        """
-        if startDate > endDate:
-            return ValueError("Start Date is later than the End Date!")
-
-        startIdx = self.getNextLowerOrEqualIndex(startDate-timeDelta)
-        endIdx = self.getNextLowerOrEqualIndex(endDate+timeDelta)
-
-        return self.df.iloc[startIdx:endIdx+1]
-    
-    def around(self,
-            date: pd.Timestamp,
-            timeDelta: pd.Timedelta = pd.Timedelta(days=0.5)):
-
-        idx = self.getIndex(date, timeDelta)
-
-        if idx == -1:
-            return pd.DataFrame(None)
-
-        return self.df.iloc[idx]
-    
-class DataFrameTimeOperationsPolars:
+class DataFrameTimeOperations:
     def __init__(self, df: pl.DataFrame, dateCol: str = 'Date'):
         self.df = df
-        self.index = self.df[dateCol]
-        if self.index.dtype.time_zone is None:
-            self.index = self.index.dt.replace_time_zone("UTC")
-        # Check if index is datetime
-        is_sorted = self.index.is_sorted()
+        if dateCol not in self.df.columns:
+            raise ValueError(f"Column '{dateCol}' does not exist in the DataFrame.")
         
-        if not is_sorted:
-            return ValueError("Dates are not sorted!")
-
-    def getIndex(self, targetDate: pd.Timestamp, timeDelta: pd.Timedelta = pd.Timedelta(days=0.5)) -> int:
-        lenIndex = len(self.index)
-
-        left, right = 0, lenIndex - 1
-
-        while left <= right:
-            mid = (left + right) // 2
-            currentDate = self.index[mid]
-
-            # Check if the difference is within the delta
-            if abs(currentDate - targetDate) <= timeDelta:
-                return mid
-
-            # Adjust the search range
-            if currentDate < targetDate:
-                left = mid + 1
-            else:
-                right = mid - 1
-
-        return -1
-    
-    def getNextLowerOrEqualIndex(self, targetDate: pd.Timestamp) -> int:
-        # Get the index of dates
-        dateIndex = self.index
+        # parse/cast to Polars Date
+        dtype = self.df[dateCol].dtype
+        if dtype == pl.Utf8:
+            try:
+                self.df = self.df.with_columns(
+                    pl.col(dateCol).str.strptime(pl.Date, format=None).alias(dateCol)
+                )
+            except Exception as e:
+                raise ValueError(f"Could not parse strings in '{dateCol}' as dates: {e}")
+        else:
+            if dtype != pl.Date:
+                raise ValueError(f"Column '{dateCol}' must be of type Date or Utf8, got {dtype}.")
         
-        # Check boundary conditions
-        if targetDate < dateIndex[0]:
-            return -1
-        if targetDate >= dateIndex[-1]:
-            return len(dateIndex)-1
+        self.series = self.df[dateCol]
+        if not self.series.is_sorted():
+            raise ValueError("Dates are not sorted!")
+        self.len = self.series.len()
 
-        # Bisection method to find the closest row
-        low, high = 0, len(dateIndex) - 1
-        while low <= high:
-            mid = (low + high) // 2
-            if dateIndex[mid] == targetDate:
-                return mid
-            elif dateIndex[mid] < targetDate:
-                low = mid + 1
-            else:
-                high = mid - 1
+    def getIndex(self, targetDate: datetime.date) -> int | None:
+        """
+        Return the exact‐match index of targetDate, or None if not present.
+        """
+        i = self.series.search_sorted(targetDate, 'left')
+        if not self.series[i] == targetDate:
+            return None
+        return i
 
-        # The closest smaller date is at index `high` after the loop
-        return high
+    def getNextLowerOrEqualIndex(self, targetDate: datetime.date) -> int:
+        """
+        Return the largest index i such that self.index[i] <= targetDate.
+        Raises ValueError if all dates are > targetDate.
+        """
+        i = self.series.search_sorted(targetDate, 'left')
+        if self.series[i] == targetDate:
+            return i
+        if self.series[i] < targetDate:
+            return i
+        
+        return i-1
 
     def inbetween(self,
-                  startDate: pd.Timestamp, 
-                  endDate: pd.Timestamp,
-                  timeDelta: pd.Timedelta = pd.Timedelta(days=0)):
+                  startDate: datetime.date, 
+                  endDate: datetime.date) -> list[int]:
         """
-            Returns dataframe of slice with dates between and including the start and end date
+        Returns list of integer positions for dates between (inclusive) startDate and endDate.
         """
         if startDate > endDate:
-            return ValueError("Start Date is later than the End Date!")
-
-        startIdx = self.getNextLowerOrEqualIndex(startDate-timeDelta)
-        endIdx = self.getNextLowerOrEqualIndex(endDate+timeDelta)
-
-        return self.df.slice(startIdx,endIdx-startIdx+1)
+            raise ValueError("start must be ≤ end")
+        lo = self.series.search_sorted(startDate, 'left')-1
+        hi = self.series.search_sorted(endDate, 'right')
+        # include end if exact match
+        if hi < self.len and self.series[hi] == endDate:
+            hi += 1
+        return list(range(lo, hi))
     
-    def around(self,
-            date: pd.Timestamp,
-            timeDelta: pd.Timedelta = pd.Timedelta(days=0.5)):
+    def getIndices(self, targetDates: Iterable[datetime.date]) -> list[Optional[int]]:
+        """
+        For each date in targetDates, return its exact index or None if not present.
+        """
+        idcs = self.series.search_sorted(targetDates, 'left')
+        idcs = [idx if self.series[idx] == targetDates[i] else None for i, idx in enumerate(idcs)]
+        return [self.getIndex(d) for d in targetDates]
 
-        idx = self.getIndex(date, timeDelta)
-
-        if idx == -1:
-            return pl.DataFrame(None)
-
-        return self.df.row[idx]
+    def getNextLowerOrEqualIndices(self, targetDates: Iterable[datetime.date]) -> list[int]:
+        """
+        For each date in targetDates, return the largest index i such that index[i] ≤ date.
+        Raises ValueError if any date is smaller than the first entry.
+        """
+        idcs = self.series.search_sorted(targetDates, 'left')
+        
+        idcs = [idx-1 if self.series[idx] > targetDates[i] else idx for i, idx in enumerate(idcs)]
+        return idcs
 
 class FastTimeOpsPolars:
     def __init__(self, df: pl.DataFrame, date_col: str = 'Date'):
