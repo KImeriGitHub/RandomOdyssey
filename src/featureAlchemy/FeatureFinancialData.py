@@ -32,23 +32,23 @@ class FeatureFinancialData():
         'reportTime',
         'grossProfit',
         'totalRevenue',
-        'costOfRevenue',
-        'operatingIncome',
-        'sellingGeneralAndAdministrative',
-        'operatingExpenses',
-        'interestExpense',
+        #'costOfRevenue',
+        #'operatingIncome',
+        #'sellingGeneralAndAdministrative',
+        #'operatingExpenses',
+        #'interestExpense',
         'ebit',
         'ebitda',
         'totalAssets',
-        'totalCurrentAssets',
-        'totalNonCurrentAssets',
-        'shortTermInvestments',
+        #'totalCurrentAssets',
+        #'totalNonCurrentAssets',
+        #'shortTermInvestments',
         'totalCurrentLiabilities',
-        'shortTermDebt',
+        #'shortTermDebt',
         'totalShareholderEquity',
         'operatingCashflow',
-        'changeInOperatingLiabilities',
-        'cashflowFromInvestment',
+        #'changeInOperatingLiabilities',
+        #'cashflowFromInvestment',
         'commonStockSharesOutstanding',
     ]
     
@@ -57,23 +57,23 @@ class FeatureFinancialData():
         'reportedEPS',
         'grossProfit',
         'totalRevenue',
-        'costOfRevenue',
-        'operatingIncome',
-        'sellingGeneralAndAdministrative',
-        'operatingExpenses',
-        'interestExpense',
+        #'costOfRevenue',
+        #'operatingIncome',
+        #'sellingGeneralAndAdministrative',
+        #'operatingExpenses',
+        #'interestExpense',
         'ebit',
         'ebitda',
         'totalAssets',
-        'totalCurrentAssets',
-        'totalNonCurrentAssets',
-        'shortTermInvestments',
+        #'totalCurrentAssets',
+        #'totalNonCurrentAssets',
+        #'shortTermInvestments',
         'totalCurrentLiabilities',
-        'shortTermDebt',
+        #'shortTermDebt',
         'totalShareholderEquity',
         'operatingCashflow',
-        'changeInOperatingLiabilities',
-        'cashflowFromInvestment',
+        #'changeInOperatingLiabilities',
+        #'cashflowFromInvestment',
     ]
     
     catav_quar_lag = [
@@ -231,14 +231,15 @@ class FeatureFinancialData():
         for lag in range(1, self.num_quar_lag+1):
             self.fin_quar = self.fin_quar.with_columns([
                 (pl.col(col).shift(lag) / pl.col("totalRevenue")).alias(f"{col}_nivRevLag_qm{lag}")
-                for col in self.catav_quar_lag
+                for col in self.catav_quar_lag if not "surprise" in col
             ]).with_columns([
-                (pl.col(col) / pl.col(col).shift(lag)).alias(f"{col}_lagquot_qm{lag}")
-                for col in self.catav_quar_lag
+                (pl.col(col) / pl.col(col).shift(lag)).clip(-30, 30)
+                    .alias(f"{col}_lagquot_qm{lag}")
+                for col in self.catav_quar_lag if not "surprise" in col
             ])
             self.columns_toFeature_quar += (
-                [f"{col}_nivRevLag_qm{lag}" for col in self.catav_quar_lag] +
-                [f"{col}_lagquot_qm{lag}" for col in self.catav_quar_lag]
+                [f"{col}_nivRevLag_qm{lag}" for col in self.catav_quar_lag if not "surprise" in col] +
+                [f"{col}_lagquot_qm{lag}" for col in self.catav_quar_lag if not "surprise" in col]
             )
             
         for lag in range(1, self.num_ann_lag+1):
@@ -246,7 +247,8 @@ class FeatureFinancialData():
                 (pl.col(col).shift(lag) / pl.col("totalRevenue")).alias(f"{col}_nivRevLag_am{lag}")
                 for col in self.catav_ann_lag
             ]).with_columns([
-                (pl.col(col) / pl.col(col).shift(lag)).alias(f"{col}_lagquot_am{lag}")
+                (pl.col(col) / pl.col(col).shift(lag)).clip(-30, 30)
+                    .alias(f"{col}_lagquot_am{lag}")
                 for col in self.catav_ann_lag
             ])
             self.columns_toFeature_ann += (
@@ -292,9 +294,14 @@ class FeatureFinancialData():
               .otherwise( (pl.col("Close") / (pl.col("estimatedEPS")*4)).log() )
               .alias("log_forward_pe_ratio"),
               
-            (pl.col("Close") / (pl.col("totalShareholderEquity")/pl.col("commonStockSharesOutstanding")))
-              .log() 
-              .alias("log_pb_ratio"),
+            pl.when((pl.col("totalShareholderEquity") / pl.col("commonStockSharesOutstanding")) <= 1e-5)
+            .then(1e-5)
+            .otherwise(
+                (pl.col("Close") /
+                (pl.col("totalShareholderEquity") / pl.col("commonStockSharesOutstanding"))
+                ).log()
+            )
+            .alias("log_pb_ratio"),
         ])
         
         self.shareprice = self.shareprice.with_columns([
@@ -337,7 +344,7 @@ class FeatureFinancialData():
                 for col in columns_toLag
             ])
             self.shareprice = self.shareprice.with_columns([
-                (pl.col(col)/pl.col(col).shift(lag)).alias(f"{col}_lagquot_m{lag}")
+                (pl.col(col)/pl.col(col).shift(lag)).clip(-30, 30).alias(f"{col}_lagquot_m{lag}")
                 for col in columns_toLag if col != 'daysToReport'
             ])
             self.columns_toFeature_metric += (

@@ -93,7 +93,8 @@ class FeatureMain():
         # 2) preallocate arrays
         nD, nA, nF = self.nDates, self.nAssets, len(flat_features)
         arr     = np.empty((nD, nA, nF), dtype=np.float32)
-        metaarr = np.empty((nD, nA, 3), dtype=object)  # [date,ticker,close]
+        metaarr = np.empty((nD, nA), dtype=[('date', 'datetime64[D]'), ('ticker', 'U10'), ('Close', 'f4')])  # [date,ticker,close]
+        mask = np.ones((nD, nA), dtype=bool)  # mask for missing values
         
         # 3) fill arrays
         niveau = 1.0
@@ -109,11 +110,12 @@ class FeatureMain():
             idcs = self.idxAssets_exc[ticker]
             for date_idx, date in enumerate(self.business_days):
                 if idcs[date_idx] is None:
+                    mask[date_idx, tidx] = False
                     continue
                 
-                metaarr[date_idx, tidx, 0] = date
-                metaarr[date_idx, tidx, 1] = ticker
-                metaarr[date_idx, tidx, 2] = self.assets[ticker].shareprice["Close"].item(idcs[date_idx])
+                metaarr[date_idx, tidx]['date'] = date
+                metaarr[date_idx, tidx]['ticker'] = ticker
+                metaarr[date_idx, tidx]["Close"] = self.assets[ticker].shareprice["Close"].item(idcs[date_idx])
 
                 arr[date_idx, tidx, :] = np.concatenate([
                     FC.apply(niveau),
@@ -124,10 +126,10 @@ class FeatureMain():
                     FTA.apply(date, niveau, idcs[date_idx]),
                     FGD_tick_date[date][ticker]
                 ])
-                
-        # 4) reshape to (nD*nA, nF) and build Polars DataFrame
-        metaarr  = metaarr.reshape(nD * nA, 3)
-        arr = arr.reshape(nD * nA, nF)
+         
+        # 4) remove missing values
+        metaarr = metaarr[mask]   # this reshapes to (nD*nA) but with valid inputs
+        arr = arr[mask]     # this reshapes to (nD*nA, nF) where nD*nA is not correct its with valid inputs
         
         return metaarr, arr, flat_features
         
@@ -135,7 +137,7 @@ class FeatureMain():
         # 1) gather feature‑name lists
         exampleAsset = next(iter(self.assets.values()))
         featureNames = [
-            FeatureCategory(exampleAsset, self.params).getTimeFeatureNames(),
+            #FeatureCategory(exampleAsset, self.params).getTimeFeatureNames(),
             FeatureMathematical(exampleAsset, self.lagList, self.monthHorizonList, self.params).getTimeFeatureNames(),
             FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params).getTimeFeatureNames(),
             FeatureFinancialData(exampleAsset, self.lagList, self.params).getTimeFeatureNames(),
@@ -149,13 +151,14 @@ class FeatureMain():
         # 2) preallocate arrays
         nD, nA, nT, nF = self.nDates, self.nAssets, self.timesteps, len(flat_features)
         arr     = np.empty((nD, nA, nT, nF), dtype=np.float32)
-        metaarr = np.empty((nD, nA, 3), dtype=object)  # [date,ticker,close]
+        metaarr = np.empty((nD, nA), dtype=[('date', 'datetime64[D]'), ('ticker', 'U10'), ('Close', 'f4')])  # [date,ticker,close]
+        mask = np.ones((nD, nA), dtype=bool)  # mask for missing values
         
         # 3) fill arrays
         FGD_tick_date = {date: self.FGD.apply_timeseries(date, {tic: idxlist[i] for tic, idxlist in self.idxAssets.items()}) for i, date in enumerate(self.business_days)}
         for tidx, ticker in enumerate(self.assets.keys()):
             self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
-            FC = FeatureCategory(self.assets[ticker], self.params)
+            #FC = FeatureCategory(self.assets[ticker], self.params)
             FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
             FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
             FFD = FeatureFinancialData(self.assets[ticker], self.lagList, self.params)
@@ -164,10 +167,12 @@ class FeatureMain():
             idcs = self.idxAssets_exc[ticker]
             for date_idx, date in enumerate(self.business_days):
                 if idcs[date_idx] is None:
+                    mask[date_idx, tidx] = False
                     continue
-                metaarr[date_idx, tidx, 0] = date
-                metaarr[date_idx, tidx, 1] = ticker
-                metaarr[date_idx, tidx, 2] = self.assets[ticker].shareprice["Close"].item(idcs[date_idx])
+                
+                metaarr[date_idx, tidx]['date'] = date
+                metaarr[date_idx, tidx]['ticker'] = ticker
+                metaarr[date_idx, tidx]["Close"] = self.assets[ticker].shareprice["Close"].item(idcs[date_idx])
 
                 arr[date_idx, tidx, :, :] = np.hstack([ 
                     #FC.apply_timeseries(date),
@@ -179,7 +184,8 @@ class FeatureMain():
                     FGD_tick_date[date][ticker]
                 ])    # (nT, nF)
                 
-        metaarr = metaarr.reshape(nD * nA, 3)
-        arr = arr.reshape(nD * nA, nT, nF)
+        # 4) remove missing values
+        metaarr = metaarr[mask]   # this reshapes to (nD*nA) but with valid inputs
+        arr = arr[mask]     # this reshapes to (nD*nA, nT, nF) where nD*nA is not correct its with valid inputs
         
         return metaarr, arr, flat_features

@@ -195,6 +195,6 @@ class FeatureFourierCoeff():
         for ts in range(0, self.timesteps):
             idx_ts = idx - (self.timesteps - 1) + ts
             featuresMat[ts, 0:4] = np.tanh(self.PricesPreMatrix_rsme[idx_ts, :, MH_val_idx])
-            featuresMat[ts, 4:8] = np.tanh(self.PricesPreMatrix_rsmeRatio[idx_ts, :, MH_val_idx] - 0.5)
+            featuresMat[ts, 4:8] = np.tanh(self.PricesPreMatrix_rsmeRatio[idx_ts, :, MH_val_idx] - 1.0)/2.0 + 0.5
             
         return featuresMat.astype(np.float32)

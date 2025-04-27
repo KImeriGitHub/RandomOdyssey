@@ -156,7 +156,7 @@ class FeatureSeasonal():
             date_lag = date - pd.Timedelta(days = ((self.timesteps - 1) - ts))
             
             featuresMat[ts, 0] = date_lag.weekday()/6.0 # Monday=0, Sunday=6
-            featuresMat[ts, 1] = (date_lag.isocalendar()[1]-1)/51.0 # Week number of the year
+            featuresMat[ts, 1] = np.clip((date_lag.isocalendar()[1]-1)/52.0, 0,1) # Week number of the year
             featuresMat[ts, 2] = np.tanh(min([((date_lag)-(h)).days for h in self.holidate_dates], key=lambda x: (abs(x), -x)))/2.0+0.5
             
         return featuresMat.astype(np.float32)
