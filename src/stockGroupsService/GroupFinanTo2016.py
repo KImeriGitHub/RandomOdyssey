@@ -1,6 +1,6 @@
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
-from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
+from src.stockGroupsService.Checks import Checks
 
 import logging
 logger = logging.getLogger(__name__)
@@ -10,7 +10,10 @@ class GroupFinanTo2016(IGroup):
       return "group_finanTo2016" 
 
     def checkAsset(self, asset: AssetData) -> bool:
-        if not GroupFinanTo2011.checkAsset(self, asset, 2016):
+        if not Checks.checkFinanTo(asset=asset, year=2016):
+            return False
+        
+        if not Checks.checkOverYear(asset=asset, year=2011):
             return False
         
         return True

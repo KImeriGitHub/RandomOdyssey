@@ -15,14 +15,7 @@ class GroupSnP500(IGroup):
         return "group_snp500"
   
     def checkAsset(self, asset: AssetData) -> bool:
-        max_date: pd.Timestamp = pd.to_datetime(asset.shareprice["Date"]).max()
-        today: pd.Timestamp = pd.to_datetime(datetime.now())
-        
         if not asset.ticker in self.snp500tickers:
-            return False
-        
-        if max_date < today - pd.Timedelta(days=20):
-            logging.warning(f"Last date in shareprice is too old: {max_date}")
             return False
         
         return True

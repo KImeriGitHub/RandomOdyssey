@@ -11,53 +11,45 @@ logger = logging.getLogger(__name__)
 
 class GroupDebug(IGroup):
     tickers = [
-        "CSX",
-        "EXC",
-        "NVDA",
-        "ADBE",
-        "AMZN",
-        "AMD",
-        "AMGN",
-        "ADI",
-        "ANSS",
         "AAPL",
+        "ADBE",
+        "ADI",
         "ADP",
+        "ALGN",
+        "AMGN",
+        "AMZN",
+        "ANSS",
         "BKNG",
         "CDNS",
         "CSCO",
-        "CTSH",
         "CSX",
-        "EA",
+        "CTSH",
         "EXC",
         "GILD",
         "IDXX",
         "INTC",
-        "INTU",
         "ISRG",
         "KLAC",
         "MAR",
-        "MU",
-        "MSFT",
         "MDLZ",
+        "MSFT",
+        "MU",
         "NFLX",
         "NVDA",
         "QCOM",
         "REGN",
-        "ROST",
         "SBUX",
-        "SNPS",
-        "TXN",
-        "ALGN",
+        "TXN"
     ]
 
     def groupName(self) -> str:
         return "group_debug"
 
     def checkAsset(self, asset: AssetData) -> bool:
-        if GroupFinanTo2011.checkAsset(self, asset) == False:
+        if not GroupFinanTo2011.checkAsset(self, asset):
             return False
         
-        if GroupOver20Years.checkAsset(self, asset) == False:
+        if not GroupOver20Years.checkAsset(self, asset):
             return False
         
         if asset.ticker not in self.tickers:
