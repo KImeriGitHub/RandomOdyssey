@@ -29,7 +29,22 @@ class Merger_AV():
             '7. dividend amount': 'Dividends',
             '8. split coefficient': 'Splits'
         }, inplace=True)
+        cols = ['Open','High','Low','Close','AdjClose','Volume','Dividends','Splits']
+        
+        # Drop missing dates
+        if pd.isnull(fullSharePrice['Date']).any() or fullSharePrice['Date'].isna().any():
+            logger.info(f"  Shareprice has empty dates or NaT Dates.")
+            fullSharePrice = fullSharePrice[pd.notnull(fullSharePrice['Date'])] # remove empty Date columns
+            fullSharePrice = fullSharePrice[fullSharePrice['Date'].notna()] # remove NaT Date columns
         fullSharePrice['Date'] = fullSharePrice['Date'].apply(lambda ts: ts.date())
+        
+        # Drop missing values
+        if pd.isnull(fullSharePrice[cols]).any().any() or fullSharePrice[cols].isna().any().any():
+            logger.info(f"  Shareprice has empty Number values or NaN Number values.")
+            for col in cols:
+                fullSharePrice = fullSharePrice[pd.notnull(fullSharePrice[col])]
+                fullSharePrice = fullSharePrice[fullSharePrice[col].notna()]
+            
         
         full = fullSharePrice.copy()
         existing = self.asset.shareprice.copy()
@@ -37,7 +52,6 @@ class Merger_AV():
         
         new_rows = []
         diffs = []
-        cols = ['Open','High','Low','Close','AdjClose','Volume','Dividends','Splits']
 
         for _, new in full.iterrows():
             date = new['Date']
@@ -72,6 +86,7 @@ class Merger_AV():
             logger.info(f"  Changes to old data amount to >1%:\n" + "\n".join(diffs))
             
     def merge_financials(self, fin_ann: pd.DataFrame, fin_quar: pd.DataFrame) -> None:
+        # Assert
         assert pd.api.types.is_datetime64_any_dtype(fin_ann['fiscalDateEnding']), (
             "fin_ann.fiscalDateEnding must be datetime64[ns], "
             f"got {fin_ann['fiscalDateEnding'].dtype}"
@@ -80,10 +95,40 @@ class Merger_AV():
             "fin_quar.fiscalDateEnding must be datetime64[ns], "
             f"got {fin_quar['fiscalDateEnding'].dtype}"
         )
+        assert pd.api.types.is_datetime64_any_dtype(fin_quar['reportedDate']), (
+            "fin_quar.reportedDate must be datetime64[ns], "
+            f"got {fin_quar['reportedDate'].dtype}"
+        )
+        # Casting Annual Financials
         full_ann = fin_ann.copy()
+        if pd.isnull(full_ann['fiscalDateEnding']).any():   # for empty dates
+            logger.info(f"  Annual Financials has empty dates.")
+            full_ann = full_ann[pd.notnull(full_ann['fiscalDateEnding'])]
+        if full_ann["fiscalDateEnding"].isna().any():        # for NaT dates
+            logger.info(f"  Annual Financials has NaT dates.")
+            full_ann = full_ann[full_ann["fiscalDateEnding"].notna()]
         full_ann['fiscalDateEnding'] = full_ann['fiscalDateEnding'].apply(lambda ts: ts.date())
+        
+        # Casting Quarterly Financials
         full_quar = fin_quar.copy()
+        if pd.isnull(full_quar['fiscalDateEnding']).any():
+            logger.info(f"  Quarterly Financials has empty fiscal Dates.")
+            full_quar = full_quar[pd.notnull(full_quar['fiscalDateEnding'])]
+        if full_quar["fiscalDateEnding"].isna().any():
+            logger.info(f"  Quarterly Financials has NaT fiscal Dates.")
+            full_quar = full_quar[full_quar["fiscalDateEnding"].notna()]
+        if pd.isnull(full_quar['reportedDate']).any():
+            logger.info(f"  Quarterly Financials has empty reported Dates.")
+            full_quar = full_quar[pd.notnull(full_quar['reportedDate'])]
+        if full_quar["reportedDate"].isna().any():
+            logger.info(f"  Quarterly Financials has NaT reported Dates.")
+            full_quar = full_quar[full_quar["reportedDate"].notna()]
         full_quar['fiscalDateEnding'] = full_quar['fiscalDateEnding'].apply(lambda ts: ts.date())
+        full_quar['reportedDate'] = full_quar['reportedDate'].apply(
+            lambda x: x.date().__str__()
+        )
+        
+        # Casting existing Financials
         existing_ann = self.asset.financials_annually.copy()
         existing_ann['fiscalDateEnding'] = existing_ann['fiscalDateEnding'].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
         existing_quar = self.asset.financials_quarterly.copy()
@@ -123,7 +168,7 @@ class Merger_AV():
                     elif pd.DataFrame([new], columns=existing_ann.columns).empty:
                         pass
                     else:
-                        existing_ann = pd.concat([existing_ann, pd.DataFrame([new], columns=existing_ann.columns)], ignore_index=True)
+                        existing_ann = pd.concat((existing_ann, pd.DataFrame([new], columns=existing_ann.columns)), ignore_index=True)
                     cn_updated_ann += 1
                 else:
                     # 2b) some entry in that year → log and skip
@@ -134,6 +179,8 @@ class Merger_AV():
         for _, new in full_quar.iterrows():
             date = new['fiscalDateEnding']
             mask = existing_quar['fiscalDateEnding'] == date
+            
+            # 1) exact‐date match -> fill in any missing fields
             if mask.any():
                 for col in existing_quar.columns.drop('fiscalDateEnding'):
                     if pd.isna(existing_quar.loc[mask, col].iloc[0]):
@@ -141,7 +188,9 @@ class Merger_AV():
                         cn_updated_quar += 1
             else:
                 age = (today - date).days
-                if 0 <= age <= 31:
+                
+                # 2.1) newly reported -> append as new row
+                if 0 <= age <= 60:
                     if existing_quar.empty:
                         existing_quar = pd.DataFrame([new], columns=existing_quar.columns)
                     elif pd.DataFrame([new]).empty:
@@ -152,9 +201,12 @@ class Merger_AV():
                     cn_updated_quar += 1
                     
                 else:
+                    # 2.2) determine quarter and look for any record in same Q/Y
                     q = (date.month - 1) // 3 + 1
                     mask_in_q = (existing_quar['fiscalDateEnding'].apply(lambda x: x.year) == date.year) & \
                            (existing_quar['fiscalDateEnding'].apply(lambda x: (x.month - 1) // 3 + 1) == q)
+                    
+                    # 3.1) no record for this quarter -> append
                     if not mask_in_q.any():
                         if existing_quar.empty:
                             existing_quar = pd.DataFrame([new], columns=existing_quar.columns)
@@ -164,17 +216,25 @@ class Merger_AV():
                             existing_quar = pd.concat([existing_quar, pd.DataFrame([new], columns=existing_quar.columns)], ignore_index=True)
                         cn_updated_quar += 1
                     else:
-                        logger.info(f"  DB quarterly fiscal date differs from new date. Year {date.year} month {date.month}.")
-            
+                        # 3.2) same quarter but different date -> update missing fields and bump date
+                        for col in existing_quar.columns.drop('fiscalDateEnding'):
+                            if pd.isna(existing_quar.loc[mask_in_q, col].iloc[0]):
+                                existing_quar.loc[mask_in_q, col] = new[col]
+                                cn_updated_quar += 1
+                        existingDate = existing_quar.loc[mask_in_q, 'fiscalDateEnding'].iloc[0]
+                        logger.info(f"  DB quarterly fiscal date differs from new date.")
+                        logger.info(f"    Existing: Year {existingDate.year} Month {existingDate.month}. New: Year {date.year} Month {date.month}.")            
+        
+        #Recasting
         existing_ann = existing_ann.sort_values('fiscalDateEnding').reset_index(drop=True)
         existing_quar = existing_quar.sort_values('fiscalDateEnding').reset_index(drop=True)
         existing_ann['fiscalDateEnding']  = existing_ann['fiscalDateEnding'].apply(lambda ts: str(ts))
         existing_quar['fiscalDateEnding'] = existing_quar['fiscalDateEnding'].apply(lambda ts: str(ts))
         
         if cn_updated_quar>0:
-            logger.info(f"  Updated quarterly financial statements on {len(cn_updated_quar)} rows for ticker {self.asset.ticker}.")
+            logger.info(f"  Updated quarterly financial statements on {(cn_updated_quar)} rows for ticker {self.asset.ticker}.")
         if cn_updated_ann>0:
-            logger.info(f"  Updated annual financial statements on {len(cn_updated_ann)} rows for ticker {self.asset.ticker}.")
+            logger.info(f"  Updated annual financial statements on {(cn_updated_ann)} rows for ticker {self.asset.ticker}.")
             
         self.asset.financials_annually = existing_ann
         self.asset.financials_quarterly = existing_quar

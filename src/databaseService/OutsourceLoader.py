@@ -102,7 +102,6 @@ class OutsourceLoader:
 
             financials_annually, financials_quarterly = parser.to_pandas()
             
-            financials_quarterly['reportedDate'] = financials_quarterly['reportedDate'].apply(lambda ts: str(ts.date()))
             financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quarterly, daysDiscrep = 15)
             financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually, daysDiscrep = 60)
             financials_annually = CleanData.financial_lastRow_removeIfOutOfFiscal(financials_annually)
