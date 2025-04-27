@@ -375,6 +375,7 @@
 - GRC
 - GT
 - GTLS
+- GVA
 - HAIN
 - HAL
 - HALO
@@ -384,7 +385,6 @@
 - HD
 - HE
 - HEI
-- HELE
 - HES
 - HIG
 - HIMX
@@ -554,6 +554,7 @@
 - MOG-A
 - MOH
 - MOV
+- MPAA
 - MPW
 - MPWR
 - MRCY
@@ -652,6 +653,7 @@
 - PEG
 - PEGA
 - PENN
+- PEP
 - PFE
 - PG
 - PH
@@ -722,6 +724,7 @@
 - SBAC
 - SBGI
 - SBLK
+- SBS
 - SBUX
 - SCCO
 - SCHW
@@ -772,6 +775,7 @@
 - STRA
 - STRL
 - STX
+- STZ
 - SU
 - SUP
 - SVC
@@ -894,6 +898,7 @@
 - WNC
 - WOLF
 - WOR
+- WRB
 - WSM
 - WSO
 - WST
