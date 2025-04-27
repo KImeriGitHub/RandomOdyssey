@@ -4,6 +4,7 @@ from typing import Dict, List
 
 import pandas as pd
 import numpy as np
+import datetime
 from datetime import datetime as dt
 
 from src.common.AssetFileInOut import AssetFileInOut
@@ -35,8 +36,8 @@ def process_period(
     assets: Dict[str, AssetDataPolars],
     group: str,
     label: str,
-    start: pd.Timestamp,
-    end: pd.Timestamp,
+    start: datetime.date,
+    end: datetime.date,
     lag_list: List[int],
     month_horizons: List[int],
     params: dict,
@@ -73,7 +74,7 @@ def process_period(
     logging.info("Saved tree features to %s", tree_path)
 
     # Save time features
-    time_path = os.path.join(out_dir, f"TimeFeatures_meta_{label}_{group}.npz")
+    time_path = os.path.join(out_dir, f"TimeFeatures_{label}_{group}.npz")
     np.savez_compressed(
         time_path,
         meta_time=meta_time,
@@ -84,11 +85,12 @@ def process_period(
     
 if __name__ == "__main__":
     groups = [
+        "group_debug",
         "group_snp500_finanTo2011",
         "group_finanTo2011",
     ]
-    years = np.arange(2015, 2025)
-    lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 400]
+    years = np.arange(2014, 2025)
+    lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
     month_horizons = [1, 2, 4, 6, 8, 12]
     params = {
         "idxLengthOneMonth": 21,
@@ -102,8 +104,8 @@ if __name__ == "__main__":
         # Yearly periods
         for year in years:
             label = str(year)
-            start_date = pd.Timestamp(year, 1, 1, tz="UTC")
-            end_date = pd.Timestamp(year, 12, 31, tz="UTC")
+            start_date = pd.Timestamp(year, 1, 1).date()
+            end_date = pd.Timestamp(year, 12, 31).date()
             
             logger.info("Processing %s for group %s", label, group)
             starttime = dt.now()
@@ -130,7 +132,7 @@ if __name__ == "__main__":
             assets_pl,
             group,
             label,
-            pd.Timestamp(2025, 1, 1, tz="UTC"),
+            pd.Timestamp(2025, 1, 1).date(),
             last_ts,
             lag_list,
             month_horizons,
