@@ -39,7 +39,7 @@ class AssetData:
     #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
     #  'reportedDate'                 : str  (YYYY-MM-DD)
     #  'reportedEPS'                  : float
-    #  'estimatedEPS'                 : str  (YYYY-MM-DD)
+    #  'estimatedEPS'                 : float
     #  'surprise'                     : float
     #  'surprisePercentage'           : float
     #  'reportTime'                   : str  ('pre_market', 'post-market')

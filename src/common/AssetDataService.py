@@ -95,14 +95,14 @@ class AssetDataService:
     def to_polars(ad: AssetData) -> AssetDataPolars:
         # Convert Pandas → Polars and cast date columns properly
         sp = pl.from_pandas(ad.shareprice).with_columns(
-            pl.col("Date").cast(pl.Date)
+            pl.col("Date").str.strptime(pl.Date, format="%Y-%m-%d", strict=False)
         ) if ad.shareprice is not None else None
         fq = pl.from_pandas(ad.financials_quarterly).with_columns([
-            pl.col("fiscalDateEnding").cast(pl.Date),
-            pl.col("reportedDate").cast(pl.Date),
+            pl.col("fiscalDateEnding").str.strptime(pl.Date, format="%Y-%m-%d", strict=False),
+            pl.col("reportedDate").str.strptime(pl.Date, format="%Y-%m-%d", strict=False),
         ]) if ad.financials_quarterly is not None else None
         fa = pl.from_pandas(ad.financials_annually).with_columns(
-            pl.col("fiscalDateEnding").cast(pl.Date)
+            pl.col("fiscalDateEnding").str.strptime(pl.Date, format="%Y-%m-%d", strict=False)
         ) if ad.financials_annually is not None else None
 
         return AssetDataPolars(
