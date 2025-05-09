@@ -6,16 +6,16 @@ import pandas as pd
 import numpy as np
 import datetime
 from datetime import datetime as dt
+import argparse
 
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetDataService import AssetDataService
 from src.common.AssetDataPolars import AssetDataPolars
 from src.featureAlchemy.FeatureMain import FeatureMain
 
-# Configure logging for better traceability
 formatted_date = dt.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
-    filename=f'output_generating_features_{formatted_date}.txt',
+    filename=f'logs/output_generating_features_{formatted_date}.txt',
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
@@ -41,7 +41,6 @@ def process_period(
     lag_list: List[int],
     month_horizons: List[int],
     params: dict,
-    logger: logging.Logger,
 ):
     """
     Compute and save both tree and time features for a given time period.
@@ -84,12 +83,15 @@ def process_period(
     logging.info("Saved time features to %s", time_path)
     
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Year to form features")
+    parser.add_argument(
+        "--year", type=int, default=2025, help="some string value"
+    )
+    year = parser.parse_args().year
     groups = [
         "group_debug",
         "group_snp500_finanTo2011",
-        "group_finanTo2011",
     ]
-    years = np.arange(2014, 2025)
     lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
     month_horizons = [1, 2, 4, 6, 8, 12]
     params = {
@@ -100,41 +102,31 @@ if __name__ == "__main__":
     }
 
     for group in groups:
+        label = str(year)
         assets_pl = load_assets(group)
-        # Yearly periods
-        for year in years:
-            label = str(year)
-            start_date = pd.Timestamp(year, 1, 1).date()
+        start_date = pd.Timestamp(year, 1, 1).date()
+        
+        end_date = 0
+        if year < 2025:
             end_date = pd.Timestamp(year, 12, 31).date()
-            
-            logger.info("Processing %s for group %s", label, group)
-            starttime = dt.now()
-            process_period(
-                assets_pl,
-                group,
-                label,
-                start_date,
-                end_date,
-                lag_list,
-                month_horizons,
-                params,
-                logger=logger,
-            )
-            endtime = dt.now()
-            logger.info("Processed %s in %s seconds", label, (endtime - starttime).total_seconds())
-
-        first_ticker = list(assets_pl.keys())[0]
-        date = assets_pl[first_ticker].shareprice["Date"].item(-1)
-        # Use Polars max to safely get last date
-        last_ts = pd.Timestamp(date)
-        label = f"2025_to_{last_ts.date()}"
+        else:
+            # Use Polars max to safely get last date
+            first_ticker = list(assets_pl.keys())[0]
+            date = assets_pl[first_ticker].shareprice["Date"].item(-1)
+            last_ts = pd.Timestamp(date)
+            end_date = last_ts.date()
+        
+        logger.info("Processing %s for group %s", label, group)
+        starttime = dt.now()
         process_period(
             assets_pl,
             group,
             label,
-            pd.Timestamp(2025, 1, 1).date(),
-            last_ts,
+            start_date,
+            end_date,
             lag_list,
             month_horizons,
             params,
         )
+        endtime = dt.now()
+        logger.info("Processed %s in %s seconds", label, (endtime - starttime).total_seconds())

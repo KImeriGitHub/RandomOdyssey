@@ -262,13 +262,13 @@ class FeatureFinancialData():
         
         # Configure joining dataframe
         self.fin_quar_join = (self.fin_quar
-            .with_row_count("q_idx")
-            .rename({"fiscalDateEnding": "Date"})
+            .with_row_index("q_idx")
+            .with_columns(pl.col("reportedDate").alias("Date"))
             .select(["Date", "q_idx"] + metricsColumns_quar)
         )
 
         self.fin_ann_join = (self.fin_ann
-            .with_row_count("a_idx")
+            .with_row_index("a_idx")
             .rename({"fiscalDateEnding": "Date"})
             .select(["Date", "a_idx"] + metricsColumns_ann)
         )
@@ -326,7 +326,7 @@ class FeatureFinancialData():
         
         # add the difference of days to the reportedDate (max 30 days)
         self.shareprice = self.shareprice.with_columns(
-            (pl.col("reportedDate") - pl.col("Date")).dt.total_days().alias("daysToReport")
+            (pl.col("Date") - pl.col("Date")).dt.total_days().alias("daysToReport")
         )
         self.shareprice = self.shareprice.with_columns(
             (pl.col("daysToReport").clip(0,30)/30.0).alias("daysToReport")

@@ -31,9 +31,7 @@ class FeatureCategory():
         'consumer-cyclical'
     ]
     
-    def __init__(self, asset: AssetDataPolars, params: dict = None, dirPath: str = None):
-        if dirPath is None:
-            dirPath = "/src/tickerSelection"
+    def __init__(self, asset: AssetDataPolars, params: dict = None):
             
         self.asset = asset
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}

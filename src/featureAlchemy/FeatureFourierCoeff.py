@@ -10,7 +10,7 @@ class FeatureFourierCoeff():
     # Class-level default parameters
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
-        'fouriercutoff': 10,
+        'fouriercutoff': 3,
         'multFactor': 8,
         'timesteps': 10,
     }
