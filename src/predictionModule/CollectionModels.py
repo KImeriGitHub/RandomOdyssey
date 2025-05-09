@@ -1,10 +1,3 @@
-from src.simulation.SimulatePortfolio import SimulatePortfolio
-from src.strategy.StratBuyAndHold import StratBuyAndHold
-from src.strategy.StratLinearAscendRanked import StratLinearAscendRanked
-from src.simulation.ResultAnalyzer import ResultAnalyzer
-from src.common.AssetFileInOut import AssetFileInOut
-from src.common.YamlTickerInOut import YamlTickerInOut
-from src.common.Portfolio import Portfolio
 from src.common.AssetDataPolars import AssetDataPolars
 from src.predictionModule.AkinDistriML import AkinDistriML
 from src.predictionModule.SubsetML import SubsetML
@@ -19,7 +12,9 @@ import optuna
 import logging
 from datetime import datetime
 
-from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
+from sklearn.metrics import confusion_matrix
+
+logger = logging.getLogger(__name__)
 
 class CollectionModels():
     # Prepare Dates

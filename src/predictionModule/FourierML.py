@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from typing import Dict, List
-import xgboost as xgb
 from scipy.interpolate import CubicSpline
 from scipy.ndimage import gaussian_filter1d
 from dataclasses import dataclass

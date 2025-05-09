@@ -4,7 +4,6 @@ import polars as pl
 import bisect
 import holidays
 from typing import Dict, List
-import xgboost as xgb
 from sklearn.utils import shuffle
 import pycountry
 from sklearn.preprocessing import MinMaxScaler

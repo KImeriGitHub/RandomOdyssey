@@ -3,12 +3,14 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 from collections import Counter
-import xgboost as xgb
 from typing import Optional
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
 from src.predictionModule.IML import IML
 import lightgbm as lgb
+from scipy import stats
+
 import logging
+logger = logging.getLogger(__name__)
 
 class ModelAnalyzer:
     def __init__(self, module = None):
@@ -58,7 +60,7 @@ class ModelAnalyzer:
         return percentage_sum_sq
     
     @staticmethod
-    def print_label_distribution(*arrays, logger: logging.Logger):
+    def print_label_distribution(*arrays):
         """
         Print the distribution of one or more label arrays.
 
@@ -74,7 +76,7 @@ class ModelAnalyzer:
             logger.info("")
 
     @staticmethod 
-    def print_classification_metrics(y_known: np.ndarray, y_observer: np.ndarray, y_obs_proba: np.ndarray = None, logger: logging.Logger = None):
+    def print_classification_metrics(y_known: np.ndarray, y_observer: np.ndarray, y_obs_proba: np.ndarray = None):
         """
         Print per-class accuracy, overall accuracy, log loss, and TPR, FPR, TNR, FNR for each class.
 
@@ -112,7 +114,7 @@ class ModelAnalyzer:
         logger.info("")
 
     @staticmethod
-    def print_feature_importance_LGBM(model: IML, n_feature: int = 50, logger: logging.Logger = None):
+    def print_feature_importance_LGBM(model: IML, n_feature: int = 50):
         importances = model.LGBMModel.feature_importances_
         
         feature_importances = pd.DataFrame({
@@ -129,7 +131,7 @@ class ModelAnalyzer:
         logger.info(top_features.to_string())
     
     @staticmethod
-    def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20, logger: logging.Logger = None):
+    def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
         importances = lgbModel.feature_importances_
         
         feature_importances = pd.DataFrame({
@@ -146,7 +148,7 @@ class ModelAnalyzer:
         logger.info(top_features.to_string())
     
     @staticmethod
-    def print_feature_importance_LGBM(lgbModel: lgb.Booster, featureColumnNames: list[str], n_feature: int = 20, logger: logging.Logger = None):
+    def print_feature_importance_LGBM(lgbModel: lgb.Booster, featureColumnNames: list[str], n_feature: int = 20):
         importances = lgbModel.feature_importance()
         
         feature_importances = pd.DataFrame({
@@ -282,3 +284,36 @@ class ModelAnalyzer:
         plt.ylabel('Frequency')
         plt.grid(True)
         plt.show()
+
+    def print_model_results(pred: list, ret: list):
+        logger.info(f"Resulting returns: {ret}")
+        logger.info(f"Resulting returns mean: {np.mean([x for x in ret if x is not None])}")
+        logger.info(f"Resulting returns variance: {np.var([x for x in ret if x is not None])}")
+        logger.info("")
+        logger.info(f"Resulting predictions: {pred}")
+        logger.info(f"Resulting predictions mean: {np.mean([x for x in pred if x is not None])}")
+        logger.info(f"Resulting predictions variance: {np.var([x for x in pred if x is not None])}")
+        logger.info("")
+
+        logger.info("Statictical Analysis res_pred to res_return")
+        # print statistic like regression for res_pred to res_return
+        # Calculate the correlation coefficient and the p-value
+        correlation, p_value = stats.pearsonr(pred, ret)
+
+        # Log the results
+        logger.info(f"Correlation coefficient: {correlation}")
+
+        # Perform a linear regression
+        slope, intercept, r_value, p_value, std_err = stats.linregress(pred, ret)
+
+        # Log the regression results
+        logger.info(f"Linear regression slope: {slope}")
+        logger.info(f"Linear regression intercept: {intercept}")
+        logger.info(f"R-squared: {r_value**2}")
+        logger.info(f"P-value: {p_value}")
+        logger.info(f"Standard error: {std_err}")
+
+        # Variance of the residuals
+        residuals = np.array(ret) - (slope * np.array(pred) + intercept)
+        residuals_variance = np.var(residuals)
+        logger.info(f"Variance of the residuals: {residuals_variance}") 

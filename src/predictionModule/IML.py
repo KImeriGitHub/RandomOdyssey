@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import os
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 import lightgbm as lgb
 import joblib
 import pickle
