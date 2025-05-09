@@ -14,10 +14,7 @@ class GroupSnP500NAS100Over20Years(IGroup):
         if not Checks.checkOverYear(asset, 2004):
             return False
         
-        if not asset.ticker in self.snp500tickers:
-            return False
-        
-        if not asset.ticker in self.nas100tickers:
+        if not (asset.ticker in self.snp500tickers or asset.ticker in self.nas100tickers):
             return False
         
         return True

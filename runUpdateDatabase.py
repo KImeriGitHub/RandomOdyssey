@@ -2,16 +2,42 @@ import yaml
 import os
 import logging
 from datetime import datetime
+
 from src.databaseService.EstablishStocks import EstablishStocks
 from src.common.YamlTickerInOut import YamlTickerInOut 
+
+from src.stockGroupsService.GroupOver20Years import GroupOver20Years
+from src.stockGroupsService.GroupSwiss import GroupSwiss
+from src.stockGroupsService.GroupManager import GroupManager
+from src.stockGroupsService.GroupSwissOver20Years import GroupSwissOver20Years
+from src.stockGroupsService.GroupSnP500 import GroupSnP500
+from src.stockGroupsService.GroupSnP500Over20Years import GroupSnP500Over20Years
+from src.stockGroupsService.GroupSnP500NAS100Over20Years import GroupSnP500NAS100Over20Years
+from src.stockGroupsService.GroupSnP500FinanTo2011 import GroupSnP500FinanTo2011
+from src.stockGroupsService.GroupDebug import GroupDebug
+from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
+from src.stockGroupsService.GroupFinanTo2016 import GroupFinanTo2016
 
 formatted_date = datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
     level=logging.INFO, 
-    filename=f"output_updateDatabase_{formatted_date}.log",
+    filename=f"logs/output_updateDatabase_{formatted_date}.log",
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+groupClasses = [
+    GroupOver20Years(),
+    GroupSwiss(),
+    GroupSwissOver20Years(),
+    GroupSnP500(),
+    GroupSnP500Over20Years(),
+    GroupSnP500NAS100Over20Years(),
+    GroupSnP500FinanTo2011(),
+    GroupDebug(),
+    GroupFinanTo2011(),
+    GroupFinanTo2016(),
+]
 
 def get_apiKey() -> str:
     # Read and load the api key for alpha vantage
@@ -52,15 +78,24 @@ def get_stock_list() -> list[str]:
         raise ValueError("No stocks found in the YAML file.")
         
     return [str(ticker) for ticker in stockList]  # Make sure its a list of strings
-    
 
 if __name__ == "__main__":
     operator = "alphaVantage"  #"yfinance" or "alphaVantage"
     apiKey = get_apiKey() if operator == "alphaVantage" else ""
     stockList = get_stock_list()
     
-    EstablishStocks(
-        tickerList=stockList,
-        operator=operator,
-        apiKey=apiKey
-    ).updateAssets()
+    
+    # Update database entries
+    #EstablishStocks(
+    #    tickerList=stockList,
+    #    operator=operator,
+    #    apiKey=apiKey
+    #).updateAssets()
+    
+    
+    # Update groups
+    dbPath = "src/database"
+    groupPath = "src/stockGroups"
+
+    manager = GroupManager(databasePath=dbPath, stockGroupPath=groupPath, groupClasses = groupClasses)
+    manager.generateGroups()

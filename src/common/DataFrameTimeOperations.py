@@ -34,6 +34,8 @@ class DataFrameTimeOperations:
         Return the exact‐match index of targetDate, or None if not present.
         """
         i = self.series.search_sorted(targetDate, 'left')
+        if i == self.len:
+            return None
         if not self.series[i] == targetDate:
             return None
         return i
@@ -41,9 +43,11 @@ class DataFrameTimeOperations:
     def getNextLowerOrEqualIndex(self, targetDate: datetime.date) -> int:
         """
         Return the largest index i such that self.index[i] <= targetDate.
-        Raises ValueError if all dates are > targetDate.
         """
         i = self.series.search_sorted(targetDate, 'left')
+        if i == self.len:
+            i = i-1
+            
         if self.series[i] == targetDate:
             return i
         if self.series[i] < targetDate:
@@ -71,17 +75,27 @@ class DataFrameTimeOperations:
         For each date in targetDates, return its exact index or None if not present.
         """
         idcs = self.series.search_sorted(targetDates, 'left')
+        
+        # fix idx out of range of series
+        idcs = [idx-1 if idx == self.len else idx for idx in idcs]
+        
+        # check whether it is an exact match
         idcs = [idx if self.series[idx] == targetDates[i] else None for i, idx in enumerate(idcs)]
-        return [self.getIndex(d) for d in targetDates]
+        
+        return idcs
 
     def getNextLowerOrEqualIndices(self, targetDates: Iterable[datetime.date]) -> list[int]:
         """
         For each date in targetDates, return the largest index i such that index[i] ≤ date.
-        Raises ValueError if any date is smaller than the first entry.
         """
         idcs = self.series.search_sorted(targetDates, 'left')
         
+        # fix idx out of range of series
+        idcs = [idx-1 if idx == self.len else idx for idx in idcs]
+        
+        # adjust for search_sorted behavior
         idcs = [idx-1 if self.series[idx] > targetDates[i] else idx for i, idx in enumerate(idcs)]
+        
         return idcs
 
 class FastTimeOpsPolars:

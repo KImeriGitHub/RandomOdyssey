@@ -23,32 +23,23 @@ class EstablishStocks:
         fileInOut = AssetFileInOut("src/database")
         yamlInOut = YamlTickerInOut("src/stockGroups")
         outsourceLoader = OutsourceLoader(outsourceOperator=self.operator, api_key=self.apiKey)
-        
-        allTickersYamlList = yamlInOut.loadFromFile("group_all")
-        
-        # Make sure its a list of strings
-        assert isinstance(allTickersYamlList, list), "Not a list"
-        assert all(isinstance(t, str) for t in allTickersYamlList), "Not all strings"
+        allTickersYamlList = []
         
         for ticker in stockList:
             tStart = time.time()
-            is_new_asset = False
             
             # Load current asset from database
             if fileInOut.exists(ticker):
                 asset: AssetData = fileInOut.loadFromFile(ticker)
-                allTickersYamlList.append(asset.ticker) if asset.ticker not in allTickersYamlList else None
             else:
-                asset: AssetData = AssetDataService.defaultInstance(ticker=ticker)
-                is_new_asset = True
+                asset: AssetData = AssetDataService.defaultInstance(ticker = ticker)
             
             # Try updating asset data
             try:
-                asset_new: AssetData = outsourceLoader.update(asset = asset, ticker=ticker)
+                asset_new: AssetData = outsourceLoader.update(asset = asset, ticker = ticker)
                 
                 fileInOut.saveToFile(asset_new)
-                if is_new_asset:
-                    allTickersYamlList.append(asset_new.ticker)
+                allTickersYamlList.append(ticker)
                 
                 logger.info(f"Got Stock data for {ticker}.")
                 
@@ -62,7 +53,5 @@ class EstablishStocks:
             except Exception as e:
                 logger.info(f"EXCEPTION. Stock data for {ticker} not retrievable. Error message: {e}")
                 
-        
         # Save all tickers to YAML file
-        allTickersYamlList = np.unique(allTickersYamlList).tolist()
         yamlInOut.saveToFile(allTickersYamlList, "group_all")

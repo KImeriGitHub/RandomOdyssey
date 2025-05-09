@@ -57,7 +57,7 @@ class OutsourceLoader:
         mergerService = Merger_AV(assetData=new_asset)
         
         ## Merge daily shareprices
-        mergerService.merge_shareprice(fullSharePrice=fullSharePrice)
+        mergerService.merge_shareprice(mergingshareprice=fullSharePrice)
         
         ## Configure company overview
         company_overview = None

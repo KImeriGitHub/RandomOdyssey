@@ -1,5 +1,7 @@
 import pandas as pd
+import polars as pl
 from datetime import datetime as dt
+import datetime
 from typing import Dict, Tuple, List
 from src.common.AssetData import AssetData
 import logging
@@ -12,12 +14,18 @@ class Merger_AV():
         # No longer storing data in the constructor
         self.asset = assetData
     
-    def merge_shareprice(self, fullSharePrice: pd.DataFrame) -> None:
+    def merge_shareprice(self, mergingshareprice: pd.DataFrame) -> None:
         """
         Merges share price data into the asset's shareprice DataFrame.
         """
-        fullSharePrice.reset_index(inplace=True)
+        if mergingshareprice.empty: 
+            raise ValueError("Mergingshareprice DataFrame is empty.")
+        
+        ### PREPARE MERGING SHAREPRICE DATA
+        fullSharePrice = mergingshareprice.copy()
+        fullSharePrice.index.name = "date"
         fullSharePrice = fullSharePrice.iloc[::-1] #flip upside down
+        fullSharePrice.reset_index(inplace=True)
         fullSharePrice.rename(columns={
             'date': 'Date',
             '1. open': 'Open',
@@ -36,54 +44,99 @@ class Merger_AV():
             logger.info(f"  Shareprice has empty dates or NaT Dates.")
             fullSharePrice = fullSharePrice[pd.notnull(fullSharePrice['Date'])] # remove empty Date columns
             fullSharePrice = fullSharePrice[fullSharePrice['Date'].notna()] # remove NaT Date columns
+            
+        # Convert datetime to date
         fullSharePrice['Date'] = fullSharePrice['Date'].apply(lambda ts: ts.date())
         
-        # Drop missing values
-        if pd.isnull(fullSharePrice[cols]).any().any() or fullSharePrice[cols].isna().any().any():
-            logger.info(f"  Shareprice has empty Number values or NaN Number values.")
-            for col in cols:
-                fullSharePrice = fullSharePrice[pd.notnull(fullSharePrice[col])]
-                fullSharePrice = fullSharePrice[fullSharePrice[col].notna()]
+        # Drop missing values, except for last row
+        if fullSharePrice[cols].iloc[:-1].isnull().values.any():
+            logger.info("  Shareprice has empty Number values or NaN Number values.")
+            # build a mask: keep rows where *all* cols are notna, or it’s the last row
+            last_idx = fullSharePrice.index[-1]
+            mask = fullSharePrice[cols].notna().all(axis=1) | (fullSharePrice.index == last_idx)
+            fullSharePrice = fullSharePrice[mask]
             
         
+        ### IF NO SHAREPRICE DATA IN DB, JUST ASSIGN
+        if len(self.asset.shareprice) == 0:
+            self.asset.shareprice = fullSharePrice
+            self.asset.shareprice['Date'] = self.asset.shareprice['Date'].apply(lambda ts: str(ts))
+            logger.info(f"  No existing shareprice data for ticker {self.asset.ticker}.")
+            return
+            
+        ### PREPARE TO MERGE SHAREPRICE DATA
         full = fullSharePrice.copy()
         existing = self.asset.shareprice.copy()
         existing['Date'] = existing['Date'].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
         
-        new_rows = []
-        diffs = []
-
-        for _, new in full.iterrows():
-            date = new['Date']
-            mask = existing['Date'] == date
-            if not mask.any():
-                new_rows.append(new)
-            else:
-                old = existing.loc[mask].iloc[0]
-                for c in cols:
-                    o, n = old[c], new[c]
-                    if o == 0:
-                        if n != 0:
-                            diffs.append(f"{date} {c}: old=0 -> new={n}")
-                    elif abs(n - o) / abs(o) > 0.01:
-                        pct = (n - o) / o * 100
-                        diffs.append(f"{date} {c}: {pct:.2f}% (old={o}, new={n})")
-
-        # append new rows
-        if new_rows:
-            appended = pd.DataFrame(new_rows)
-            concat = pd.concat([existing, appended], ignore_index=True) if not existing.empty else appended
-            concat = concat.sort_values('Date').reset_index(drop=True)
-            concat['Date'] = concat['Date'].apply(lambda ts: str(ts))
-            self.asset.shareprice = concat
-            
-            logger.info(f"  Added {len(new_rows)} new rows to shareprice data of ticker {self.asset.ticker}.")
-        else:
-            logger.info(f"  No new rows added to shareprice data of ticker {self.asset.ticker}.")
-            
-        # print summary
-        if diffs:
-            logger.info(f"  Changes to old data amount to >1%:\n" + "\n".join(diffs))
+        existing_pl = pl.from_pandas(existing).sort('Date')
+        full_pl = pl.from_pandas(full).sort('Date')
+        
+        merged_pl = existing_pl.join(
+            full_pl,
+            on="Date",
+            how="full",
+            coalesce=True,
+            suffix="_new"
+        )
+        merged_pl = merged_pl.sort("Date")
+        
+        # Update null Entries
+        merged_pl = merged_pl.with_columns(
+            pl.when(pl.col("Open").is_null()).then(pl.col("Open_new")).otherwise(pl.col("Open")).alias("Open"),
+            pl.when(pl.col("High").is_null()).then(pl.col("High_new")).otherwise(pl.col("High")).alias("High"),
+            pl.when(pl.col("Low").is_null()).then(pl.col("Low_new")).otherwise(pl.col("Low")).alias("Low"),
+            pl.when(pl.col("Close").is_null()).then(pl.col("Close_new")).otherwise(pl.col("Close")).alias("Close"),
+            pl.when(pl.col("Volume").is_null()).then(pl.col("Volume_new")).otherwise(pl.col("Volume")).alias("Volume"),
+            pl.when(pl.col("Dividends").is_null()).then(pl.col("Dividends_new")).otherwise(pl.col("Dividends")).alias("Dividends"),
+            pl.when(pl.col("Splits").is_null()).then(pl.col("Splits_new")).otherwise(pl.col("Splits")).alias("Splits")
+        )
+        # Update adjusted close
+        merged_pl = merged_pl.drop("AdjClose").rename({"AdjClose_new": "AdjClose"})
+        
+        # New columns with ratios (for logging)
+        merged_pl = merged_pl.with_columns(
+            (pl.col("Open_new") / pl.col("Open")).alias("Open_ratio"),
+            (pl.col("High_new") / pl.col("High")).alias("High_ratio"),
+            (pl.col("Low_new") / pl.col("Low")).alias("Low_ratio"),
+            (pl.col("Close_new") / pl.col("Close")).alias("Close_ratio"),
+            ((pl.col("Volume_new") - pl.col("Volume"))/100.0).alias("Volume_diff"),
+            (pl.col("Dividends_new") - pl.col("Dividends")).alias("Dividends_diff"),
+            (pl.col("Splits_new") / pl.col("Splits")).alias("Splits_ratio")
+        )
+        
+        # Adopt new values
+        merged_pl = merged_pl.with_columns(
+            pl.when(pl.col("Open").is_not_null() & pl.col("Open_new").is_not_null()).then(pl.col("Open_new")).otherwise(pl.col("Open")).alias("Open"),
+            pl.when(pl.col("High").is_not_null() & pl.col("High_new").is_not_null()).then(pl.col("High_new")).otherwise(pl.col("High")).alias("High"),
+            pl.when(pl.col("Low").is_not_null() & pl.col("Low_new").is_not_null()).then(pl.col("Low_new")).otherwise(pl.col("Low")).alias("Low"),
+            pl.when(pl.col("Close").is_not_null() & pl.col("Close_new").is_not_null()).then(pl.col("Close_new")).otherwise(pl.col("Close")).alias("Close"),
+            pl.when(pl.col("Volume").is_not_null() & pl.col("Volume_new").is_not_null()).then(pl.col("Volume_new")).otherwise(pl.col("Volume")).alias("Volume"),
+            pl.when(pl.col("Dividends").is_not_null() & pl.col("Dividends_new").is_not_null()).then(pl.col("Dividends_new")).otherwise(pl.col("Dividends")).alias("Dividends"),
+            pl.when(pl.col("Splits").is_not_null() & pl.col("Splits_new").is_not_null()).then(pl.col("Splits_new")).otherwise(pl.col("Splits")).alias("Splits")
+        )
+        
+        # Logging of critical changes
+        counts_df = merged_pl.select([
+            ((pl.col(c) > 1.01) | (pl.col(c) < 0.99)).sum().alias(c)
+            for c in ["Open_ratio", "High_ratio", "Low_ratio", "Close_ratio", "Splits_ratio"]
+        ] + [
+            ((pl.col(c) > 0.01) | (pl.col(c) < -0.01)).sum().alias(c)
+            for c in ["Volume_diff", "Dividends_diff"]
+        ])
+        counts = counts_df.to_dicts()[0]
+        for col, cnt in counts.items():
+            logger.info(f"  {col}: {cnt} values outside +-1%")
+        
+        ### ASSIGN MERGED SHAREPRICE DATA
+        merged_pl = merged_pl.select(["Date"] + cols)
+        merged_pd = merged_pl.to_pandas()
+        merged_pd['Date'] = merged_pd['Date'].apply(lambda ts: str(ts.date()))
+        self.asset.shareprice = merged_pd
+        
+        # Further logging
+        new_dates = set(full_pl["Date"].to_list()) - set(existing_pl["Date"].to_list())
+        logger.info(f"  Added {len(new_dates)} new rows to shareprice data of ticker {self.asset.ticker}.")
             
     def merge_financials(self, fin_ann: pd.DataFrame, fin_quar: pd.DataFrame) -> None:
         # Assert
