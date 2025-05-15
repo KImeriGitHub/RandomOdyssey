@@ -5,7 +5,7 @@ import polars as pl
 import lightgbm as lgb
 import logging
 import datetime
-
+import re
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input, GaussianNoise, LSTM, Bidirectional, Dropout, Dense
@@ -13,6 +13,7 @@ from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam, RMSprop
 from tensorflow.keras.losses import MeanSquaredError
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.metrics import RootMeanSquaredError
 
 from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.mathTools.DistributionTools import DistributionTools
@@ -133,7 +134,7 @@ class TreeTimeML:
         
         # Filter start date end date
         mask_at_test_date = (meta_pl["date"] == self.test_date).to_numpy()
-        mask_inbetween_date = ((meta_pl["date"] >= self.train_start_date) | (meta_pl["date"] <= self.test_date - pd.Timedelta(days=self.daysAfter))).to_numpy()
+        mask_inbetween_date = ((meta_pl["date"] >= self.train_start_date) & (meta_pl["date"] <= self.test_date - pd.Timedelta(days=self.daysAfter))).to_numpy()
         
         rat_at_test_date = tar_masked[mask_at_test_date] / cur_masked[mask_at_test_date]
         rat_inbetween = tar_masked[mask_inbetween_date] / cur_masked[mask_inbetween_date]
@@ -228,8 +229,10 @@ class TreeTimeML:
         startTime  = datetime.datetime.now()
         y_train_pred = lstm_model.predict(self.train_Xtime, batch_size=self.params['TreeTime_lstm_batch_size'])[:,0]
         y_test_pred = lstm_model.predict(self.test_Xtime, batch_size=self.params['TreeTime_lstm_batch_size'])[:,0]
-        y_train_pred = np.arctanh(y_train_pred - 0.5) * 2.0 + 1.0
-        y_test_pred = np.arctanh(y_test_pred - 0.5) * 2.0 + 1.0
+        min_clip = -1.0 + 1e-6
+        max_clip = 1.0 - 1e-6
+        y_train_pred = np.arctanh(np.clip((y_train_pred - 0.5) * 2.0, min_clip, max_clip)) + 1.0
+        y_test_pred  = np.arctanh(np.clip((y_test_pred  - 0.5) * 2.0, min_clip, max_clip)) + 1.0
         logger.info(f"LSTM Prediction completed in {datetime.datetime.now() - startTime}.")
         
         ## Add LSTM predictions to the tree test set
@@ -324,7 +327,8 @@ class TreeTimeML:
         model.compile(
             optimizer=optimizer,
             loss=MeanSquaredError(),
-            metrics=[MeanSquaredError()]
+            metrics=[MeanSquaredError(name='mse'),
+                     RootMeanSquaredError(name='rmse')]
         )
 
         # Callbacks
@@ -332,13 +336,25 @@ class TreeTimeML:
         rlrop = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2)
 
         # Train
-        model.fit(
+        history = model.fit(
             self.train_Xtime,
             self.train_ytime,
             batch_size=batch_size,
             epochs=epochs,
             validation_split=0.1,
             callbacks=[es, rlrop]
+        )
+        final_loss = history.history['loss'][-1]
+        final_val_loss = history.history['val_loss'][-1]
+        final_rmse = history.history['rmse'][-1]
+        final_val_rmse = history.history['val_rmse'][-1]
+
+        logger.info(f"  Train    -> loss: {final_loss:.4f},  rmse: {final_rmse:.4f}")
+        logger.info(f"  Validate -> loss: {final_val_loss:.4f}, rmse: {final_val_rmse:.4f}")
+        model.summary(
+            print_fn=lambda line: logger.info(
+                re.sub(r'[\u2500-\u257F]+', '', line)
+            )
         )
 
         return model    
