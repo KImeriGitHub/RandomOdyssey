@@ -8,8 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# For Alpha Vantage
-class Merger_AV():
+class Merger():
     def __init__(self, assetData: AssetData):
         # No longer storing data in the constructor
         self.asset = assetData
@@ -23,40 +22,8 @@ class Merger_AV():
         
         ### PREPARE MERGING SHAREPRICE DATA
         fullSharePrice = mergingshareprice.copy()
-        fullSharePrice.index.name = "date"
-        fullSharePrice = fullSharePrice.iloc[::-1] #flip upside down
-        fullSharePrice.reset_index(inplace=True)
-        fullSharePrice.rename(columns={
-            'date': 'Date',
-            '1. open': 'Open',
-            '2. high': 'High',
-            '3. low': 'Low',
-            '4. close': 'Close',
-            '5. adjusted close': 'AdjClose',
-            '6. volume': 'Volume',
-            '7. dividend amount': 'Dividends',
-            '8. split coefficient': 'Splits'
-        }, inplace=True)
-        cols = ['Open','High','Low','Close','AdjClose','Volume','Dividends','Splits']
-        
-        # Drop missing dates
-        if pd.isnull(fullSharePrice['Date']).any() or fullSharePrice['Date'].isna().any():
-            logger.info(f"  Shareprice has empty dates or NaT Dates.")
-            fullSharePrice = fullSharePrice[pd.notnull(fullSharePrice['Date'])] # remove empty Date columns
-            fullSharePrice = fullSharePrice[fullSharePrice['Date'].notna()] # remove NaT Date columns
+        fullSharePrice["Date"] = fullSharePrice["Date"].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
             
-        # Convert datetime to date
-        fullSharePrice['Date'] = fullSharePrice['Date'].apply(lambda ts: ts.date())
-        
-        # Drop missing values, except for last row
-        if fullSharePrice[cols].iloc[:-1].isnull().values.any():
-            logger.info("  Shareprice has empty Number values or NaN Number values.")
-            # build a mask: keep rows where *all* cols are notna, or it’s the last row
-            last_idx = fullSharePrice.index[-1]
-            mask = fullSharePrice[cols].notna().all(axis=1) | (fullSharePrice.index == last_idx)
-            fullSharePrice = fullSharePrice[mask]
-            
-        
         ### IF NO SHAREPRICE DATA IN DB, JUST ASSIGN
         if len(self.asset.shareprice) == 0:
             self.asset.shareprice = fullSharePrice
@@ -126,10 +93,11 @@ class Merger_AV():
         ])
         counts = counts_df.to_dicts()[0]
         for col, cnt in counts.items():
-            logger.info(f"  {col}: {cnt} values outside +-1%")
+            if cnt > 0:
+                logger.info(f"  {col}: {cnt} values outside +-1%")
         
         ### ASSIGN MERGED SHAREPRICE DATA
-        merged_pl = merged_pl.select(["Date"] + cols)
+        merged_pl = merged_pl.select(["Date",'Open','High','Low','Close','AdjClose','Volume','Dividends','Splits'])
         merged_pd = merged_pl.to_pandas()
         merged_pd['Date'] = merged_pd['Date'].apply(lambda ts: str(ts.date()))
         self.asset.shareprice = merged_pd

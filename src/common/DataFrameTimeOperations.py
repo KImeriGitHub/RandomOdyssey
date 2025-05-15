@@ -2,7 +2,6 @@ import pandas as pd
 import polars as pl
 import numpy as np
 import datetime
-import bisect
 from typing import Iterable, Optional
     
 class DataFrameTimeOperations:
@@ -63,7 +62,7 @@ class DataFrameTimeOperations:
         """
         if startDate > endDate:
             raise ValueError("start must be ≤ end")
-        lo = self.series.search_sorted(startDate, 'left')-1
+        lo = self.series.search_sorted(startDate, 'left')
         hi = self.series.search_sorted(endDate, 'right')
         # include end if exact match
         if hi < self.len and self.series[hi] == endDate:
@@ -87,6 +86,7 @@ class DataFrameTimeOperations:
     def getNextLowerOrEqualIndices(self, targetDates: Iterable[datetime.date]) -> list[int]:
         """
         For each date in targetDates, return the largest index i such that index[i] ≤ date.
+        HAS A -1 IF FIRST INDEX IS GREATER THAN TARGET DATE
         """
         idcs = self.series.search_sorted(targetDates, 'left')
         
@@ -97,48 +97,3 @@ class DataFrameTimeOperations:
         idcs = [idx-1 if self.series[idx] > targetDates[i] else idx for i, idx in enumerate(idcs)]
         
         return idcs
-
-class FastTimeOpsPolars:
-    def __init__(self, df: pl.DataFrame, date_col: str = 'Date'):
-        self.df = df
-        # extract datetime values into pandas Series for tz handling
-        ts_list = df[date_col].to_list()
-        s = pd.to_datetime(pd.Series(ts_list))
-        # ensure timezone-aware, default UTC
-        if s.dt.tz is None:
-            s = s.dt.tz_localize('UTC')
-        # store int64 nanoseconds array
-        self._ts = s.view('int64').to_numpy()
-        # ensure sorted
-        if not np.all(self._ts[:-1] <= self._ts[1:]):
-            raise ValueError("Date column must be sorted")
-
-    def inbetween(self, start: pd.Timestamp, end: pd.Timestamp) -> pl.DataFrame:
-        # ensure pd.Timestamp with tz
-        if start.tzinfo is None:
-            start = start.tz_localize('UTC')
-        if end.tzinfo is None:
-            end = end.tz_localize('UTC')
-        # convert to ns
-        s_ns = start.value
-        e_ns = end.value
-        # find bounds
-        i = np.searchsorted(self._ts, s_ns, side='left')
-        j = np.searchsorted(self._ts, e_ns, side='right') - 1
-        if i > j:
-            return self.df.slice(0, 0)
-        return self.df.slice(i, j - i + 1)
-
-    def around(self, target: pd.Timestamp, tol: pd.Timedelta = pd.Timedelta(days=0.5)) -> pl.DataFrame:
-        # ensure pd.Timestamp with tz
-        if target.tzinfo is None:
-            target = target.tz_localize('UTC')
-        # convert to ns
-        t0_ns = target.value
-        tol_ns = tol.value
-        # compute window
-        lo = np.searchsorted(self._ts, t0_ns - tol_ns, side='left')
-        hi = np.searchsorted(self._ts, t0_ns + tol_ns, side='right')
-        if lo >= hi:
-            return self.df.slice(0, 0)
-        return self.df.slice(lo, hi - lo)

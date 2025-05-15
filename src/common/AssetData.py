@@ -42,7 +42,7 @@ class AssetData:
     #  'estimatedEPS'                 : float
     #  'surprise'                     : float
     #  'surprisePercentage'           : float
-    #  'reportTime'                   : str  ('pre_market', 'post-market')
+    #  'reportTime'                   : str  ('pre-market', 'post-market')
     #  'grossProfit'                  : float
     #  'totalRevenue'                 : float
     #  'ebit'                         : float

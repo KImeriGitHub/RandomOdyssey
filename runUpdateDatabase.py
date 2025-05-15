@@ -84,18 +84,22 @@ if __name__ == "__main__":
     apiKey = get_apiKey() if operator == "alphaVantage" else ""
     stockList = get_stock_list()
     
+    es = EstablishStocks(
+        tickerList=stockList,
+        operator=operator,
+        apiKey=apiKey
+    )
     
-    # Update database entries
-    #EstablishStocks(
-    #    tickerList=stockList,
-    #    operator=operator,
-    #    apiKey=apiKey
-    #).updateAssets()
-    
-    
-    # Update groups
     dbPath = "src/database"
     groupPath = "src/stockGroups"
-
-    manager = GroupManager(databasePath=dbPath, stockGroupPath=groupPath, groupClasses = groupClasses)
-    manager.generateGroups()
+    gm = GroupManager(databasePath=dbPath, stockGroupPath=groupPath, groupClasses = groupClasses)
+    
+    # Update database entries
+    es.updateAssets()
+    
+    # Update groups
+    gm.generateGroups()
+    
+    # Validate datbase entries
+    es.validateAssets()
+    

@@ -11,7 +11,7 @@ from src.common.AssetData import AssetData
 from src.common.AssetDataService import AssetDataService
 from src.databaseService.CleanData import CleanData
 from src.databaseService.Parser import Parser_AV
-from src.databaseService.Merger import Merger_AV
+from src.databaseService.Merger import Merger
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +29,55 @@ class OutsourceLoader:
             raise ValueError("API key is required for Alpha Vantage.")
 
         self.apiKey = api_key
-    
-    def update(self, asset: AssetData, ticker: str) -> AssetData:
-        new_asset: AssetData
+        
+    def request_financials(self, ticker: str) -> tuple:
         if self.outsourceOperator == "yfinance":
             raise NotImplementedError("yfinance is not implemented yet.")
-        elif self.outsourceOperator == "alphaVantage":
-            new_asset = self._from_alpha_vantage(asset, ticker)
         
-        return new_asset
+        elif self.outsourceOperator == "alphaVantage":
+            try:
+                url = 'https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol='+ticker+'&apikey='+self.apiKey
+                incStatementData = requests.get(url).json()
+                url = 'https://www.alphavantage.co/query?function=CASH_FLOW&symbol='+ticker+'&apikey='+self.apiKey
+                cashFlowData = requests.get(url).json()
+                url = 'https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol='+ticker+'&apikey='+self.apiKey
+                balanceSheetData = requests.get(url).json()
+                url = 'https://www.alphavantage.co/query?function=EARNINGS&symbol='+ticker+'&apikey='+self.apiKey
+                earningsData = requests.get(url).json()
+            
+                if incStatementData=={} or cashFlowData == {} or balanceSheetData == {} or earningsData == {}:
+                    raise ValueError(f"Empty Financial Data")
+                
+                return incStatementData, cashFlowData, balanceSheetData, earningsData
+            except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+                logger.info(f"API call get_income_statement_quarterly failed for {ticker} error: {str(e)}")
+                raise requests.exceptions.RequestException
+        
+    def request_shareprice(self, ticker: str) -> pd.DataFrame:
+        if self.outsourceOperator == "yfinance":
+            raise NotImplementedError("yfinance is not implemented yet.")
+        
+        elif self.outsourceOperator == "alphaVantage":
+            ts = TimeSeries(key=self.apiKey, output_format='pandas')
+            try:
+                data, _ = ts.get_daily_adjusted(symbol=ticker, outputsize='full')
+                return data
+            except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+                logger.info(f"API call get_daily_adjusted failed for {ticker} error: {str(e)}")
+                raise requests.exceptions.RequestException
+            
+    def request_company_overview(self, ticker: str) -> dict:
+        if self.outsourceOperator == "yfinance":
+            raise NotImplementedError("yfinance is not implemented yet.")
+        
+        elif self.outsourceOperator == "alphaVantage":
+            fd = FundamentalData(key=self.apiKey, output_format='pandas')
+            try:
+                data, _ = fd.get_company_overview(symbol=ticker)
+                return data
+            except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+                logger.info(f"API call company_overview failed for {ticker} error: {str(e)}")
+                raise requests.exceptions.RequestException
             
     def _from_alpha_vantage(self, assetData: AssetData, tickerHandle: str):
         # Initialize Alpha Vantage API clients
@@ -54,7 +94,7 @@ class OutsourceLoader:
         new_asset = AssetDataService.defaultInstance(ticker=tickerHandle)
         new_asset = AssetDataService.copy(ad=assetData)
         
-        mergerService = Merger_AV(assetData=new_asset)
+        mergerService = Merger(assetData=new_asset)
         
         ## Merge daily shareprices
         mergerService.merge_shareprice(mergingshareprice=fullSharePrice)
@@ -92,7 +132,7 @@ class OutsourceLoader:
             earningsData = requests.get(url).json()
             
             if incStatementData=={} or cashFlowData == {} or balanceSheetData == {} or earningsData == {}:
-                raise ImportError(f"Empty Financial Data")
+                raise ValueError(f"Empty Financial Data")
             
             parser = Parser_AV(
                 incStatementData=incStatementData, 
@@ -100,7 +140,7 @@ class OutsourceLoader:
                 balanceSheetData=balanceSheetData, 
                 earningsData=earningsData)
 
-            financials_annually, financials_quarterly = parser.to_pandas()
+            financials_annually, financials_quarterly = parser.to_pandas_financials()
             
             financials_quarterly = CleanData.financial_fiscalDateIncongruence(financials_quarterly, daysDiscrep = 15)
             financials_annually = CleanData.financial_fiscalDateIncongruence(financials_annually, daysDiscrep = 60)

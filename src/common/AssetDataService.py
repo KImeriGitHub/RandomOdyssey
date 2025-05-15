@@ -1,9 +1,15 @@
 import pandas as pd
 import polars as pl
+import re
 from typing import Dict
-
+from dataclasses import fields
+from pandas.api.types import is_float_dtype
+    
 from src.common.AssetData import AssetData
 from src.common.AssetDataPolars import AssetDataPolars
+
+import logging
+logger = logging.getLogger(__name__)
 
 class AssetDataService:
     def __init__(self):
@@ -11,25 +17,58 @@ class AssetDataService:
 
     @staticmethod
     def defaultInstance(ticker: str = "", isin: str = "") -> AssetData:
-        # Define column schemas for each DataFrame
-        shareprice_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'AdjClose', 'Volume', 'Dividends', 'Splits']
-        quarterly_cols = [
-            'fiscalDateEnding', 'reportedDate', 'reportedEPS', 'estimatedEPS', 'surprise',
-            'surprisePercentage', 'reportTime', 'grossProfit', 'totalRevenue', 'ebit',
-            'ebitda', 'totalAssets', 'totalCurrentLiabilities',
-            'totalShareholderEquity', 'commonStockSharesOutstanding',
-            'operatingCashflow'
-        ]
-        annual_cols = [
-            'fiscalDateEnding', 'reportedEPS', 'grossProfit', 'totalRevenue', 'ebit', 'ebitda',
-            'totalAssets', 'totalCurrentLiabilities', 'totalShareholderEquity',
-            'operatingCashflow'
-        ]
+        # Define dtypes for shareprice
+        shareprice_dtypes = {
+            'Date': 'object',
+            'Open': 'float64',
+            'High': 'float64',
+            'Low': 'float64',
+            'Close': 'float64',
+            'AdjClose': 'float64',
+            'Volume': 'float64',
+            'Dividends': 'float64',
+            'Splits': 'float64'
+        }
+        # Define dtypes for quarterly financials
+        quarterly_dtypes = {
+            'fiscalDateEnding': 'object',
+            'reportedDate': 'object',
+            'reportedEPS': 'float64',
+            'estimatedEPS': 'float64',
+            'surprise': 'float64',
+            'surprisePercentage': 'float64',
+            'reportTime': 'object',
+            'grossProfit': 'float64',
+            'totalRevenue': 'float64',
+            'ebit': 'float64',
+            'ebitda': 'float64',
+            'totalAssets': 'float64',
+            'totalCurrentLiabilities': 'float64',
+            'totalShareholderEquity': 'float64',
+            'commonStockSharesOutstanding': 'float64',
+            'operatingCashflow': 'float64'
+        }
+        # Define dtypes for annual financials
+        annual_dtypes = {
+            'fiscalDateEnding': 'object',
+            'reportedEPS': 'float64',
+            'grossProfit': 'float64',
+            'totalRevenue': 'float64',
+            'ebit': 'float64',
+            'ebitda': 'float64',
+            'totalAssets': 'float64',
+            'totalCurrentLiabilities': 'float64',
+            'totalShareholderEquity': 'float64',
+            'operatingCashflow': 'float64'
+        }
 
-        # Create empty DataFrames with specified columns
-        empty_shareprice = pd.DataFrame(columns=shareprice_cols)
-        empty_quarterly = pd.DataFrame(columns=quarterly_cols)
-        empty_annual = pd.DataFrame(columns=annual_cols)
+        # Create empty DataFrames with specified dtypes
+        empty_shareprice = pd.DataFrame({col: pd.Series(dtype=dt)
+            for col, dt in shareprice_dtypes.items()})
+        empty_quarterly = pd.DataFrame({col: pd.Series(dtype=dt)
+            for col, dt in quarterly_dtypes.items()})
+        empty_annual = pd.DataFrame({col: pd.Series(dtype=dt)
+            for col, dt in annual_dtypes.items()})
 
         return AssetData(
             ticker=ticker,
@@ -72,22 +111,17 @@ class AssetDataService:
         instance.about = assetdict.get("about", {}) or {}
         instance.sector = assetdict.get("sector", "") or ""
 
-        # Helper to build DataFrame safely and match schema
-        def build_df(data_dict, columns):
-            df = pd.DataFrame(data_dict)
-            return df.reindex(columns=columns)
-
         # Load shareprice
         sp_dict = assetdict.get("shareprice", {})
-        instance.shareprice = build_df(sp_dict, instance.shareprice.columns)
+        instance.shareprice = pd.DataFrame(sp_dict)
 
         # Load financials quarterly
         fq_dict = assetdict.get("financials_quarterly", {})
-        instance.financials_quarterly = build_df(fq_dict, instance.financials_quarterly.columns)
+        instance.financials_quarterly = pd.DataFrame(fq_dict)
 
         # Load financials annually
         fa_dict = assetdict.get("financials_annually", {})
-        instance.financials_annually = build_df(fa_dict, instance.financials_annually.columns)
+        instance.financials_annually = pd.DataFrame(fa_dict)
 
         return instance
     
@@ -127,3 +161,84 @@ class AssetDataService:
             financials_quarterly=ad.financials_quarterly.copy(),
             financials_annually=ad.financials_annually.copy()
         )
+
+    @staticmethod
+    def validate_asset_data(ad: AssetData):
+        DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        VALID_REPORT_TIMES = {"pre-market", "post-market"}
+        
+        # 1. Field names
+        dc_fields = {f.name for f in fields(AssetData)}
+        inst_fields = set(ad.__dict__)
+        if dc_fields != inst_fields:
+            extra = inst_fields - dc_fields
+            missing = dc_fields - inst_fields
+            logger.error(f"VALIDATION ERROR: Field mismatch – extra: {extra}, missing: {missing}")
+
+        # 2. Attribute types
+        if not isinstance(ad.ticker, str):
+            logger.error("VALIDATION ERROR: ticker must be str")
+        if not isinstance(ad.isin, str):
+            logger.error("VALIDATION ERROR: isin must be str")
+        if not isinstance(ad.sector, str):
+            logger.error("VALIDATION ERROR: sector must be str")
+        if ad.about is not None and not isinstance(ad.about, dict):
+            logger.error("VALIDATION ERROR: about must be dict or None")
+
+        # Helper to check a date‐string column
+        def check_date_col(df, col):
+            if df[col].dtype != object:
+                logger.error(f"VALIDATION ERROR: {col} must be dtype object (str), got {df[col].dtype}")
+            bad = df[~df[col].astype(str).str.match(DATE_RE)]
+            if not bad.empty:
+                logger.error(f"VALIDATION ERROR: Column {col} has invalid dates:\n{bad[col].unique()}")
+
+        # Helper to check float columns
+        def check_float_col(df, col):
+            if not is_float_dtype(df[col]):
+                logger.error(f"VALIDATION ERROR: {col} must be float dtype, got {df[col].dtype}")
+
+        # 3. shareprice
+        if ad.shareprice is not None:
+            exp = ['Date','Open','High','Low','Close','AdjClose','Volume','Dividends','Splits']
+            if list(ad.shareprice.columns) != exp:
+                logger.error(f"VALIDATION ERROR: shareprice.columns must be {exp}")
+            check_date_col(ad.shareprice, 'Date')
+            for c in exp[1:]:
+                check_float_col(ad.shareprice, c)
+
+        # 4. financials_quarterly
+        if ad.financials_quarterly is not None:
+            exp_q = [
+                'fiscalDateEnding','reportedDate','reportedEPS','estimatedEPS','surprise',
+                'surprisePercentage','reportTime','grossProfit','totalRevenue','ebit',
+                'ebitda','totalAssets','totalCurrentLiabilities','totalShareholderEquity',
+                'commonStockSharesOutstanding','operatingCashflow'
+            ]
+            if list(ad.financials_quarterly.columns) != exp_q:
+                logger.error(f"VALIDATION ERROR: financials_quarterly.columns must be {exp_q}")
+            check_date_col(ad.financials_quarterly, 'fiscalDateEnding')
+            check_date_col(ad.financials_quarterly, 'reportedDate')
+            # reportTime
+            rt = ad.financials_quarterly['reportTime']
+            if ad.financials_quarterly['reportTime'].dtype != object:
+                logger.error(f"VALIDATION ERROR: 'reportTime' must be dtype object (str), got {ad.financials_quarterly['reportTime'].dtype}")
+            if not rt.empty and (rt.dtype != object or not set(rt.unique()).issubset(VALID_REPORT_TIMES)):
+                logger.error(f"VALIDATION ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {rt.unique()}")
+            # numeric
+            for c in exp_q[2:] :
+                if c not in {'reportTime'}:
+                    check_float_col(ad.financials_quarterly, c)
+
+        # 5. financials_annually
+        if ad.financials_annually is not None:
+            exp_a = [
+                'fiscalDateEnding','reportedEPS','grossProfit','totalRevenue','ebit',
+                'ebitda','totalAssets','totalCurrentLiabilities','totalShareholderEquity',
+                'operatingCashflow'
+            ]
+            if list(ad.financials_annually.columns) != exp_a:
+                logger.error(f"VALIDATION ERROR: financials_annually.columns must be {exp_a}")
+            check_date_col(ad.financials_annually, 'fiscalDateEnding')
+            for c in exp_a[1:]:
+                check_float_col(ad.financials_annually, c)
