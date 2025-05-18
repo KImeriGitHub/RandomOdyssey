@@ -203,28 +203,6 @@ class ModelAnalyzer:
         print(f'\nTest Accuracy: {test_acc:.4f}')
         print(f'Test Log Loss: {test_loss:.4f}')
 
-    def plot_feature_importance(self, max_num_features: int = 20, height: float = 0.5, save_path: str = 'feature_importance.png'):
-        """
-        Plot and save feature importance for a specified model.
-
-        Parameters:
-            model_name (str): Name of the model attribute in the IML instance.
-            max_num_features (int): Maximum number of top features to display.
-            height (float): Height of each feature importance bar.
-            save_path (str): File path to save the plot.
-        """
-        model = getattr(self.module, 'XGBoostModel', None)
-        if model is None:
-            raise ValueError(f"Model 'XGBoostModel' not found in the provided model instance.")
-
-        plt.figure(figsize=(10, 8))
-        xgb.plot_importance(model, max_num_features=max_num_features, height=height, show_values=False)
-        plt.title(f'Feature Importance for XGBoostModel')
-        plt.tight_layout()
-        plt.savefig(save_path, bbox_inches='tight')
-        plt.show()
-        print(f"Feature importance plot saved to {save_path}")
-
     def plot_lstm_absolute_diff_histogram(self, 
                                           bins: int = 50, color: str = 'skyblue', 
                                           edgecolor: str = 'black', alpha: float = 0.7, 

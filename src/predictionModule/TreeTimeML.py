@@ -7,8 +7,10 @@ import logging
 import datetime
 import re
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import TimeSeriesSplit
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, GaussianNoise, LSTM, Bidirectional, Dropout, Dense
+from tensorflow.keras.layers import Input, GaussianNoise, LSTM, Bidirectional, Dropout, Dense, Conv1D
 from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam, RMSprop
 from tensorflow.keras.losses import MeanSquaredError
@@ -190,8 +192,13 @@ class TreeTimeML:
         
         if not self.params["TreeTime_FourierRSME_q"] is None:
             idx = np.where(names_tree == 'Fourier_Price_RSMERatioCoeff_1_MH_1')[0]
+            idx1 = np.where(names_tree == 'FeatureTA_Open_lag_m1')[0]
+            idx2 = np.where(names_tree == 'FeatureTA_Open_lag_m10')[0]
             arr = feats_tree[:, idx].flatten()
-            quant = np.quantile(arr, self.params["TreeTime_FourierRSME_q"])
+            arr1 = feats_tree[:, idx1].flatten()
+            arr2 = feats_tree[:, idx2].flatten()
+            mask = mask | (arr2 < arr1*0.98)
+            quant = np.quantile(arr[(arr2 < arr1*0.98)], self.params["TreeTime_FourierRSME_q"])
             mask = mask | (arr <= quant)
             
         if not self.params["TreeTime_RSIExt_q"] is None:
@@ -229,10 +236,12 @@ class TreeTimeML:
         startTime  = datetime.datetime.now()
         y_train_pred = lstm_model.predict(self.train_Xtime, batch_size=self.params['TreeTime_lstm_batch_size'])[:,0]
         y_test_pred = lstm_model.predict(self.test_Xtime, batch_size=self.params['TreeTime_lstm_batch_size'])[:,0]
-        min_clip = -1.0 + 1e-6
-        max_clip = 1.0 - 1e-6
-        y_train_pred = np.arctanh(np.clip((y_train_pred - 0.5) * 2.0, min_clip, max_clip)) + 1.0
-        y_test_pred  = np.arctanh(np.clip((y_test_pred  - 0.5) * 2.0, min_clip, max_clip)) + 1.0
+        rsme = np.sqrt(np.mean((y_train_pred - self.train_ytime) ** 2))
+        logger.info(f"  Train (lstm_pred-ytime)  -> RSME: {rsme:.4f}")
+        y_train_pred = np.arctanh((y_train_pred - 0.5) * 2.0) + 1.0
+        y_test_pred  = np.arctanh((y_test_pred  - 0.5) * 2.0) + 1.0
+        rsme = np.sqrt(np.mean((y_train_pred - self.train_ytree) ** 2))
+        logger.info(f"  Train (arctanh-ytree)    -> RSME: {rsme:.4f}")
         logger.info(f"LSTM Prediction completed in {datetime.datetime.now() - startTime}.")
         
         ## Add LSTM predictions to the tree test set
@@ -254,19 +263,17 @@ class TreeTimeML:
         startTime  = datetime.datetime.now()
         y_train_pred = lgb_model.predict(self.train_Xtree, num_iteration=lgb_model.best_iteration)
         y_test_pred = lgb_model.predict(self.test_Xtree, num_iteration=lgb_model.best_iteration)
+        rsme = np.sqrt(np.mean((y_train_pred - self.train_ytree) ** 2))
+        logger.info(f"  Train (lgbm_pred - ytree)       -> RSME: {rsme:.4f}")
         logger.info(f"LGB Prediction completed in {datetime.datetime.now() - startTime}.")
         
         # filter unimportant features
         # to be implemented
-        
-        # Log predicted distributions
-        logger.info("Predicted Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(y_train_pred > 0.525)
 
         # Return everything needed
         return {
             'lstm_model': lstm_model,
-            #'lgb_model': lgb_model,
+            'lgb_model': lgb_model,
             'y_test_pred': y_test_pred,
         }
 
@@ -281,19 +288,36 @@ class TreeTimeML:
         bidirectional = self.params["TreeTime_lstm_bidirectional"]
         batch_size = self.params["TreeTime_lstm_batch_size"]
         epochs = self.params["TreeTime_lstm_epochs"]
+        loss_name = self.params["TreeTime_lstm_loss"]
         
         # Regularization hyperparameters
         l1 = self.params.get("TreeTime_lstm_l1", 0.0)
         l2 = self.params.get("TreeTime_lstm_l2", 0.0)
         inter_dropout = self.params.get("TreeTime_inter_dropout", 0.0)
         noise_std = self.params.get("TreeTime_input_gaussian_noise", 0.0)
+        
+        # Conv1D option
+        use_conv1d = self.params.get("TreeTime_lstm_conv1d", False)
+        conv_filters = lstm_units
+        conv_kernel = self.params.get("TreeTime_lstm_conv1d_kernel_size", 3)
 
+        X_full, y_full = self.train_Xtime, self.train_ytime
+        n_total = X_full.shape[0]
+        split_at = int(n_total * 0.95)
+        X_train, X_holdout = X_full[:split_at], X_full[split_at:]
+        y_train, y_holdout = y_full[:split_at], y_full[split_at:]
+        
         # Build model
         model = Sequential([Input(shape=self.train_Xtime.shape[1:])])
         # Add Gaussian noise to inputs
         if noise_std > 0:
             model.add(GaussianNoise(noise_std))
-
+        # Add Conv1D layer if opted in
+        if use_conv1d:
+            model.add(Conv1D(filters=conv_filters,
+                            kernel_size=conv_kernel,
+                            padding='same',
+                            activation='relu'))
         # Add LSTM layers with regularization and dropout
         for i in range(num_layers):
             return_seq = i < (num_layers - 1)
@@ -311,10 +335,9 @@ class TreeTimeML:
             # Add dropout between layers
             if inter_dropout > 0 and return_seq:
                 model.add(Dropout(inter_dropout))
-
         # Output layer
         model.add(Dense(1, activation='linear', kernel_regularizer=regularizers.L1L2(l1=l1, l2=l2)))
-
+        
         # Optimizer
         if optimizer_name == "adam":
             optimizer = Adam(learning_rate=learning_rate)
@@ -322,28 +345,38 @@ class TreeTimeML:
             optimizer = RMSprop(learning_rate=learning_rate)
         else:
             raise ValueError(f"Unknown optimizer: {optimizer_name}")
-
+        
+        def quantile_loss(q):
+            def loss(y_true, y_pred):
+                e = y_true - y_pred
+                return tf.reduce_mean(tf.maximum(q*e, (q-1)*e))
+            return loss
+        if loss_name == "quantile":
+            loss = quantile_loss(0.9)
+        elif loss_name == "mse":
+            loss = MeanSquaredError()
         # Compile
         model.compile(
             optimizer=optimizer,
-            loss=MeanSquaredError(),
+            loss=loss,
             metrics=[MeanSquaredError(name='mse'),
-                     RootMeanSquaredError(name='rmse')]
+                    RootMeanSquaredError(name='rmse')]
         )
-
         # Callbacks
         es = EarlyStopping(monitor='loss', patience=3, restore_best_weights=True)
         rlrop = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2)
-
+        
         # Train
         history = model.fit(
-            self.train_Xtime,
-            self.train_ytime,
+            X_train, y_train,
             batch_size=batch_size,
             epochs=epochs,
-            validation_split=0.1,
-            callbacks=[es, rlrop]
+            validation_data=(X_holdout, y_holdout),
+            callbacks=[es, rlrop],
+            shuffle=False,
         )
+            
+        # Log metrics
         final_loss = history.history['loss'][-1]
         final_val_loss = history.history['val_loss'][-1]
         final_rmse = history.history['rmse'][-1]
@@ -382,7 +415,10 @@ class TreeTimeML:
             'random_state': 41,
         }   
         
-        mask_val = np.random.rand(np.sum(self.train_Xtree.shape[0])) < 0.1
+        n_total = self.train_Xtree.shape[0]
+        split_at = int(n_total * 0.95)
+        mask_val = np.zeros(n_total, dtype=bool)
+        mask_val[split_at:] = True
 
         train_data = lgb.Dataset(self.train_Xtree[~mask_val], label = self.train_ytree[~mask_val], weight=self.tree_weights[~mask_val])
         test_data = lgb.Dataset(self.train_Xtree[mask_val], label = self.train_ytree[mask_val], reference=train_data)
@@ -473,9 +509,11 @@ class TreeTimeML:
             
         return top_idces
     
-    def analyze(self):
+    def analyze(self, data = None):
         # Run common pipeline in "analyze" mode
-        data = self.pipeline()
+        if data is None:
+            # If no data is provided, run the pipeline
+            data = self.pipeline()
 
         # Additional analysis with test set
         y_test_pred: np.array = data['y_test_pred']
