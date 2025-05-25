@@ -67,9 +67,6 @@ python runGenerateGroups.py
 ### ML Model Update
 python runGenerateModels.py
 
-### Run Simulation
-python runSimulation.py
-
 ## How to Line Profile
 Add to a function or method the decorator
 @line_profiler.profile
@@ -83,3 +80,7 @@ python -m line_profiler -rmt "runSimulation.py.lprof"
 ## Running pytest
 Just run 'pytest'. Maybe your pytest does not work with the venv. Then you need to update the main python runtime env. To this end run the following command outside the virtual environement
 pip install -r requirement.txt
+
+## Install GPU Driver
+Install Cuda, then run
+py -m pip install nvidia-cudnn-cu12
