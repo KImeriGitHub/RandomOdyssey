@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import lightgbm as lgb
+from lightgbm.callback import record_evaluation
 import logging
 import datetime
 import re
@@ -257,37 +258,37 @@ class TreeTimeML:
         if not self.params["TreeTime_isFiltered"]:
             return np.ones(feats_tree.shape[0], dtype=bool)
         
-        if self.params.get("TreeTime_FourierRSME_q", None) is not None:
+        if self.params["TreeTime_FourierRSME_q"] is not None:
             idx = np.where(names_tree == 'Fourier_Price_RSMERatioCoeff_1_MH_2')[0]
             arr = feats_tree[:, idx].flatten()
             quant = np.quantile(arr, self.params["TreeTime_FourierRSME_q"])
             mask = mask | (arr <= quant)
             
-        if self.params.get("TreeTime_trend_stc_q", None) is not None:
+        if self.params["TreeTime_trend_stc_q"] is not None:
             idx = np.where(names_tree == 'FeatureTA_trend_stc')[0]
             arr = feats_tree[:, idx].flatten()
             quant_lower = np.quantile(arr, self.params["TreeTime_trend_stc_q"])
             mask = mask | (arr <= quant_lower)
             
-        if self.params.get("TreeTime_trend_mass_index_q", None) is not None:
+        if self.params["TreeTime_trend_mass_index_q"] is not None:
             idx = np.where(names_tree == 'FeatureTA_trend_mass_index')[0]
             arr = feats_tree[:, idx].flatten()
             quant_lower = np.quantile(arr, self.params["TreeTime_trend_mass_index_q"])
             mask = mask | (arr <= quant_lower)
             
-        if self.params.get("TreeTime_AvgReturnPct_qup", None) is not None:
+        if self.params["TreeTime_AvgReturnPct_qup"] is not None:
             idx = np.where(names_tree == 'FeatureGroup_AvgReturnPct')[0]
             arr = feats_tree[:, idx].flatten()
             quant = np.quantile(arr, self.params["TreeTime_AvgReturnPct_qup"])
             mask = mask | (arr >= quant)
             
-        if self.params.get("TreeTime_volatility_atr_qup", None) is not None:
+        if self.params["TreeTime_volatility_atr_qup"] is not None:
             idx = np.where(names_tree == 'FeatureTA_volatility_atr')[0]
             arr = feats_tree[:, idx].flatten()
             quant = np.quantile(arr, self.params["TreeTime_volatility_atr_qup"])
             mask = mask | (arr >= quant)
             
-        if self.params.get("TreeTime_ReturnLog_RSMECoeff_2_qup", None) is not None:
+        if self.params["TreeTime_ReturnLog_RSMECoeff_2_qup"] is not None:
             lag = int(self.daysAfter * (5/7))
             candidates = [
                     f'Fourier_ReturnLog_RSMECoeff_2_MH_{m}_lag_m{lag}' for m in [4,5,6,7,8]
@@ -303,7 +304,7 @@ class TreeTimeML:
             else:
                 logger.warning("No Fourier ReturnLog RSME Coeff feature found in the dataset. Skipping filtering by Fourier ReturnLog RSME Coeff.")
             
-        if self.params.get("TreeTime_Drawdown_q", None) is not None:
+        if self.params["TreeTime_Drawdown_q"] is not None:
             candidates = [
                 'MathFeature_Drawdown_MH4',
                 'MathFeature_Drawdown_MH5',
@@ -366,9 +367,12 @@ class TreeTimeML:
             self.featureTreeNames = np.hstack((self.featureTreeNames,["LSTM_Prediction"]))
         
         ## Establish weights for Tree
-        startTime  = datetime.datetime.now()
-        self.tree_weights = self.__establish_weights()
-        logger.info(f"Weights established in {datetime.datetime.now() - startTime}.")
+        if self.params['TreeTime_MatchFeatures_run'] is False:
+            self.tree_weights = np.ones(self.train_Xtree.shape[0])
+        else:
+            startTime  = datetime.datetime.now()
+            self.tree_weights = self.__establish_weights()
+            logger.info(f"Weights established in {datetime.datetime.now() - startTime}.")
         
         # LGB model
         if lgb_model is None:
@@ -378,8 +382,8 @@ class TreeTimeML:
         
         # LGB Predictions
         startTime  = datetime.datetime.now()
-        y_train_pred = lgb_model.predict(self.train_Xtree, num_iteration=lgb_model.best_iteration)
         y_test_pred = lgb_model.predict(self.test_Xtree, num_iteration=lgb_model.best_iteration)
+        y_train_pred = lgb_model.predict(self.train_Xtree, num_iteration=lgb_model.best_iteration)
         rsme = np.sqrt(np.mean((y_train_pred - self.train_ytree) ** 2))
         logger.info(f"  Train (lgbm_pred - ytree)       -> RSME: {rsme:.4f}")
         logger.info(f"LGB Prediction completed in {datetime.datetime.now() - startTime}.")
@@ -392,6 +396,7 @@ class TreeTimeML:
             'lstm_model': lstm_model,
             'lgb_model': lgb_model,
             'y_test_pred': y_test_pred,
+            'y_train_pred': y_train_pred,
         }
 
     def __run_LSTM(self):
@@ -535,12 +540,15 @@ class TreeTimeML:
             'verbosity': -1,
             'n_jobs': -1,
             'is_unbalance': True,
-            'objective': 'regression',
-            #'alpha': 0.85,
-            'metric': 'l2_root',  # NOTE: the string 'rsme' is not recognized, v 4.5.0
+            'objective': 'lambdarank',
+            'ndcg_eval_at': [1,5],
+            'label_gain': tuple(np.array(range(1,400))**(2)), 
+            'metric': 'ndcg',  
+            #'lambdarank_truncation_level': 10,
+            #'lambdarank_norm': True,
             'lambda_l1': self.params['TreeTime_lgb_lambda_l1'],
             'lambda_l2': self.params['TreeTime_lgb_lambda_l2'],
-            'early_stopping_rounds': num_boost_round//10,
+            'early_stopping_rounds': num_boost_round//2,
             'feature_fraction': self.params['TreeTime_lgb_feature_fraction'],
             'num_leaves': self.params['TreeTime_lgb_num_leaves'], 
             'max_depth': self.params['TreeTime_lgb_max_depth'],
@@ -549,16 +557,38 @@ class TreeTimeML:
             'min_gain_to_split': self.params['TreeTime_lgb_min_gain_to_split'],
             'path_smooth': self.params['TreeTime_lgb_path_smooth'],
             'min_sum_hessian_in_leaf': self.params['TreeTime_lgb_min_sum_hessian_in_leaf'],
+            "max_bin": self.params["TreeTime_lgb_max_bin"],
             'random_state': 41,
         }   
         
-        n_total = self.train_Xtree.shape[0]
-        split_at = int(n_total * 0.95)
-        mask_val = np.zeros(n_total, dtype=bool)
-        mask_val[split_at:] = True
-
-        train_data = lgb.Dataset(self.train_Xtree[~mask_val], label = self.train_ytree[~mask_val], weight=self.tree_weights[~mask_val])
-        test_data = lgb.Dataset(self.train_Xtree[mask_val], label = self.train_ytree[mask_val], reference=train_data)
+        counts_df = self.meta_pl_train.group_by("date", maintain_order=True).agg(pl.count("date").alias("cnt"))
+        group_sizes = counts_df['cnt'].to_list()
+        
+        test_size_pct = self.params['TreeTime_lgb_test_size_pct']   
+        n_test = max(1, int(len(group_sizes) * test_size_pct))
+        train_group_sizes = group_sizes[:-n_test]
+        test_group_sizes  = group_sizes[-n_test:]
+        split_idx = sum(train_group_sizes)
+        
+        ytree_df = pl.DataFrame({
+            "date": self.meta_pl_train.select('date').to_series(), 
+            "y": self.train_ytree
+        }).with_columns(
+            pl.col("y")
+            .rank(method="dense")
+            .over("date")
+            .cast(pl.UInt64)  
+            .alias("y_rank")
+        )
+        
+        y_rank_list = ytree_df["y_rank"].to_list()
+        # split features and labels
+        X_all = self.train_Xtree
+        y_all = y_rank_list
+        X_train, X_test = X_all[:split_idx], X_all[split_idx:]
+        y_train, y_test = y_all[:split_idx], y_all[split_idx:]
+        train_data = lgb.Dataset(X_train, label=y_train, group=train_group_sizes)
+        valid_data = lgb.Dataset(X_test,  label=y_test,  group=test_group_sizes)
         
         def print_eval_after_100(env):
             if env.iteration % 100 == 0 or env.iteration == num_boost_round:
@@ -568,14 +598,24 @@ class TreeTimeML:
                 ]
                 logger.info(f"Iteration {env.iteration}: " + ", ".join(results))
         
-        gbm = lgb.train(
+        evals_result = {}
+        gbm: lgb.Booster = lgb.train(
             lgb_params,
             train_data,
-            valid_sets=[test_data],
+            valid_sets=[train_data, valid_data],
+            valid_names=['train', 'test'],
+            callbacks=[
+                #record_evaluation(evals_result),
+                print_eval_after_100
+            ],
             num_boost_round=num_boost_round,
-            callbacks=[print_eval_after_100]
         )
-        
+        #ndcg5 = np.array(evals_result['test']['ndcg@5'])
+        #best_it = int(ndcg5.argmax()) + 1
+        #best_score = ndcg5.max()
+#
+        #gbm.best_iteration = best_it
+        #gbm.best_score['test']['ndcg@5'] = best_score
         return gbm
         
     def __establish_weights(self) -> np.array:
@@ -647,17 +687,18 @@ class TreeTimeML:
         return top_idces
     
     def analyze(self, params: dict = {}, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> tuple:
-        logger.disabled = logger_disabled
-        
         # Run common pipeline in "analyze" mode
         data = self.pipeline(params = params, lstm_model = lstm_model, lgb_model = lgb_model)
 
+        logger.disabled = logger_disabled
+        
         if data["lgb_model"] is not None:
             ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)
         
         # Additional analysis with test set
         y_test_pred: np.array = data['y_test_pred']
-
+        y_train_pred: np.array = data['y_train_pred']
+        
         mean_topval_per_Day = np.zeros(len(self.test_dates))
         mean_toppred_per_Day = np.zeros(len(self.test_dates))
         for idx, test_date in enumerate(self.test_dates):
@@ -706,13 +747,16 @@ class TreeTimeML:
             mean_toppred_per_Day[idx] = np.mean(selected_pred_values_reg)
         
         inliner_mask = (~np.isnan(mean_toppred_per_Day)) & (~np.isnan(mean_topval_per_Day))
-        inliner_mask = inliner_mask & (mean_topval_per_Day > 0.5) & (mean_toppred_per_Day > 0.5)
+        inliner_mask = inliner_mask & (mean_topval_per_Day > 0.5)
         mean_topval_per_Day = mean_topval_per_Day[inliner_mask]
         mean_toppred_per_Day = mean_toppred_per_Day[inliner_mask]
         try:
             act_arr = mean_topval_per_Day
             pred_arr = mean_toppred_per_Day
-            _, _, r_value, _, _ = stats.linregress(pred_arr, act_arr)
+            _, _, r_value, _, _ = stats.linregress(
+                (pred_arr - np.mean(pred_arr))/np.sqrt(np.var(pred_arr)), 
+                (act_arr - np.mean(act_arr))/np.sqrt(np.var(act_arr))
+            )
             r2_score = r_value**2
         except Exception as e:
             logger.error(f"Error calculating R² score: {e}")
@@ -721,36 +765,100 @@ class TreeTimeML:
         
         # Print all values
 
+        n_arr = len(mean_topval_per_Day)
         logger.info("Mean Top Value per Day ALL VALUES: [" + ", ".join([f"{v:.4f}" for v in mean_topval_per_Day]) + "]")
         logger.info(f"Mean Top Predicted per Day ALL VALUES: [" + ", ".join([f"{v:.4f}" for v in mean_toppred_per_Day])+ "]")
-        logger.info(f"Mean actual value for pred > quant3(pred): {np.mean(mean_topval_per_Day[mean_toppred_per_Day > np.quantile(mean_toppred_per_Day, 0.3)]):.4f}")
-        logger.info(f"Mean actual value for pred > quant5(pred): {np.mean(mean_topval_per_Day[mean_toppred_per_Day > np.quantile(mean_toppred_per_Day, 0.5)]):.4f}")
-        logger.info(f"Mean actual value for pred > quant7(pred): {np.mean(mean_topval_per_Day[mean_toppred_per_Day > np.quantile(mean_toppred_per_Day, 0.7)]):.4f}")
-        logger.info(f"Mean actual value for pred > quant9(pred): {np.mean(mean_topval_per_Day[mean_toppred_per_Day > np.quantile(mean_toppred_per_Day, 0.9)]):.4f}")
+        #logger.info(f"quant3(pred): {np.quantile(mean_toppred_per_Day, 0.3):.4f}")
+        #logger.info(f"quant5(pred): {np.quantile(mean_toppred_per_Day, 0.5):.4f}")
+        #logger.info(f"quant7(pred): {np.quantile(mean_toppred_per_Day, 0.7):.4f}")
+        #logger.info(f"quant9(pred): {np.quantile(mean_toppred_per_Day, 0.9):.4f}")
+        #pred_half_3 = np.quantile(mean_toppred_per_Day[n_arr//2:], 0.3)
+        #pred_half_5 = np.quantile(mean_toppred_per_Day[n_arr//2:], 0.5)
+        #pred_half_7 = np.quantile(mean_toppred_per_Day[n_arr//2:], 0.7)
+        #pred_half_9 = np.quantile(mean_toppred_per_Day[n_arr//2:], 0.9)
+        #logger.info(f"quant3(pred half): {pred_half_3:.4f}")
+        #logger.info(f"quant5(pred half): {pred_half_5:.4f}")
+        #logger.info(f"quant7(pred half): {pred_half_7:.4f}")
+        #logger.info(f"quant9(pred half): {pred_half_9:.4f}")
+        #logger.info(f"quant3(train pred): {np.quantile(y_train_pred, 0.3):.4f}")
+        #logger.info(f"quant5(train pred): {np.quantile(y_train_pred, 0.5):.4f}")
+        #logger.info(f"quant7(train pred): {np.quantile(y_train_pred, 0.7):.4f}")
+        #logger.info(f"quant9(train pred): {np.quantile(y_train_pred, 0.9):.4f}")
+        #logger.info(f"Mean actual value for pred > quant3(pred): {np.mean(mean_topval_per_Day[:n_arr//2][mean_toppred_per_Day[:n_arr//2] > pred_half_3]):.4f}")
+        #logger.info(f"Mean actual value for pred > quant5(pred): {np.mean(mean_topval_per_Day[:n_arr//2][mean_toppred_per_Day[:n_arr//2] > pred_half_5]):.4f}")
+        #logger.info(f"Mean actual value for pred > quant7(pred): {np.mean(mean_topval_per_Day[:n_arr//2][mean_toppred_per_Day[:n_arr//2] > pred_half_7]):.4f}")
+        #logger.info(f"Mean actual value for pred > quant9(pred): {np.mean(mean_topval_per_Day[:n_arr//2][mean_toppred_per_Day[:n_arr//2] > pred_half_9]):.4f}")
+        
+        logger.info(f"Best Train score: {data['lgb_model'].best_score['train']}")
+        logger.info(f"Best Test score: {data['lgb_model'].best_score['test']}")
+        logger.info(f"Best Iteration: {data['lgb_model'].best_iteration}")
         return (
             np.mean(mean_topval_per_Day), 
             np.mean(mean_toppred_per_Day),
-            r2_score,
         )
         
-    def predict(self):
+    def predict(self, params: dict = {}, lstm_model = None, lgb_model = None) -> tuple:
         # Run common pipeline in "analyze" mode
-        data = self.pipeline()
+        data = self.pipeline(params = params, lstm_model = lstm_model, lgb_model = lgb_model)
 
+        if data["lgb_model"] is not None:
+            ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)
+        
         # Additional analysis with test set
         y_test_pred: np.array = data['y_test_pred']
-
-        # Top m analysis
-        m = self.params['TreeTime_top_highest']
-        top_m_indices = np.flip(np.argsort(y_test_pred)[-m:])
-        selected_df = self.meta_pl_test.with_columns(pl.Series("prediction_ratio", y_test_pred))[top_m_indices]
+        y_train_pred: np.array = data['y_train_pred']
         
-        selected_pred_values_reg = y_test_pred[top_m_indices]
-        logger.info(f"Mean pred value of top {m}: {np.mean(selected_pred_values_reg)}")
+        mean_topval_per_Day = np.zeros(len(self.test_dates))
+        mean_toppred_per_Day = np.zeros(len(self.test_dates))
+        for idx, test_date in enumerate(self.test_dates):
+            logger.info(f"Analyzing test date: {test_date}")
+            meta_pl_test_ondate = self.meta_pl_test.filter(pl.col("date") == test_date)
+            if meta_pl_test_ondate.is_empty():
+                logger.error(f"ERROR: No data available for test date {test_date}. Skipping analysis.")
+                continue
+            
+            mask_date = (self.meta_pl_test["date"] == test_date).to_numpy()
+            y_test_pred_ondate = y_test_pred[mask_date]
 
-        with pl.Config(ascii_tables=True):
-            logger.info(f"DataFrame:\n{selected_df}")
+            logger.info("Reporting Error on all filtered:")
+            error = (self.test_ytree[mask_date] - y_test_pred_ondate)
+            logger.info(f"  Mean Root Squared Error: {np.sqrt(np.mean((error) ** 2)):.4f}")
+            logger.info(f"  Median Absolute Error: {np.median(np.abs(error)):.4f}")
+            logger.info(f"  Median Error: {np.mean(error):.4f}")
+            logger.info(f"  0.9 Quantile Error: {np.quantile(error, 0.9):.4f}")
+            logger.info(f"  0.1 Quantile Error: {np.quantile(error, 0.1):.4f}")
+
+            # Top m analysis
+            logger.info("Reporting Error on top predicted:")
+            m = self.params['TreeTime_top_highest']
+            top_m_indices = np.flip(np.argsort(y_test_pred_ondate)[-m:])
+            selected_df = meta_pl_test_ondate.with_columns(pl.Series("prediction_ratio", y_test_pred_ondate))[top_m_indices]
+            
+            selected_true_values_reg = selected_df["target_ratio"].to_numpy().flatten()
+            selected_pred_values_reg = y_test_pred_ondate[top_m_indices]
+            logger.info(f"  Mean value of top {m}: {np.mean(selected_true_values_reg)}")
+            logger.info(f"  Min value of top {m}: {np.min(selected_true_values_reg)}")
+            logger.info(f"  Max value of top {m}: {np.max(selected_true_values_reg)}")
+            logger.info(f"  Mean pred value of top {m}: {np.mean(selected_pred_values_reg)}")
         
+            with pl.Config(ascii_tables=True):
+                logger.info(f"DataFrame:\n{selected_df}")
+                
+            mean_topval_per_Day[idx] = np.mean(selected_true_values_reg)
+            mean_toppred_per_Day[idx] = np.mean(selected_pred_values_reg)
+        
+        inliner_mask = (~np.isnan(mean_toppred_per_Day)) & (~np.isnan(mean_topval_per_Day))
+        inliner_mask = inliner_mask & (mean_topval_per_Day > 0.5)
+        mean_topval_per_Day = mean_topval_per_Day[inliner_mask]
+        mean_toppred_per_Day = mean_toppred_per_Day[inliner_mask]
+        
+        logger.info("Mean Top Value per Day ALL VALUES: [" + ", ".join([f"{v:.4f}" for v in mean_topval_per_Day]) + "]")
+        logger.info(f"Mean Top Predicted per Day ALL VALUES: [" + ", ".join([f"{v:.4f}" for v in mean_toppred_per_Day])+ "]")
+
+        logger.info(f"Best Train score: {data['lgb_model'].best_score['train']}")
+        logger.info(f"Best Test score: {data['lgb_model'].best_score['test']}")
+        logger.info(f"Best Iteration: {data['lgb_model'].best_iteration}")
         return (
-            np.mean(selected_pred_values_reg)
+            np.mean(mean_topval_per_Day), 
+            np.mean(mean_toppred_per_Day), 
         )
