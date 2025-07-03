@@ -25,3 +25,4 @@ src/predictionmodule/bin/*
 output_*
 
 documents
+/optuna.db
