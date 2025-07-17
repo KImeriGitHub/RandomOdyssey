@@ -374,7 +374,7 @@ class TreeTimeML:
         data = self.pipeline()
 
         # Additional analysis with test set
-        y_test_pred: np.array = data['y_test_pred']
+        y_test_pred: np.array = data['y_test_pred_masked']
 
         # Top m analysis
         m = self.params['TreeTime_top_n']
