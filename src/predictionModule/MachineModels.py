@@ -301,7 +301,7 @@ class MachineModels:
         inter_dropout = self.params.get('LSTM_inter_dropout', 0.0)
         noise_std = self.params.get('LSTM_input_gaussian_noise', 0.0)
         use_conv1d = self.params.get('LSTM_conv1d', False)
-        conv_kernel = self.params.get('LSTMconv1d_kernel_size', 3)
+        conv_kernel = self.params.get('LSTM_conv1d_kernel_size', 3)
 
         train_ds = TensorDataset(
             torch.tensor(X_train, dtype=torch.float32),
