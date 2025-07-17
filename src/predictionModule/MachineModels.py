@@ -140,7 +140,7 @@ class MachineModels:
         # Hyperparameters to tune
         lstm_units = self.params["LSTM_units"]
         num_layers = self.params["LSTM_num_layers"]
-        dropout = self.params["LSTM_dropout"]
+        dropout = self.params.get("LSTM_dropout", 0.001)
         recurrent_dropout = self.params["LSTM_recurrent_dropout"]
         learning_rate = self.params["LSTM_learning_rate"]
         optimizer_name = self.params["LSTM_optimizer"]

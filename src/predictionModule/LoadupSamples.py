@@ -145,10 +145,12 @@ class LoadupSamples:
         # Post processing
         meta_pl: pl.DataFrame = pl.concat(meta_all_pl_list)
         
-        for idx, test_date in enumerate(self.test_dates):
+        modified_test_dates = self.test_dates[:]
+        for idx, test_date in enumerate(modified_test_dates):
             if not testdate_in_db[idx]:
                 logger.warning(f"Test date {test_date} not found in the database. Resetting to last trading day.")
-                self.test_dates[idx] = meta_pl.filter(pl.col("date") <= test_date).select("date").max()["date"].item()
+                modified_test_dates[idx] = meta_pl.filter(pl.col("date") <= test_date).select("date").max()["date"].item()
+        self.test_dates = modified_test_dates
         
         self.featureTreeNames = namestree
         self.featureTimeNames = namestime
