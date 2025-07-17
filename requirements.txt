@@ -20,3 +20,4 @@ optuna
 seaborn
 statistics
 numba
+pandas_market_calendars
