@@ -196,7 +196,7 @@ class TreeTimeML:
         
     def __establish_weights(self) -> np.array:
         nSamples = self.train_Xtree.shape[0]
-        mask_sparsing = np.random.rand(nSamples) <= 1e4/np.sum(nSamples) # for speedup
+        mask_sparsing = np.random.rand(nSamples) <= 1e4/nSamples # for speedup
         
         ksDist = DistributionTools.ksDistance(
             self.train_Xtree[mask_sparsing].astype(np.float64), 
