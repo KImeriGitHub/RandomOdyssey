@@ -357,18 +357,18 @@ class TreeTimeML:
                 continue
             
             meta_pl_test_ondate = meta_pl_test_ondate.filter(
-                pl.col("result_close") > 0.60
+                pl.col("result_ratio") > 0.60    # TODO: We need to incorporate adj close
             )
 
-            pl.Config.set_tbl_rows(20)
-            pl.Config.set_tbl_cols(10)
             with pl.Config(ascii_tables=True):
+                pl.Config.set_tbl_rows(15)
+                pl.Config.set_tbl_cols(15)
                 logger.info(f"DataFrame:\n{meta_pl_test_ondate}")
                 
             logger.info(f"  P/L Ratio: {meta_pl_test_ondate['result_ratio'].mean():.4f}")
                 
         res_ = meta_pred_df.filter(
-            pl.col("result_close") > 0.60
+            pl.col("result_ratio") > 0.60
         ).group_by("date").agg(
             pl.col("result_ratio").mean().alias("mean_result_ratio")
         )

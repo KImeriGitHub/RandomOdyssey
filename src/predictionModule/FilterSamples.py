@@ -14,6 +14,8 @@ class FilterSamples:
     treeblacklist_keywords = ["Category", "Seasonal", "lag"]  # "FeatureGroup", "Lag"]
     
     default_params= {
+        "FilterSamples_days_to_train_end": 365,
+
         "FilterSamples_lincomb_q_up": 0.90,
         "FilterSamples_lincomb_lr": 0.018601,
         "FilterSamples_lincomb_epochs": 15000,
@@ -41,7 +43,7 @@ class FilterSamples:
         self.ytree_test = ytree_test
         self.treenames = treenames
         self.samples_dates_train = samples_dates_train
-        
+
         self.doTest = True
         if self.ytree_test is None:
             self.doTest = False
@@ -56,6 +58,8 @@ class FilterSamples:
             self.samples_dates_test = samples_dates_test
             
         self.params = {**self.default_params, **(params or {})}
+        
+        self.days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
         
         self.__simple_tests()
                 
@@ -162,6 +166,16 @@ class FilterSamples:
         lincomb_fmask = np.array(self.separate_treefeatures())
         q_lincomb = self.params["FilterSamples_lincomb_q_up"]
         
+        # Reducing to recent days training data
+        unique_dates = dates_train.unique().sort()
+        last_Date: datetime.date = unique_dates[-1]
+        days_to_train_end_mod = self.days_to_train_end if self.days_to_train_end > 0 else len(unique_dates) - 1
+        first_day = last_Date - datetime.timedelta(days = days_to_train_end_mod)
+        mask_dates_reduced = (
+            (self.samples_dates_train >= first_day) 
+            & (self.samples_dates_train <= last_Date)
+        ).fill_null(False).to_numpy()
+        
         # weights UNDER CONSTRUCTION
         #weights = self.establish_weights(
         #    sam_tr=A_lincomb[:, lincomb_fmask],
@@ -171,39 +185,43 @@ class FilterSamples:
         
         for i in range(itermax):
             logger.debug(f"  FilterSamples: Lincomb Iteration {i}/{itermax} running.")
+            dates_recent = dates_train.filter(mask_dates_reduced)
             lincomb = self.ml_train_lincomb(
-                A=A_lincomb[:, lincomb_fmask],
-                v=y_lincomb,
-                dates=dates_train,
+                A=A_lincomb[mask_dates_reduced][:, lincomb_fmask],
+                v=y_lincomb[mask_dates_reduced],
+                dates=dates_recent,
                 maximize=True,
                 upper_quantile=True,
             )
-            w = A_lincomb[:, lincomb_fmask] @ lincomb
-            lincomb_mask_train = w > np.quantile(w, q_lincomb)
-            score = self.evaluate_mask(
-                mask=lincomb_mask_train, 
-                dates=dates_train, 
-                y=y_lincomb
+            w_recent = A_lincomb[mask_dates_reduced][:, lincomb_fmask] @ lincomb
+            quant_w_recent = np.quantile(w_recent, q_lincomb)
+            mask_train_recent = w_recent > quant_w_recent
+            score_recent = self.evaluate_mask(
+                mask=mask_train_recent, 
+                dates=dates_recent, 
+                y=y_lincomb[mask_dates_reduced]
             )
             
+            lincomb_mask_train = (A_lincomb[:, lincomb_fmask] @ lincomb) > quant_w_recent
+            
             #Analysis
-            logger.info(f"  Mean target (train): {score}")
+            logger.info(f"  Mean target (train): {score_recent}")
             logger.debug(f"  Number of features selected: {np.sum(lincomb_fmask)}")
-            ddiff = np.diff(np.sort(np.where(lincomb_mask_train)[0]))
+            ddiff = np.diff(np.sort(np.where(mask_train_recent)[0]))
             logger.info(f"  Max distance between idces: {max(ddiff)}")
             logger.debug(f"  Mean distance between idces: {np.mean(ddiff)}")
             logger.debug(f"  Median distance between idces: {np.median(ddiff)}")
             
             # Update test mask
             w_test = Atest_lincomb[:, lincomb_fmask] @ lincomb
-            lincomb_mask_test = w_test > np.quantile(w, q_lincomb)
+            lincomb_mask_test = w_test > np.quantile(w_recent, q_lincomb)
             if self.doTest:
-                score = self.evaluate_mask(
+                score_test = self.evaluate_mask(
                     mask=lincomb_mask_test, 
                     dates=dates_test, 
                     y=ytest_lincomb
                 )
-                logger.info(f"  Mean target (test): {score}")
+                logger.info(f"  Mean target (test): {score_test}")
                 
                 # Print number of days which are not covered in percentage
                 dates_Mat = self.establish_datesMat(dates_test, device="cpu").to_dense().numpy()
@@ -211,7 +229,7 @@ class FilterSamples:
                 logger.info(f"  Fraction of days with no coverage by test mask: {np.mean(zeroday_perc):.2%}")
                 
             #Analysis
-            logger.debug(f"  w quantile     : {np.quantile(w, q_lincomb)}")
+            logger.debug(f"  w quantile     : {np.quantile(w_recent, q_lincomb)}")
             logger.debug(f"  w_test quantile: {np.quantile(w_test, q_lincomb)}")
             
             lincomb_argsort = np.argsort(np.abs(lincomb))

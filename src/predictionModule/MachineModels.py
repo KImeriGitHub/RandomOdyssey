@@ -8,26 +8,14 @@ import datetime
 import re
 import time
 from scipy import stats
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, GaussianNoise, LSTM, Bidirectional, Dropout, Dense, Conv1D
-from tensorflow.keras import regularizers, backend as K
-from tensorflow.keras.optimizers import Adam, RMSprop
-from tensorflow.keras.losses import MeanSquaredError
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, Callback
-from tensorflow.keras.metrics import RootMeanSquaredError, R2Score
 
+import tensorflow as tf
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm, trange
 import time
-
-from src.predictionModule.ModelAnalyzer import ModelAnalyzer
-from src.mathTools.DistributionTools import DistributionTools
-from src.predictionModule.LoadupSamples import LoadupSamples
-from src.predictionModule.FilterSamples import FilterSamples
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +124,13 @@ class MachineModels:
             X_test: np.ndarray = None,
             y_test: np.ndarray = None
         ) -> tuple[tf.keras.Model, dict]:
+        from tensorflow.keras.models import Sequential
+        from tensorflow.keras.layers import Input, GaussianNoise, LSTM, Bidirectional, Dropout, Dense, Conv1D
+        from tensorflow.keras import regularizers, backend as K
+        from tensorflow.keras.optimizers import Adam, RMSprop
+        from tensorflow.keras.losses import MeanSquaredError
+        from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, Callback
+        from tensorflow.keras.metrics import RootMeanSquaredError, R2Score
         
         # Hyperparameters to tune
         lstm_units = self.params["LSTM_units"]
@@ -369,33 +364,49 @@ class MachineModels:
 
         for epoch in trange(epochs, desc='Epochs'):
             model.train()
-            for X_batch, y_batch in tqdm(
-                train_loader, desc='Training', leave=False
-            ):
+            sum_sq_error = 0.0
+            total_samples = 0
+
+            for X_batch, y_batch in tqdm(train_loader, desc='Training', leave=False):
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 optimizer.zero_grad()
+
                 preds = model(X_batch).squeeze()
+                # compute loss (with optional L1)
                 loss = criterion(preds, y_batch)
                 if l1 > 0:
-                    l1_penalty = sum(p.abs().sum() for p in model.parameters())
-                    loss += l1 * l1_penalty
+                    loss = loss + l1 * sum(p.abs().sum() for p in model.parameters())
                 loss.backward()
                 optimizer.step()
+
+                # accumulate squared error for RMSE
+                # note: detach so it doesn't track grads
+                se = ((preds.detach() - y_batch) ** 2).sum().item()
+                sum_sq_error += se
+                total_samples += y_batch.numel()
+
                 if time.time() - start_time > 3600:
                     break
 
+            train_rmse = (sum_sq_error / total_samples) ** 0.5
+
+            # validation as before
             model.eval()
             val_rmses = []
-            for X_batch, y_batch in tqdm(
-                val_loader, desc='Validation', leave=False
-            ):
-                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                preds = model(X_batch).squeeze()
-                mse = nn.MSELoss()(preds, y_batch)
-                val_rmses.append(torch.sqrt(mse).item())
+            with torch.no_grad():
+                for X_batch, y_batch in tqdm(val_loader, desc='Validation', leave=False):
+                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                    preds = model(X_batch).squeeze()
+                    mse = nn.MSELoss()(preds, y_batch)
+                    val_rmses.append(torch.sqrt(mse).item())
             val_rmse = sum(val_rmses) / len(val_rmses)
-            scheduler.step(val_rmse)
 
+            print(f"Epoch {epoch+1}/{epochs} — "
+                f"Train RMSE: {train_rmse:.4f} — "
+                f"Validation RMSE: {val_rmse:.4f}")
+
+            scheduler.step(val_rmse)
+            
             if val_rmse < best_rmse:
                 best_rmse, wait = val_rmse, 0
                 best_state = model.state_dict()
