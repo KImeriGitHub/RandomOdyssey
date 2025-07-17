@@ -1,333 +1,324 @@
-from src.predictionModule.CollectionModels import CollectionModels
-from src.common.AssetFileInOut import AssetFileInOut
+from src.predictionModule.TreeTimeML import TreeTimeML
+from src.predictionModule.LoadupSamples import LoadupSamples
 
-from src.common.AssetDataPolars import AssetDataPolars
-from src.common.AssetDataService import AssetDataService
-from typing import Dict
 import pandas as pd
 import numpy as np
 import polars as pl
-from datetime import datetime
-import os
-import gc
+import datetime
+import secrets
+import copy
 import logging
 import optuna
+from optuna.exceptions import TrialPruned
+import argparse
 
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
-from scipy import stats
-
-stock_group = "snp500_finanTo2011"
-assets=AssetFileInOut("src/stockGroups/bin").loadDictFromFile("group_"+stock_group)
-assetspl: Dict[str, AssetDataPolars] = {}
-for ticker, asset in assets.items():
-    assetspl[ticker]= AssetDataService.to_polars(asset)
-
-#To free up RAM
-del assets
-cutoffDate = pd.Timestamp(year=2010, month=1, day=7, tz='UTC')
-for ticker, asset in assetspl.items():
-    lastIdx = DPl(assetspl[ticker].adjClosePrice).getNextLowerOrEqualIndex(cutoffDate)
-    if not assetspl[ticker].adjClosePrice['Date'].item(lastIdx) == cutoffDate:
-        print(f"Cutoff-date {cutoffDate} was not found in ticker {ticker}.")
-        
-    assetspl[ticker].shareprice = assetspl[ticker].shareprice.slice(lastIdx)
-    assetspl[ticker].adjClosePrice = assetspl[ticker].adjClosePrice.slice(lastIdx)
-    assetspl[ticker].volume = assetspl[ticker].volume.slice(lastIdx)
-    assetspl[ticker].dividends = assetspl[ticker].dividends.slice(lastIdx)
-    assetspl[ticker].splits = assetspl[ticker].splits.slice(lastIdx)
+stock_group = "group_snp500_finanTo2011"
+stock_group_short = "snp500_finanTo2011"
     
-    assetspl[ticker].shareprice.shrink_to_fit()
-    assetspl[ticker].adjClosePrice.shrink_to_fit()
-    assetspl[ticker].volume.shrink_to_fit()
-    assetspl[ticker].dividends.shrink_to_fit()
-    assetspl[ticker].splits.shrink_to_fit()
-    
-gc.collect()
-
 params = {
-    'idxAfterPrediction': 10,
-    'monthsHorizon': 3,
-    'timesteps': 5,
-    'classificationInterval': [0.05],
-    
+    "idxAfterPrediction": 5,
+    'timesteps': 25,
     'target_option': 'last',
     
-    'optuna_trials': 3,
-    'averageOverDays': 5,
-    'optuna_weight': 4,
+    "TreeTime_top_n": 5,
+    "TreeTime_stoploss": 0.92,
     
-    'Akin_test_quantile': 1.0,
-    'Akin_feature_max': 1492,
+    "FilterSamples_lincomb_q_up": 0.97,
+    "FilterSamples_lincomb_lr": 0.0008384895113158295,
+    "FilterSamples_lincomb_epochs": 800,
+    "FilterSamples_lincomb_probs_noise_std": 0.010503627436184224,
+    "FilterSamples_lincomb_subsample_ratio": 0.2424109747001177,
+    "FilterSamples_lincomb_sharpness": 0.59226051089996,
+    "FilterSamples_lincomb_featureratio": 0.33269072850403053,
+    "FilterSamples_lincomb_itermax": 1,
+    "FilterSamples_lincomb_show_progress": True,
+
+    'TreeTime_run_lstm': True,
+    "LSTM_units": 32,
+    "LSTM_num_layers": 4,
+    "LSTM_dropout": 0.0001,
+    "LSTM_recurrent_dropout": 0.0001,
+    "LSTM_learning_rate": 0.001,
+    "LSTM_optimizer": "adam",
+    "LSTM_bidirectional": True,
+    "LSTM_batch_size": 2**11,
+    "LSTM_epochs": 1,
+    "LSTM_l1": 0.0001,
+    "LSTM_l2": 0.0001,
+    "LSTM_inter_dropout": 0.0001,
+    "LSTM_input_gaussian_noise": 0.0001,
+    "LSTM_conv1d": True,
+    "LSTM_conv1d_kernel_size": 3,
+    "LSTM_loss": "mse",
     
-    'Akin_itersteps': 2,
-    'Akin_pre_weight_truncation': 1,
-    'Akin_pre_num_leaves': 185,
-    'Akin_pre_num_boost_round': 400,
-    'Akin_num_leaves': 81,
-    'Akin_num_boost_round': 60,
-    
-    'Akin_feature_fraction': 0.191528,
-    'Akin_top_highest': 10,
-    
-    'Akin_max_depth': 9, #default = -1
-    'Akin_learning_rate': 0.011040, #default = 0.1
-    'Akin_min_data_in_leaf': 329, # default = 20
-    'Akin_min_gain_to_split': 0.108174, # default = 0
-    'Akin_path_smooth': 0.749147, # default = 0
-    'Akin_min_sum_hessian_in_leaf': 0.164186, #default = 1e-3
+    "LGB_num_boost_round": 1500,
+    "LGB_lambda_l1": 0.04614242128149404,
+    "LGB_lambda_l2": 0.009786276249261908,
+    "LGB_feature_fraction": 0.20813359498274574,
+    "LGB_num_leaves": 182,
+    "LGB_max_depth": 11,
+    "LGB_learning_rate": 0.02887444408582576,
+    "LGB_min_data_in_leaf": 272,
+    "LGB_min_gain_to_split": 0.10066457576238419,
+    "LGB_path_smooth": 0.5935679203578974,
+    "LGB_min_sum_hessian_in_leaf": 0.3732876155751053,
+    "LGB_max_bin": 150,
+        
+    'TreeTime_MatchFeatures_run': False,
+    'TreeTime_MatchFeatures_minWeight': 0.4,
+    'TreeTime_MatchFeatures_truncation': 2,
+    'TreeTime_MatchFeatures_Pricediff': True,
+    'TreeTime_MatchFeatures_FinData_quar': False,
+    'TreeTime_MatchFeatures_FinData_metrics': False,
+    'TreeTime_MatchFeatures_Fourier_RSME': False,
+    'TreeTime_MatchFeatures_Fourier_Sign': False,
+    'TreeTime_MatchFeatures_TA_trend': True,
+    'TreeTime_MatchFeatures_FeatureGroup_VolGrLvl': False,
+    'TreeTime_MatchFeatures_LSTM_Prediction': False,
 }
-formatted_date = datetime.now().strftime("%d%b%y_%H%M").lower()
+
+formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
 
 logging.basicConfig(
-    filename=f'output_{stock_group}_Akin_{formatted_date}.txt',
+    filename=f'logs/output_TreeTime_{stock_group_short}_{formatted_date}.log',
     level=logging.DEBUG,
-    format='%(message)s'
+    format='%(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M'
 )
 logger = logging.getLogger(__name__)
 logger.info(f" Params: {params}")
 
-#if __name__ == "__main__":
-#    eval_date = pd.Timestamp(year=2025, month=3, day=7, tz='UTC')
-#    formatted_date = eval_date.strftime('%d%b%Y')
-#    akinML_binaries_live_name = (
-#        f"AkinDistriML_{stock_group}_{formatted_date}_10days"
-#    )
-#    
-#    print(f"----------Date: {eval_date}----------")
-#    print(f"----------{akinML_binaries_live_name}----------")
-#
-#    CollectionModels.AkinDistriML_saveData_predict(
-#        assetspl = assetspl, 
-#        save_name = akinML_binaries_live_name,
-#        params = params,
-#        test_date = eval_date,
-#        logger = logger,
-#    ) 
-#    #CollectionModels.AkinDistriML_loadUpData_predict(
-#    #    assetspl = assetspl, 
-#    #    loadup_name = akinML_binaries_live_name,
-#    #    params = params,
-#    #    test_date = eval_date,
-#    #    logger = logger,
-#    #) 
-
-#if __name__ == "__main__":
-#    lagList = np.array([0, 10, 20, 30, 45, 55, 69, 80, 110, 150, 240, 280, 320, 366, 420, 600])
-#    lagList = np.unique(np.random.randint(366*6+150, 366*7+150, 13))
-#    
-#    lagList = np.array([10, 22, 36, 39, 49, 60, 89, 112, 117, 128,
-#     132, 170, 201, 209, 203, 230, 263, 268, 288, 325, 384, 414, 489, 512, 594, 
-#     606, 608, 616, 637, 670, 720, 725, 772, 778, 783, 805, 810, 866, 
-#     873, 901, 950, 1013, 1037, 1043, 1060, 1064, 1098, 1153, 1172, 
-#     1242, 1254, 1298, 1331, 1337, 1341, 1360, 1404, 1421, 1452, 1487, 
-#     1509, 1546, 1556, 1598, 1620, 1660, 1706, 1728, 1734, 1760, 1775, 
-#     1802, 1817, 1889, 1930, 1993, 2025, 2050, 2043, 2085, 2122, 2201, 2278, 2326, 2387, 
-#     2411, 2461, 2471, 2500, 2505, 2517, 2536])
-#    eval_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
-#    res_return = []
-#    res_pred = []
-#    res_all = []
-#    res_allPred = []
-#    res_midend = []
-#    startTime = datetime.now()
-#    for dayLag in lagList:
-#        test_date_lag = eval_date - pd.Timedelta(days=dayLag)
-#        
-#        formatted_date = test_date_lag.strftime('%d%b%Y')
-#        
-#        akinML_binaries_subsetml_name = (
-#            f"AkinDistriML_{stock_group}_{formatted_date}_10days"
-#        )
-#        
-#        logger.info(f"----------Date: {test_date_lag} , Lag: {dayLag}----------")
-#        logger.info(f"----------{akinML_binaries_subsetml_name}----------")
-#        filePath = os.path.join("src/predictionModule/bin", akinML_binaries_subsetml_name + '.pkl')
-#        if not os.path.exists(filePath):
-#            CollectionModels.AkinDistriML_saveData(
-#                assetspl = assetspl, 
-#                save_name = akinML_binaries_subsetml_name,
-#                params = params,
-#                test_date = test_date_lag,
-#                logger = logger,
-#            ) 
-#        
-#        res_loc = CollectionModels.AkinDistriML_loadup_analyze(
-#            assetspl = assetspl, 
-#            loadup_name = akinML_binaries_subsetml_name,
-#            test_date = test_date_lag,
-#            params = params,
-#            logger = logger,
-#        )
-#        res_return.append(res_loc[0])
-#        res_pred.append(res_loc[1])
-#        res_all.append(res_loc[2])
-#        res_allPred.append(res_loc[3])
-#        res_midend.extend(res_loc[4])
-#    
-#    endTime = datetime.now()
-#    logger.info(f"Time taken: {endTime - startTime}")
-#    logger.info("")
-#    logger.info(f"Resulting returns: {res_return}")
-#    logger.info(f"Resulting returns mean: {np.mean([x for x in res_return if x is not None])}")
-#    logger.info(f"Resulting returns variance: {np.var([x for x in res_return if x is not None])}")
-#    logger.info("")
-#    logger.info(f"Resulting predictions: {res_pred}")
-#    logger.info(f"Resulting predictions mean: {np.mean([x for x in res_pred if x is not None])}")
-#    logger.info(f"Resulting predictions variance: {np.var([x for x in res_pred if x is not None])}")
-#    logger.info("")
-#    logger.info(f"Resulting all test stock: {res_all}")
-#    logger.info(f"Resulting all test stock mean: {np.mean([x for x in res_all if x is not None])}")
-#    logger.info(f"Resulting all test stock variance: {np.var([x for x in res_all if x is not None])}")
-#    logger.info("")
-#    logger.info(f"Resulting all test predictions: {res_allPred}")
-#    logger.info(f"Resulting all test predictions mean: {np.mean([x for x in res_allPred if x is not None])}")
-#    logger.info(f"Resulting all test predictions variance: {np.var([x for x in res_allPred if x is not None])}")
-#    logger.info("")
-#    
-#    # Ratio Analysis
-#    logger.info("Ratio Analysis")
-#    
-#    mid_ratios, end_ratios = zip(*res_midend)
-#    logger.info(f"Resulting mid ratios: {list(mid_ratios)}")
-#    logger.info(f"Resulting end ratios: {list(end_ratios)}")
-#
-#    # Function to calculate probability based on a given condition
-#    def probability(group, condition):
-#        return sum(1 for a, b in group if condition(a, b)) / len(group) if group else 0
-#
-#    # Group the data based on mid ratio thresholds
-#    groups = {
-#        "mid ratio < 0.995": [pair for pair in res_midend if pair[0] < 0.995],
-#        "0.995 <= mid ratio <= 1.005": [pair for pair in res_midend if 0.995 <= pair[0] <= 1.005],
-#        "mid ratio > 1.005": [pair for pair in res_midend if pair[0] > 1.005]
-#    }
-#
-#    # Log probabilities where end ratio > mid ratio
-#    logger.info("Probabilities for end ratio > mid ratio:")
-#    for label, group in groups.items():
-#        prob = probability(group, lambda a, b: b > a)
-#        logger.info(f"    {label}: {prob}")
-#
-#    # Log probabilities where end ratio <= mid ratio
-#    logger.info("Probabilities for end ratio <= mid ratio:")
-#    for label, group in groups.items():
-#        prob = probability(group, lambda a, b: b <= a)
-#        logger.info(f"    {label}: {prob}")    
-#    
-#    # Statistics Prediction to Return
-#    logger.info("Statictical Analysis All Prediction to top Return")
-#    # print statistic like regression for res_pred to res_return
-#    # Calculate the correlation coefficient and the p-value
-#    correlation, p_value = stats.pearsonr(res_allPred, res_return)
-#
-#    # Log the results
-#    logger.info(f"Correlation coefficient: {correlation}")
-#
-#    # Perform a linear regression
-#    slope, intercept, r_value, p_value, std_err = stats.linregress(res_allPred, res_return)
-#
-#    # Log the regression results
-#    logger.info(f"Linear regression slope: {slope}")
-#    logger.info(f"Linear regression intercept: {intercept}")
-#    logger.info(f"R-squared: {r_value**2}")
-#    logger.info(f"P-value: {p_value}")
-#    logger.info(f"Standard error: {std_err}")
-#    
-#    # Variance of the residuals
-#    residuals = np.array(res_return) - (slope * np.array(res_allPred) + intercept)
-#    residuals_variance = np.var(residuals)
-#    logger.info(f"Variance of the residuals: {residuals_variance}") 
-    
+###############
+## ANALYZING ##
+###############
 if __name__ == "__main__":
-    eval_date = pd.Timestamp(year=2024, month=12, day=13, tz='UTC')
-    res = []      
-    test_date_lag1 = eval_date - pd.Timedelta(days=10)
-    test_date_lag2 = eval_date - pd.Timedelta(days=873)
-    test_date_lag3 = eval_date - pd.Timedelta(days=1802)
-    test_date_lag4 = eval_date - pd.Timedelta(days=2471)
-    formatted_date1 = test_date_lag1.strftime('%d%b%Y')
-    formatted_date2 = test_date_lag2.strftime('%d%b%Y')
-    formatted_date3 = test_date_lag3.strftime('%d%b%Y')
-    formatted_date4 = test_date_lag4.strftime('%d%b%Y')
+    last_date = datetime.date(2025,  2,  1)
+    start_date = datetime.date(2014,  1,  1)
     
-    akinML_binaries_subsetml_name1 = (
-        f"AkinDistriML_{stock_group}_{formatted_date1}_10days")
-    akinML_binaries_subsetml_name2 = (
-        f"AkinDistriML_{stock_group}_{formatted_date2}_10days")
-    akinML_binaries_subsetml_name3 = (
-        f"AkinDistriML_{stock_group}_{formatted_date3}_10days")
-    akinML_binaries_subsetml_name4 = (
-        f"AkinDistriML_{stock_group}_{formatted_date4}_10days")
+    ls = LoadupSamples(
+        train_start_date=start_date,
+        test_dates=[last_date],
+        group=stock_group,
+        params=params,
+    )
     
-    def objective(trial):
-        # Create a copy of the base params and override the ones to be optimized
-        params_opt = params.copy()
-        params_opt['Akin_feature_max'] = trial.suggest_int('Akin_feature_max', 300, 2000)
-        params_opt['Akin_pre_num_leaves'] = trial.suggest_int('Akin_pre_num_leaves', 50, 200)
-        params_opt['Akin_num_leaves'] = trial.suggest_int('Akin_num_leaves', 50, 200)
-        params_opt['Akin_itersteps'] = trial.suggest_int('Akin_itersteps', 0, 2)
-        params_opt['Akin_pre_weight_truncation'] = trial.suggest_int('Akin_pre_weight_truncation', 1, 2)
-        params_opt['Akin_feature_fraction'] = trial.suggest_float('Akin_feature_fraction', 0.01, 0.8)
-        params_opt['Akin_max_depth'] = trial.suggest_int('Akin_max_depth', 5, 13)
-        params_opt['Akin_learning_rate'] = trial.suggest_float('Akin_learning_rate', 0.005, 0.03, log=True)
-        params_opt['Akin_min_data_in_leaf'] = trial.suggest_int('Akin_min_data_in_leaf', 80, 500)
-        params_opt['Akin_min_gain_to_split'] = trial.suggest_float('Akin_min_gain_to_split', 0.1, 10.0)
-        params_opt['Akin_path_smooth'] = trial.suggest_float('Akin_path_smooth', 0.3, 0.9)
-        params_opt['Akin_min_sum_hessian_in_leaf'] = trial.suggest_float('Akin_min_sum_hessian_in_leaf', 1e-4, 1.0, log=True)
-        # Run your prediction/analysis routine; assume it returns a score (higher is better)
-        logger.info(f" Params: {params_opt}")
-        
-        score1 = CollectionModels.AkinDistriML_loadup_analyze(
-            assetspl=assetspl, 
-            loadup_name=akinML_binaries_subsetml_name1,
-            test_date=test_date_lag1,
-            params=params_opt,
-            logger=logger,
-        )
-        score1 = (score1[0] - (-0.035))/0.035
-        
-        score2 = CollectionModels.AkinDistriML_loadup_analyze(
-            assetspl=assetspl, 
-            loadup_name=akinML_binaries_subsetml_name2,
-            test_date=test_date_lag2,
-            params=params_opt,
-            logger=logger,
-        )
-        score2 = (score2[0] - 0.04)/0.04
-        
-        score3 = CollectionModels.AkinDistriML_loadup_analyze(
-            assetspl=assetspl, 
-            loadup_name=akinML_binaries_subsetml_name3,
-            test_date=test_date_lag3,
-            params=params_opt,
-            logger=logger,
-        )
-        score3 = (score3[0] - 0.005)/0.005
-        
-        score4 = CollectionModels.AkinDistriML_loadup_analyze(
-            assetspl=assetspl, 
-            loadup_name=akinML_binaries_subsetml_name4,
-            test_date=test_date_lag4,
-            params=params_opt,
-            logger=logger,
-        )
-        score4 = (score4[0] - (-0.05))/0.05
-        
-        return (score1 + score2 + score3 + score4) / 4.0
-
-    # Create and run the study
-    optuna.logging.enable_propagation()
-    study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=35)
-
-    logger.info("Best parameters:", study.best_params)
-    logger.info("Best score:", study.best_value)
+    start_train_date = datetime.date(2014,  1,  1)
+    end_train_date = datetime.date(2024, 6, 1)
     
-    df = study.trials_dataframe()
-    logger.info("\nTrials DataFrame:")
-    logger.info(df.to_string())
+    starttime = datetime.datetime.now()
+    
+    ls.load_samples(main_path="./src/featureAlchemy/bin/")
+    ls.split_dataset(
+        start_date = start_train_date,
+        last_train_date = end_train_date,
+    )
+    
+    tt = TreeTimeML(
+        train_start_date = ls.train_start_date,
+        test_dates = ls.test_dates,
+        group = stock_group,
+        params = params,
+        loadup = ls
+    )
+    
+    tt.analyze()
+    
+    logger.info(f"Time taken for analysis: {datetime.datetime.now() - starttime}")
+    
+    formatted_date = end_train_date.strftime('%d%b%Y')
 
-    param_importances = optuna.importance.get_param_importances(study)
-    logger.info("Parameter Importances:")
-    for key, value in param_importances.items():
-        logger.info(f"{key}: {value}")
+
+###########################
+## HYPERPARAMETER TUNING ##
+###########################
+#if __name__ == "__main__":
+#    start_train_date = datetime.date(year=2014, month=1, day=1)
+#    eval_dates = [
+#        datetime.date(year=2025, month=3, day=3),
+#        datetime.date(year=2025, month=1, day=3),
+#        datetime.date(year=2024, month=8, day=7),
+#        datetime.date(year=2024, month=5, day=7),
+#        datetime.date(year=2024, month=2, day=7),
+#        datetime.date(year=2023, month=12, day=11),
+#        datetime.date(year=2023, month=7, day=11),
+#        datetime.date(year=2023, month=2, day=11),
+#        datetime.date(year=2022, month=9, day=15),
+#        datetime.date(year=2021, month=11, day=19),
+#    ]
+#    
+#    formatted_date = datetime.datetime.now().strftime('%d%b%Y')
+#    hex_code = secrets.token_hex(4)
+#    optuna_study_name = "optuna_study_25Jun2025_ae6e53d7" #f"optuna_study_{formatted_date}_{hex_code}"
+#    optuna_duration = 60 * 60 * 10
+#    logger.info(f"----------OPTUNA HYPERPARAMETER TUNING for {optuna_study_name}----------")
+#    
+#    n_eval = 5
+#    lagList = np.linspace(0, 20, n_eval).astype(int).tolist()
+#    
+#    logger.info(f"----------Last Date: {max(eval_dates)}, First Date: {min(eval_dates)}, Amount: {len(eval_dates)}----------")
+#    
+#    treetime_instances = [None] * len(eval_dates)
+#    for i in range(len(eval_dates)):
+#        treetime_instance = TreeTimeML(
+#            train_start_date = start_train_date,
+#            test_dates = [eval_dates[i] - pd.Timedelta(days=lag) for lag in lagList][::-1],
+#            group = stock_group,
+#            params = params,
+#        )
+#        treetime_instance.load_and_filter_sets()
+#        treetime_instances[i] = treetime_instance
+#    
+#    def objective(trial: optuna.Trial):
+#        # Create a copy of the base params and override the ones to be optimized
+#        params_opt = params.copy()
+#        # core
+#        #params_opt['daysAfterPrediction'] = trial.suggest_categorical('daysAfterPrediction', [5,7])
+#        #params_opt['timesteps'] = trial.suggest_int('timesteps', 8, 48, step=4)
+#        #params_opt['TreeTime_FourierRSME_q'] = trial.suggest_float('TreeTime_FourierRSME_q', 0.01, 0.10)
+#        #params_opt['TreeTime_FourierRSME_q'] = None if params_opt['TreeTime_FourierRSME_q'] < 0.09 else params_opt['TreeTime_FourierRSME_q']
+#        
+#        #params_opt['TreeTime_trend_stc_q'] = trial.suggest_float('TreeTime_trend_stc_q', 0.01, 0.1)
+#        #params_opt['TreeTime_trend_stc_q'] = None if params_opt['TreeTime_trend_stc_q'] < 0.09 else params_opt['TreeTime_trend_stc_q']
+#        
+#        #params_opt['TreeTime_trend_mass_index_q'] = trial.suggest_float('TreeTime_trend_mass_index_q', 0.01, 0.1)
+#        #params_opt['TreeTime_trend_mass_index_q'] = None if params_opt['TreeTime_trend_mass_index_q'] < 0.09 else params_opt['TreeTime_trend_mass_index_q']
+#        
+#        #params_opt['TreeTime_AvgReturnPct_qup'] = trial.suggest_float('TreeTime_AvgReturnPct_qup', 0.9, 0.99)
+#        #params_opt['TreeTime_AvgReturnPct_qup'] = None if params_opt['TreeTime_AvgReturnPct_qup'] > 0.995 else params_opt['TreeTime_AvgReturnPct_qup']
+#        
+#        #params_opt['TreeTime_volatility_atr_qup'] = trial.suggest_float('TreeTime_volatility_atr_qup', 0.9, 0.99)
+#        #params_opt['TreeTime_volatility_atr_qup'] = 0.01 if params_opt['TreeTime_volatility_atr_qup'] > 0.995 else params_opt['TreeTime_volatility_atr_qup']
+#        
+#        #params_opt['TreeTime_ReturnLog_RSMECoeff_2_qup'] = trial.suggest_float('TreeTime_ReturnLog_RSMECoeff_2_qup', 0.9, 0.99)
+#        #params_opt['TreeTime_ReturnLog_RSMECoeff_2_qup'] = None if params_opt['TreeTime_ReturnLog_RSMECoeff_2_qup'] > 0.995 else params_opt['TreeTime_ReturnLog_RSMECoeff_2_qup']
+#        
+#        #params_opt['TreeTime_Drawdown_q'] = trial.suggest_float('TreeTime_Drawdown_q', 0.01, 0.1)
+#        #params_opt['TreeTime_Drawdown_q'] = None if params_opt['TreeTime_Drawdown_q'] < 0.09 else params_opt['TreeTime_Drawdown_q']
+#
+#        # LSTM
+#        params_opt['TreeTime_run_lstm'] = False #trial.suggest_categorical('TreeTime_run_lstm', [True, False])
+#        #params_opt['LSTM_units'] = trial.suggest_int('LSTM_units', 32, 128, step=32) 
+#        #params_opt['LSTM_num_layers'] = trial.suggest_int('LSTM_num_layers', 1, 6)
+#        #params_opt['LSTM_dropout'] = trial.suggest_float('LSTM_dropout', 0.0001, 0.3, log=True)
+#        #params_opt['LSTM_recurrent_dropout'] = trial.suggest_float('LSTM_recurrent_dropout', 0.0001, 0.3, log=True)
+#        #params_opt['LSTM_learning_rate'] = trial.suggest_float('LSTM_learning_rate', 0.0001, 1.2, log=True)
+#        #params_opt['LSTM_optimizer'] = trial.suggest_categorical('LSTM_optimizer',['adam', 'rmsprop'])
+#        #params_opt['LSTM_bidirectional'] = trial.suggest_categorical('LSTM_bidirectional',[True, False])
+#        #params_opt['LSTM_batch_size'] = int(np.pow(2,trial.suggest_int('LSTM_batch_size_pow', 8, 12)))
+#        #params_opt['LSTM_epochs'] = trial.suggest_int('LSTM_epochs', 6, 96, step=10)
+#        #params_opt['LSTM_l1'] = trial.suggest_float('LSTM_l1', 0.01, 6.0, log=True)
+#        #params_opt['LSTM_l2'] = trial.suggest_float('LSTM_l2', 0.01, 6.0, log=True)
+#        #params_opt['LSTM_inter_dropout'] = trial.suggest_float('LSTM_inter_dropout', 0.001, 0.3, log=True)
+#        #params_opt['LSTM_input_gaussian_noise'] = trial.suggest_float('LSTM_input_gaussian_noise', 0.0001, 0.2, log=True)
+#        #params_opt["LSTM_conv1d_kernel_size"] = trial.suggest_int('LSTM_conv1d_kernel_size', 0, 9)
+#        #params_opt["LSTM_conv1d"] = True if params_opt["LSTM_conv1d_kernel_size"] > 0 else False
+#        #params_opt['LSTM_loss'] = trial.suggest_categorical('LSTM_loss', ['mse', 'quantile_2', 'quantile_5', 'quantile_8', 'r2'])
+#
+#        # LightGBM
+#        params_opt['LGB_num_boost_round'] = 1500; #trial.suggest_int('LGB_num_boost_round', 500, 3500, step=500)
+#        params_opt['LGB_lambda_l1'] = trial.suggest_float('LGB_lambda_l1', 0.001, 0.5, log=True)
+#        params_opt['LGB_lambda_l2'] = trial.suggest_float('LGB_lambda_l2', 0.001, 0.5, log=True)
+#        params_opt['LGB_feature_fraction'] = trial.suggest_float('LGB_feature_fraction', 0.005, 0.05, log=False)
+#        params_opt['LGB_max_depth'] = trial.suggest_int('LGB_max_depth', 2, 9)
+#        params_opt['LGB_num_leaves'] = min(int((2**params_opt['LGB_max_depth']) * trial.suggest_float('LGB_num_leaves_rat', 0.2, 1.3)), 800)
+#        params_opt['LGB_learning_rate'] = trial.suggest_float('LGB_learning_rate', 0.0001, 0.03, log=True)
+#        #params_opt['LGB_min_data_in_leaf'] = trial.suggest_int('LGB_min_data_in_leaf', 30, 430, step=20)
+#        #params_opt['LGB_min_gain_to_split'] = trial.suggest_float('LGB_min_gain_to_split', 0.001, 2.9, log=True)
+#        #params_opt['LGB_path_smooth'] = trial.suggest_float('LGB_path_smooth', 0.1, 0.9)
+#        #params_opt['LGB_min_sum_hessian_in_leaf'] = trial.suggest_float('LGB_min_sum_hessian_in_leaf', 0.01, 10.0, log=True)
+#        #params_opt['LGB_max_bin'] = trial.suggest_int('LGB_max_bin', 100, 1500, step=100)
+#        params_opt['LGB_test_size_pct'] = 0.01
+#        
+#        # MatchFeatures
+#        params_opt['TreeTime_MatchFeatures_run'] = False #trial.suggest_categorical('TreeTime_MatchFeatures_run', [True, False])
+#        #params_opt['TreeTime_MatchFeatures_minWeight'] = trial.suggest_float('TreeTime_MatchFeatures_minWeight', 0.1, 0.8)
+#        
+#        # Run your prediction/analysis routine; assume it returns a score (higher is better)
+#        logger.info(f" Params:")
+#        res_arr_list = [None] * len(eval_dates)
+#        for key, value in params_opt.items():
+#            logger.info(f"  {key}: {value}")
+#        try:    
+#            for i, _ in enumerate(eval_dates):
+#                treetime_instance: TreeTimeML = copy.deepcopy(treetime_instances[i])
+#                res_arr_list[i] = treetime_instance.analyze(params=params_opt)
+#        except Exception as e:
+#            # optional: record the error message
+#            trial.set_user_attr("error", str(e))
+#            # prune this trial
+#            raise TrialPruned()
+#        
+#        res_arr_0 = np.mean([res[0] for res in res_arr_list if res is not None])
+#        res_arr_1 = np.mean([res[1] for res in res_arr_list if res is not None])
+#        res_arr_2 = np.mean([res[2] for res in res_arr_list if res is not None])
+#        res_arr_3 = np.mean([res[3] for res in res_arr_list if res is not None])
+#        res_arr_4 = np.mean([res[4] for res in res_arr_list if res is not None])
+#        
+#        logger.info(f"Model actual mean return over dates: {[res[0] for res in res_arr_list if res is not None]} with mean {res_arr_0}")   
+#        logger.info(f"Model train NDCG@1 score over dates: {[res[1] for res in res_arr_list if res is not None]} with mean {res_arr_1}")
+#        logger.info(f"Model train NDCG@5 score over dates: {[res[2] for res in res_arr_list if res is not None]} with mean {res_arr_2}")
+#        logger.info(f"Model test NDCG@1  score over dates: {[res[3] for res in res_arr_list if res is not None]} with mean {res_arr_3}")
+#        logger.info(f"Model test NDCG@5  score over dates: {[res[4] for res in res_arr_list if res is not None]} with mean {res_arr_4}")
+#        score = res_arr_4
+#        
+#        return score
+#
+#    # Create and run the study
+#    optuna.logging.enable_propagation()
+#    study = optuna.create_study(
+#        study_name=optuna_study_name,
+#        storage="sqlite:///optuna.db",
+#        direction="maximize",
+#        load_if_exists=True              # don’t error if it already exists
+#    )
+#    study.optimize(objective, timeout=optuna_duration)
+#
+#    logger.info(f"Best parameters: {study.best_params}")
+#    logger.info(f"Best score: {study.best_value}")
+#    
+#    df = study.trials_dataframe()
+#    logger.info("\nTrials DataFrame:")
+#    logger.info(df.sort_values("value").to_string())
+#
+#    param_importances = optuna.importance.get_param_importances(study)
+#    logger.info("Parameter Importances:")
+#    for key, value in param_importances.items():
+#        logger.info(f"{key}: {value}")
+        
+################
+## Prediction ##
+################
+#if __name__ == "__main__":
+#    p = argparse.ArgumentParser()
+#    p.add_argument('--year',  type=int, default=2025, help='Year (default: 2025)')
+#    p.add_argument('--month', type=int, required=True, help='Month as a number (1–12)')
+#    p.add_argument('--day',   type=int, required=True, help='Day as a number (1–31)')
+#    args = p.parse_args()
+#
+#    eval_date = datetime.date(year=args.year, month=args.month, day=args.day)
+#    
+#    start_train_date = datetime.date(year=2014, month=1, day=1)
+#    formatted_date = eval_date.strftime('%d%b%Y')
+#    
+#    lagList = np.linspace(0, 180, 50).astype(int).tolist()
+#    test_dates = (
+#        [eval_date - pd.Timedelta(days=dayLag) for dayLag in range(0, params['daysAfterPrediction'] + 1)] 
+#        + [eval_date - pd.Timedelta(days=dayLag + params['daysAfterPrediction']+1) for dayLag in lagList]
+#    )
+#    test_dates = test_dates[::-1]  # Reverse the order
+#    
+#    logger.info(f"----------Last Date: {eval_date}, First Date: {min(test_dates)}, Amount: {len(test_dates)}----------")
+#    starttime = datetime.datetime.now()
+#    treetimeML = TreeTimeML(
+#        train_start_date=start_train_date,
+#        test_dates=test_dates,
+#        group=stock_group,
+#        params=params,
+#    )
+#    treetimeML.load_and_filter_sets()
+#    res_arr = treetimeML.predict()
+#    logger.info(f"Time taken for analysis: {datetime.datetime.now() - starttime}")
+#    
+#    logger.info(f"Model actual mean return over dates: {res_arr[0]}")   
+#    logger.info(f"Model predictions mean return over dates: {res_arr[1]}")
+#    logger.info("")

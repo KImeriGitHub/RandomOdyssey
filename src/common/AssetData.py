@@ -4,22 +4,66 @@ from typing import Dict
 
 @dataclass
 class AssetData:
+    ###########
+    # GENERAL #
+    ###########
     ticker: str
     isin: str = ""
-
-    # [Open, High, Low, Close, Adj Close]
-    shareprice: pd.DataFrame = None
-    volume: pd.Series = None
-    dividends: pd.Series = None # Note: Must be per day and not in percentage
-    splits: pd.Series = None
-
-    # Adj Close has No NAN Values and maybe extra dates than Close price
-    adjClosePrice: pd.Series = None
-
-    #General Information about the asset in dict format
+    
+    #Information about the asset in dict format
     about: Dict = None
+    # Sector of the asset
     sector: str = ""
+    # 'other', 'industrials', 'healthcare', 'technology', 'financial-services', 'real-estate', 'energy', 'consumer-cyclical'
 
-    #financials
-    financials_quarterly: pd.DataFrame = None
+    ###########################
+    # PRICES AND CORP-ACTIONS #
+    ###########################
+    shareprice: pd.DataFrame = None
+    # Columns 
+    #  'Date'      : str (YYYY-MM-DD)
+    #  'Open'      : float
+    #  'High'      : float
+    #  'Low'       : float
+    #  'Close'     : float
+    #  'AdjClose'  : float
+    #  'Volume'    : float
+    #  'Dividends' : float  
+    #  'Splits'    : float
+
+    ##############
+    # FINANCIALS #
+    ##############
+    financials_quarterly: pd.DataFrame = None 
+    # Columns
+    #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
+    #  'reportedDate'                 : str  (YYYY-MM-DD)
+    #  'reportedEPS'                  : float
+    #  'estimatedEPS'                 : float
+    #  'surprise'                     : float
+    #  'surprisePercentage'           : float
+    #  'reportTime'                   : str  ('pre-market', 'post-market')
+    #  'grossProfit'                  : float
+    #  'totalRevenue'                 : float
+    #  'ebit'                         : float
+    #  'ebitda'                       : float
+    #  'totalAssets'                  : float
+    #  'totalCurrentLiabilities'      : float
+    #  'totalShareholderEquity'       : float
+    #  'commonStockSharesOutstanding' : float
+    #  'operatingCashflow'            : float
+    
     financials_annually: pd.DataFrame = None
+    # Columns
+    #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
+    #  'reportedEPS'                  : float
+    #  'grossProfit'                  : float
+    #  'totalRevenue'                 : float
+    #  'ebit'                         : float
+    #  'ebitda'                       : float
+    #  'totalAssets'                  : float
+    #  'totalCurrentLiabilities'      : float
+    #  'totalShareholderEquity'       : float
+    #  'operatingCashflow'            : float
+
+    

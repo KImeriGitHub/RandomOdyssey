@@ -2,11 +2,14 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from typing import Dict, List
+import itertools
+import datetime
+import logging
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
 from src.mathTools.TAIndicators import TAIndicators
-from src.common.DataFrameTimeOperations import DataFrameTimeOperationsPolars as DPl
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
 from src.featureAlchemy.FeatureFourierCoeff import FeatureFourierCoeff
 from src.featureAlchemy.FeatureCategory import FeatureCategory
@@ -14,31 +17,36 @@ from src.featureAlchemy.FeatureFinancialData import FeatureFinancialData
 from src.featureAlchemy.FeatureMathematical import FeatureMathematical
 from src.featureAlchemy.FeatureSeasonal import FeatureSeasonal
 from src.featureAlchemy.FeatureTA import FeatureTA
+from src.featureAlchemy.FeatureGroupDynamic import FeatureGroupDynamic
 
 class FeatureMain():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'fouriercutoff': 15,
         'multFactor': 8,
-        'monthsHorizon': 13,
-        'timesteps': 5,
+        'timesteps': 15,
     }
 
     def __init__(self, 
-                 asset: AssetDataPolars,
-                 startDate: pd.Timestamp, 
-                 endDate:pd.Timestamp, 
+                 assets: Dict[str, AssetDataPolars],
+                 startDate: datetime.date, 
+                 endDate: datetime.date, 
                  lagList: List[int],
-                 timeLagList = [],
+                 monthHorizonList: List[int],
                  params: dict = None,
-                 enableTimeSeries = True):
+                 logger: logging.Logger = None):
         
-        self.asset = asset
+        self.assets = assets
         self.startDate = startDate
         self.endDate = endDate
         self.lagList = lagList
-        self.timeLagList = timeLagList
-        self.enableTimeSeries = enableTimeSeries
+        self.monthHorizonList = monthHorizonList
+        
+        if logger is None:
+            logging.basicConfig(level=logging.INFO, format="%(message)s")
+            self.logger = logging.getLogger(__name__)
+        else:   
+            self.logger = logger
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -47,84 +55,137 @@ class FeatureMain():
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.fouriercutoff = self.params['fouriercutoff']
         self.multFactor = self.params['multFactor']
-        self.monthsHorizon = self.params['monthsHorizon']
         self.timesteps = self.params['timesteps']
         
-        self.featCategory = FeatureCategory(asset)
-        self.featMathematical = FeatureMathematical(asset, self.lagList)
-        self.featFourierCoeff = FeatureFourierCoeff(asset, self.startDate, self.endDate, self.lagList, self.params)
-        self.featFinancialData = FeatureFinancialData(asset, self.lagList)
-        self.featSeasonal = FeatureSeasonal(asset, self.startDate, self.endDate, self.lagList, self.params)
-        self.featTA = FeatureTA(asset, self.startDate, self.endDate, self.lagList)
+        # get business days
+        self.tickers = list(self.assets.keys())
+        self.nAssets = len(self.tickers)
         
-        if self.enableTimeSeries:
-            self.featCategory_timelag = self.featCategory
-            self.featMathematical_timelag = FeatureMathematical(asset, self.timeLagList) 
-            self.featFourierCoeff_timelag = FeatureFourierCoeff(asset, self.startDate, self.endDate, self.timeLagList, self.params) 
-            self.featFinancialData_timelag = FeatureFinancialData(asset, self.timeLagList) 
-            self.featSeasonal_timelag = FeatureSeasonal(asset, self.startDate, self.endDate, self.timeLagList, self.params) 
-            self.featTA_timelag = FeatureTA(asset, self.startDate, self.endDate, self.timeLagList) 
-
-    def getFeatureNames(self) -> list[str]:
-        return (
-            self.featCategory.getFeatureNames()+
-            self.featMathematical.getFeatureNames()+
-            self.featFourierCoeff.getFeatureNames()+
-            self.featFinancialData.getFeatureNames()+
-            self.featSeasonal.getFeatureNames()+
-            self.featTA.getFeatureNames()
-        )
+        #preprocess
+        self.business_days= pd.bdate_range(start=self.startDate, end=self.endDate).date.tolist()  
+        self.startBDate = self.business_days[0]
+        self.endBDate = self.business_days[-1]
+        self.nDates = len(self.business_days)
         
-    def getTimeFeatureNames(self) -> list[str]:
-        if not self.enableTimeSeries:
-            return []
+        self.nAssets = len(self.assets)
         
-        return (
-            self.featCategory.getFeatureNames()+
-            self.featMathematical.getFeatureNames()+
-            self.featFourierCoeff.getFeatureNames()+
-            self.featFinancialData.getFeatureNames()+
-            self.featSeasonal.getFeatureNames()+
-            self.featTA.getFeatureNames()
-        )
+        self.idxAssets = {ticker: DOps(self.assets[ticker].shareprice).getNextLowerOrEqualIndices(self.business_days) for ticker in self.assets.keys()}
+        self.idxAssets_exc = {ticker: DOps(self.assets[ticker].shareprice).getIndices(self.business_days) for ticker in self.assets.keys()}
+            
+        self.FGD = FeatureGroupDynamic(self.assets, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
+        self.logger.info(f"  FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
     
-    def apply(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
-        if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
+    def getTreeFeatures(self) -> tuple[np.array, np.array, list[str]]:
+        # 1) gather feature‑name lists
+        exampleAsset = self.assets[self.tickers[0]]
+        featureNames = [
+            FeatureCategory(exampleAsset, self.params).getFeatureNames(),
+            FeatureMathematical(exampleAsset, self.lagList, self.monthHorizonList, self.params).getFeatureNames(),
+            FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params).getFeatureNames(),
+            FeatureFinancialData(exampleAsset, self.lagList, self.params).getFeatureNames(),
+            FeatureSeasonal(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getFeatureNames(),
+            FeatureTA(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getFeatureNames(),
+            self.FGD.getFeatureNames()
+        ]
+        # flatten into one long list
+        flat_features = list(itertools.chain.from_iterable(featureNames))
         
+        # 2) preallocate arrays
+        nD, nA, nF = self.nDates, self.nAssets, len(flat_features)
+        arr     = np.empty((nD, nA, nF), dtype=np.float32)
+        metaarr = np.empty((nD, nA), dtype=[('date', 'datetime64[D]'), ('ticker', 'U10'), ('Close', 'f4')])  # [date,ticker,close]
+        mask = np.ones((nD, nA), dtype=bool)  # mask for missing values
+        
+        # 3) fill arrays
         niveau = 1.0
-        # Get features for current date
-        features = self.featCategory.apply(niveau)
-        features = np.concatenate((features, self.featMathematical.apply(date, niveau, idx)))
-        features = np.concatenate((features, self.featFourierCoeff.apply(date, niveau, idx)))
-        features = np.concatenate((features, self.featFinancialData.apply(date, niveau, idx)))
-        features = np.concatenate((features, self.featSeasonal.apply(date, niveau)))
-        features = np.concatenate((features, self.featTA.apply(date, niveau, idx)))
+        FGD_tick_date = {date: self.FGD.apply(date, {tic: idxlist[i] for tic, idxlist in self.idxAssets.items()}) for i, date in enumerate(self.business_days)}
+        for tidx, ticker in enumerate(self.assets.keys()):
+            self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
+            FC = FeatureCategory(self.assets[ticker], self.params)
+            FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
+            FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
+            FFD = FeatureFinancialData(self.assets[ticker], self.lagList, self.params)
+            FS = FeatureSeasonal(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
+            FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
+            idcs = self.idxAssets_exc[ticker]
+            for date_idx, date in enumerate(self.business_days):
+                if idcs[date_idx] is None:
+                    mask[date_idx, tidx] = False
+                    continue
+                
+                metaarr[date_idx, tidx]['date'] = date
+                metaarr[date_idx, tidx]['ticker'] = ticker
+                metaarr[date_idx, tidx]["Close"] = self.assets[ticker].shareprice["Close"].item(idcs[date_idx])
+
+                arr[date_idx, tidx, :] = np.concatenate([
+                    FC.apply(niveau),
+                    FM.apply(date, niveau, idcs[date_idx]),
+                    FFC.apply(date, niveau, idcs[date_idx]),
+                    FFD.apply(date, niveau, idcs[date_idx]),
+                    FS.apply(date, niveau),
+                    FTA.apply(date, niveau, idcs[date_idx]),
+                    FGD_tick_date[date][ticker]
+                ])
+         
+        # 4) remove missing values
+        metaarr = metaarr[mask]   # this reshapes to (nD*nA) but with valid inputs
+        arr = arr[mask]     # this reshapes to (nD*nA, nF) where nD*nA is not correct its with valid inputs
         
-        return features
+        return metaarr, arr, flat_features
         
-    def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
-        if idx is None:
-            idx = DPl(self.asset.adjClosePrice).getNextLowerOrEqualIndex(date)
-            
-        if not self.enableTimeSeries:
-            return np.array([])
+    def getTimeFeatures(self) -> tuple[np.array, np.array, list[str]]:
+        # 1) gather feature‑name lists
+        exampleAsset = next(iter(self.assets.values()))
+        featureNames = [
+            #FeatureCategory(exampleAsset, self.params).getTimeFeatureNames(),
+            FeatureMathematical(exampleAsset, self.lagList, self.monthHorizonList, self.params).getTimeFeatureNames(),
+            FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params).getTimeFeatureNames(),
+            FeatureFinancialData(exampleAsset, self.lagList, self.params).getTimeFeatureNames(),
+            FeatureSeasonal(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getTimeFeatureNames(),
+            FeatureTA(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getTimeFeatureNames(),
+            self.FGD.getTimeFeatureNames()
+        ]
+        # flatten into one long list
+        flat_features = list(itertools.chain.from_iterable(featureNames))
         
-        # Get features of timeseries: a matrix where each row is a feature vector of a time step
-        featureMatrix = np.zeros((self.timesteps, len(self.getFeatureNames())))
+        # 2) preallocate arrays
+        nD, nA, nT, nF = self.nDates, self.nAssets, self.timesteps, len(flat_features)
+        arr     = np.empty((nD, nA, nT, nF), dtype=np.float32)
+        metaarr = np.empty((nD, nA), dtype=[('date', 'datetime64[D]'), ('ticker', 'U10'), ('Close', 'f4')])  # [date,ticker,close]
+        mask = np.ones((nD, nA), dtype=bool)  # mask for missing values
         
-        #reverse the order of the timeLagList
-        for idx_t in range(idx-self.timesteps+1, idx+1):
-            niveau = self.asset.adjClosePrice['AdjClose'].item(idx_t)
-            timefeatures = self.featCategory.apply(niveau)
-            timefeatures = np.concatenate((timefeatures, self.featMathematical_timelag.apply(date, niveau, idx_t)))
-            timefeatures = np.concatenate((timefeatures, self.featFourierCoeff_timelag.apply(date, niveau, idx_t)))
-            timefeatures = np.concatenate((timefeatures, self.featFinancialData_timelag.apply(date, niveau, idx_t)))
-            timefeatures = np.concatenate((timefeatures, self.featSeasonal_timelag.apply(date, niveau)))
-            timefeatures = np.concatenate((timefeatures, self.featTA_timelag.apply(date, niveau, idx_t)))
-            
-            featureMatrix[idx_t-idx+self.timesteps-1,:] = timefeatures
-            
-        return featureMatrix
-            
-            
+        # 3) fill arrays
+        FGD_tick_date = {date: self.FGD.apply_timeseries(date, {tic: idxlist[i] for tic, idxlist in self.idxAssets.items()}) for i, date in enumerate(self.business_days)}
+        for tidx, ticker in enumerate(self.assets.keys()):
+            self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
+            #FC = FeatureCategory(self.assets[ticker], self.params)
+            FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
+            FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
+            FFD = FeatureFinancialData(self.assets[ticker], self.lagList, self.params)
+            FS = FeatureSeasonal(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
+            FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
+            idcs = self.idxAssets_exc[ticker]
+            for date_idx, date in enumerate(self.business_days):
+                if idcs[date_idx] is None:
+                    mask[date_idx, tidx] = False
+                    continue
+                
+                metaarr[date_idx, tidx]['date'] = date
+                metaarr[date_idx, tidx]['ticker'] = ticker
+                metaarr[date_idx, tidx]["Close"] = self.assets[ticker].shareprice["Close"].item(idcs[date_idx])
+
+                arr[date_idx, tidx, :, :] = np.hstack([ 
+                    #FC.apply_timeseries(date),
+                    FM.apply_timeseries(date, idcs[date_idx]),
+                    FFC.apply_timeseries(date, idcs[date_idx]),
+                    FFD.apply_timeseries(date, idcs[date_idx]),
+                    FS.apply_timeseries(date),
+                    FTA.apply_timeseries(date, idcs[date_idx]),
+                    FGD_tick_date[date][ticker]
+                ])    # (nT, nF)
+                
+        # 4) remove missing values
+        metaarr = metaarr[mask]   # this reshapes to (nD*nA) but with valid inputs
+        arr = arr[mask]     # this reshapes to (nD*nA, nT, nF) where nD*nA is not correct its with valid inputs
+        
+        return metaarr, arr, flat_features

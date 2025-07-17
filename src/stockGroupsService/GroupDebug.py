@@ -1,57 +1,58 @@
 import pandas as pd
+from datetime import datetime
 from src.common.AssetData import AssetData
 from src.stockGroupsService.IGroup import IGroup
 
+from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
+from src.stockGroupsService.GroupOver20Years import GroupOver20Years
+
+import logging
+logger = logging.getLogger(__name__)
+
 class GroupDebug(IGroup):
-  tickers = [
-    "CSX",
-    "EXC",
-    "NVDA",
-    "ADBE",
-    "AMZN",
-    "AMD",
-    "AMGN",
-    "ADI",
-    "ANSS",
-    "AAPL",
-    "ADP",
-    "BKNG",
-    "CDNS",
-    "CSCO",
-    "CTSH",
-    "CMCSA",
-    "CSX",
-    "EA",
-    "EXC",
-    "GILD",
-    "IDXX",
-    "INTC",
-    "INTU",
-    "ISRG",
-    "KLAC",
-    "LRCX",
-    "MAR",
-    "MU",
-    "MSFT",
-    "MDLZ",
-    "NFLX",
-    "NVDA",
-    "QCOM",
-    "REGN",
-    "ROST",
-    "SBUX",
-    "SNPS",
-    "TXN",
-    "ALGN",
-  ]
+    tickers = [
+        "AAPL",
+        "ADBE",
+        "ADI",
+        "ADP",
+        "ALGN",
+        "AMGN",
+        "AMZN",
+        "ANSS",
+        "BKNG",
+        "CDNS",
+        "CSCO",
+        "CSX",
+        "CTSH",
+        "EXC",
+        "GILD",
+        "IDXX",
+        "INTC",
+        "ISRG",
+        "KLAC",
+        "MAR",
+        "MDLZ",
+        "MSFT",
+        "MU",
+        "NFLX",
+        "NVDA",
+        "QCOM",
+        "REGN",
+        "SBUX",
+        "TXN"
+    ]
 
-  def groupName(self) -> str:
-   return "group_debug"
+    def groupName(self) -> str:
+        return "group_debug"
 
-  def checkAsset(self, asset: AssetData) -> bool:
-    
-    adf: pd.DataFrame = asset.shareprice
-    max_date: pd.Timestamp = adf.index.max()
-    current_date: pd.Timestamp = pd.Timestamp.now(tz=adf.index.tz)
-    return (self.tickers.__contains__(asset.ticker)) \
-      and ((current_date - max_date).days < 60)
+    def checkAsset(self, asset: AssetData) -> bool:
+        if not GroupFinanTo2011.checkAsset(self, asset):
+            return False
+        
+        if not GroupOver20Years.checkAsset(self, asset):
+            return False
+        
+        if asset.ticker not in self.tickers:
+            return False
+        
+        return True
