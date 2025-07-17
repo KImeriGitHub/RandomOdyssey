@@ -1,4 +1,5 @@
-from src.predictionModule.TreeTimeML_save import TreeTimeML
+from src.predictionModule.TreeTimeML import TreeTimeML
+from src.predictionModule.LoadupSamples import LoadupSamples
 
 import pandas as pd
 import numpy as np
@@ -15,57 +16,57 @@ stock_group = "group_snp500_finanTo2011"
 stock_group_short = "snp500_finanTo2011"
     
 params = {
-    "daysAfterPrediction": 14,
-    'timesteps': 16,
-    
+    "idxAfterPrediction": 5,
+    'timesteps': 25,
     'target_option': 'last',
+    
+    "TreeTime_top_n": 5,
+    "TreeTime_stoploss": 0.92,
+    
+    "FilterSamples_lincomb_q_up": 0.97,
+    "FilterSamples_lincomb_lr": 0.0008384895113158295,
+    "FilterSamples_lincomb_epochs": 800,
+    "FilterSamples_lincomb_probs_noise_std": 0.010503627436184224,
+    "FilterSamples_lincomb_subsample_ratio": 0.2424109747001177,
+    "FilterSamples_lincomb_sharpness": 0.59226051089996,
+    "FilterSamples_lincomb_featureratio": 0.33269072850403053,
+    "FilterSamples_lincomb_itermax": 1,
+    "FilterSamples_lincomb_show_progress": True,
 
-    "TreeTime_isFiltered": False,
-    "TreeTime_FourierRSME_q": None,
-    "TreeTime_trend_stc_q": None,
-    "TreeTime_trend_mass_index_q": None,
-    "TreeTime_AvgReturnPct_qup": None, #0.9616684094957099,
-    "TreeTime_volatility_atr_qup": None,
-    "TreeTime_ReturnLog_RSMECoeff_2_qup": None,
-    "TreeTime_Drawdown_q": None,
-
-    'TreeTime_run_lstm': False,
-    "TreeTime_lstm_units": 128,
-    "TreeTime_lstm_num_layers": 5,
-    "TreeTime_lstm_dropout": 0.001,
-    "TreeTime_lstm_recurrent_dropout": 0.002,
-    "TreeTime_lstm_learning_rate": 0.02,
-    "TreeTime_lstm_optimizer": "rmsprop",
-    "TreeTime_lstm_bidirectional": True,
-    "TreeTime_lstm_batch_size": 2**11,
-    "TreeTime_lstm_epochs": 15,
-    "TreeTime_lstm_l1": 0.05,
-    "TreeTime_lstm_l2": 0.5,
-    "TreeTime_inter_dropout": 0.003,
-    "TreeTime_input_gaussian_noise": 0.0005,
-    "TreeTime_lstm_conv1d": True,
-    "TreeTime_lstm_conv1d_kernel_size": 3,
-    "TreeTime_lstm_loss": "quantile_8",
+    'TreeTime_run_lstm': True,
+    "LSTM_units": 32,
+    "LSTM_num_layers": 4,
+    "LSTM_dropout": 0.0001,
+    "LSTM_recurrent_dropout": 0.0001,
+    "LSTM_learning_rate": 0.001,
+    "LSTM_optimizer": "adam",
+    "LSTM_bidirectional": True,
+    "LSTM_batch_size": 2**11,
+    "LSTM_epochs": 1,
+    "LSTM_l1": 0.0001,
+    "LSTM_l2": 0.0001,
+    "LSTM_inter_dropout": 0.0001,
+    "LSTM_input_gaussian_noise": 0.0001,
+    "LSTM_conv1d": True,
+    "LSTM_conv1d_kernel_size": 3,
+    "LSTM_loss": "mse",
     
-    "TreeTime_lgb_num_boost_round": 1500,
-    "TreeTime_lgb_lambda_l1": 0.04614242128149404,
-    "TreeTime_lgb_lambda_l2": 0.009786276249261908,
-    "TreeTime_lgb_feature_fraction": 0.20813359498274574,
-    "TreeTime_lgb_num_leaves": 182,
-    "TreeTime_lgb_max_depth": 11,
-    "TreeTime_lgb_learning_rate": 0.02887444408582576,
-    "TreeTime_lgb_min_data_in_leaf": 272,
-    "TreeTime_lgb_min_gain_to_split": 0.10066457576238419,
-    "TreeTime_lgb_path_smooth": 0.5935679203578974,
-    "TreeTime_lgb_min_sum_hessian_in_leaf": 0.3732876155751053,
-    "TreeTime_lgb_max_bin": 150,
-    
-    'TreeTime_lgb_test_size_pct': 0.01,
-    
-    'TreeTime_MatchFeatures_run': True,
-    'TreeTime_MatchFeatures_minWeight': 0.3,
+    "LGB_num_boost_round": 1500,
+    "LGB_lambda_l1": 0.04614242128149404,
+    "LGB_lambda_l2": 0.009786276249261908,
+    "LGB_feature_fraction": 0.20813359498274574,
+    "LGB_num_leaves": 182,
+    "LGB_max_depth": 11,
+    "LGB_learning_rate": 0.02887444408582576,
+    "LGB_min_data_in_leaf": 272,
+    "LGB_min_gain_to_split": 0.10066457576238419,
+    "LGB_path_smooth": 0.5935679203578974,
+    "LGB_min_sum_hessian_in_leaf": 0.3732876155751053,
+    "LGB_max_bin": 150,
+        
+    'TreeTime_MatchFeatures_run': False,
+    'TreeTime_MatchFeatures_minWeight': 0.4,
     'TreeTime_MatchFeatures_truncation': 2,
-    
     'TreeTime_MatchFeatures_Pricediff': True,
     'TreeTime_MatchFeatures_FinData_quar': False,
     'TreeTime_MatchFeatures_FinData_metrics': False,
@@ -74,8 +75,6 @@ params = {
     'TreeTime_MatchFeatures_TA_trend': True,
     'TreeTime_MatchFeatures_FeatureGroup_VolGrLvl': False,
     'TreeTime_MatchFeatures_LSTM_Prediction': False,
-    
-    "TreeTime_top_highest": 5,
 }
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
@@ -93,40 +92,40 @@ logger.info(f" Params: {params}")
 ## ANALYZING ##
 ###############
 if __name__ == "__main__":
-    eval_date = datetime.date(year=2025, month=4, day=16)
-    start_train_date = datetime.date(year=2014, month=1, day=1)
+    last_date = datetime.date(2025,  2,  1)
+    start_date = datetime.date(2014,  1,  1)
     
-    testlagList = np.linspace(0, 20, 5).astype(int).tolist()
-    evallagList = np.linspace(0, 365*4, 50).astype(int).tolist()
+    ls = LoadupSamples(
+        train_start_date=start_date,
+        test_dates=[last_date],
+        group=stock_group,
+        params=params,
+    )
     
-    formatted_date = eval_date.strftime('%d%b%Y')
-        
-    logger.info(f"----------Last Date: {eval_date}----------")
-    res = []
-    res_1 = []
-    for e_date in [eval_date - pd.Timedelta(days=dayLag) for dayLag in evallagList]:
-        starttime = datetime.datetime.now()
-        treetimeML = TreeTimeML(
-            train_start_date=start_train_date,
-            test_dates=[e_date], #[e_date - pd.Timedelta(days=dayLag) for dayLag in testlagList],
-            group=stock_group,
-            params=params,
-        )
-        treetimeML.load_and_filter_sets()
-        try:
-            res_arr = treetimeML.analyze()
-        except Exception as e:
-            logger.error(f"Error during analysis for date {e_date}: {e}")
-            continue
-        res.append(res_arr[0])
-        res_1.append(res_arr[1])
+    start_train_date = datetime.date(2014,  1,  1)
+    end_train_date = datetime.date(2024, 6, 1)
     
-        logger.info(f"All results: {res}")
-        logger.info(f"Mean over all: {np.mean(res)}") 
-        logger.info(f"All predictions: {res_1}")
-        logger.info(f"Mean predictions over all: {np.mean(res_1)}")
-        
+    starttime = datetime.datetime.now()
+    
+    ls.load_samples(main_path="./src/featureAlchemy/bin/")
+    ls.split_dataset(
+        start_date = start_train_date,
+        last_train_date = end_train_date,
+    )
+    
+    tt = TreeTimeML(
+        train_start_date = ls.train_start_date,
+        test_dates = ls.test_dates,
+        group = stock_group,
+        params = params,
+        loadup = ls
+    )
+    
+    tt.analyze()
+    
     logger.info(f"Time taken for analysis: {datetime.datetime.now() - starttime}")
+    
+    formatted_date = end_train_date.strftime('%d%b%Y')
 
 
 ###########################
@@ -198,37 +197,37 @@ if __name__ == "__main__":
 #
 #        # LSTM
 #        params_opt['TreeTime_run_lstm'] = False #trial.suggest_categorical('TreeTime_run_lstm', [True, False])
-#        #params_opt['TreeTime_lstm_units'] = trial.suggest_int('TreeTime_lstm_units', 32, 128, step=32) 
-#        #params_opt['TreeTime_lstm_num_layers'] = trial.suggest_int('TreeTime_lstm_num_layers', 1, 6)
-#        #params_opt['TreeTime_lstm_dropout'] = trial.suggest_float('TreeTime_lstm_dropout', 0.0001, 0.3, log=True)
-#        #params_opt['TreeTime_lstm_recurrent_dropout'] = trial.suggest_float('TreeTime_lstm_recurrent_dropout', 0.0001, 0.3, log=True)
-#        #params_opt['TreeTime_lstm_learning_rate'] = trial.suggest_float('TreeTime_lstm_learning_rate', 0.0001, 1.2, log=True)
-#        #params_opt['TreeTime_lstm_optimizer'] = trial.suggest_categorical('TreeTime_lstm_optimizer',['adam', 'rmsprop'])
-#        #params_opt['TreeTime_lstm_bidirectional'] = trial.suggest_categorical('TreeTime_lstm_bidirectional',[True, False])
-#        #params_opt['TreeTime_lstm_batch_size'] = int(np.pow(2,trial.suggest_int('TreeTime_lstm_batch_size_pow', 8, 12)))
-#        #params_opt['TreeTime_lstm_epochs'] = trial.suggest_int('TreeTime_lstm_epochs', 6, 96, step=10)
-#        #params_opt['TreeTime_lstm_l1'] = trial.suggest_float('TreeTime_lstm_l1', 0.01, 6.0, log=True)
-#        #params_opt['TreeTime_lstm_l2'] = trial.suggest_float('TreeTime_lstm_l2', 0.01, 6.0, log=True)
-#        #params_opt['TreeTime_inter_dropout'] = trial.suggest_float('TreeTime_inter_dropout', 0.001, 0.3, log=True)
-#        #params_opt['TreeTime_input_gaussian_noise'] = trial.suggest_float('TreeTime_input_gaussian_noise', 0.0001, 0.2, log=True)
-#        #params_opt["TreeTime_lstm_conv1d_kernel_size"] = trial.suggest_int('TreeTime_lstm_conv1d_kernel_size', 0, 9)
-#        #params_opt["TreeTime_lstm_conv1d"] = True if params_opt["TreeTime_lstm_conv1d_kernel_size"] > 0 else False
-#        #params_opt['TreeTime_lstm_loss'] = trial.suggest_categorical('TreeTime_lstm_loss', ['mse', 'quantile_2', 'quantile_5', 'quantile_8', 'r2'])
+#        #params_opt['LSTM_units'] = trial.suggest_int('LSTM_units', 32, 128, step=32) 
+#        #params_opt['LSTM_num_layers'] = trial.suggest_int('LSTM_num_layers', 1, 6)
+#        #params_opt['LSTM_dropout'] = trial.suggest_float('LSTM_dropout', 0.0001, 0.3, log=True)
+#        #params_opt['LSTM_recurrent_dropout'] = trial.suggest_float('LSTM_recurrent_dropout', 0.0001, 0.3, log=True)
+#        #params_opt['LSTM_learning_rate'] = trial.suggest_float('LSTM_learning_rate', 0.0001, 1.2, log=True)
+#        #params_opt['LSTM_optimizer'] = trial.suggest_categorical('LSTM_optimizer',['adam', 'rmsprop'])
+#        #params_opt['LSTM_bidirectional'] = trial.suggest_categorical('LSTM_bidirectional',[True, False])
+#        #params_opt['LSTM_batch_size'] = int(np.pow(2,trial.suggest_int('LSTM_batch_size_pow', 8, 12)))
+#        #params_opt['LSTM_epochs'] = trial.suggest_int('LSTM_epochs', 6, 96, step=10)
+#        #params_opt['LSTM_l1'] = trial.suggest_float('LSTM_l1', 0.01, 6.0, log=True)
+#        #params_opt['LSTM_l2'] = trial.suggest_float('LSTM_l2', 0.01, 6.0, log=True)
+#        #params_opt['LSTM_inter_dropout'] = trial.suggest_float('LSTM_inter_dropout', 0.001, 0.3, log=True)
+#        #params_opt['LSTM_input_gaussian_noise'] = trial.suggest_float('LSTM_input_gaussian_noise', 0.0001, 0.2, log=True)
+#        #params_opt["LSTM_conv1d_kernel_size"] = trial.suggest_int('LSTM_conv1d_kernel_size', 0, 9)
+#        #params_opt["LSTM_conv1d"] = True if params_opt["LSTM_conv1d_kernel_size"] > 0 else False
+#        #params_opt['LSTM_loss'] = trial.suggest_categorical('LSTM_loss', ['mse', 'quantile_2', 'quantile_5', 'quantile_8', 'r2'])
 #
 #        # LightGBM
-#        params_opt['TreeTime_lgb_num_boost_round'] = 1500; #trial.suggest_int('TreeTime_lgb_num_boost_round', 500, 3500, step=500)
-#        params_opt['TreeTime_lgb_lambda_l1'] = trial.suggest_float('TreeTime_lgb_lambda_l1', 0.001, 0.5, log=True)
-#        params_opt['TreeTime_lgb_lambda_l2'] = trial.suggest_float('TreeTime_lgb_lambda_l2', 0.001, 0.5, log=True)
-#        params_opt['TreeTime_lgb_feature_fraction'] = trial.suggest_float('TreeTime_lgb_feature_fraction', 0.005, 0.05, log=False)
-#        params_opt['TreeTime_lgb_max_depth'] = trial.suggest_int('TreeTime_lgb_max_depth', 2, 9)
-#        params_opt['TreeTime_lgb_num_leaves'] = min(int((2**params_opt['TreeTime_lgb_max_depth']) * trial.suggest_float('TreeTime_lgb_num_leaves_rat', 0.2, 1.3)), 800)
-#        params_opt['TreeTime_lgb_learning_rate'] = trial.suggest_float('TreeTime_lgb_learning_rate', 0.0001, 0.03, log=True)
-#        #params_opt['TreeTime_lgb_min_data_in_leaf'] = trial.suggest_int('TreeTime_lgb_min_data_in_leaf', 30, 430, step=20)
-#        #params_opt['TreeTime_lgb_min_gain_to_split'] = trial.suggest_float('TreeTime_lgb_min_gain_to_split', 0.001, 2.9, log=True)
-#        #params_opt['TreeTime_lgb_path_smooth'] = trial.suggest_float('TreeTime_lgb_path_smooth', 0.1, 0.9)
-#        #params_opt['TreeTime_lgb_min_sum_hessian_in_leaf'] = trial.suggest_float('TreeTime_lgb_min_sum_hessian_in_leaf', 0.01, 10.0, log=True)
-#        #params_opt['TreeTime_lgb_max_bin'] = trial.suggest_int('TreeTime_lgb_max_bin', 100, 1500, step=100)
-#        params_opt['TreeTime_lgb_test_size_pct'] = 0.01
+#        params_opt['LGB_num_boost_round'] = 1500; #trial.suggest_int('LGB_num_boost_round', 500, 3500, step=500)
+#        params_opt['LGB_lambda_l1'] = trial.suggest_float('LGB_lambda_l1', 0.001, 0.5, log=True)
+#        params_opt['LGB_lambda_l2'] = trial.suggest_float('LGB_lambda_l2', 0.001, 0.5, log=True)
+#        params_opt['LGB_feature_fraction'] = trial.suggest_float('LGB_feature_fraction', 0.005, 0.05, log=False)
+#        params_opt['LGB_max_depth'] = trial.suggest_int('LGB_max_depth', 2, 9)
+#        params_opt['LGB_num_leaves'] = min(int((2**params_opt['LGB_max_depth']) * trial.suggest_float('LGB_num_leaves_rat', 0.2, 1.3)), 800)
+#        params_opt['LGB_learning_rate'] = trial.suggest_float('LGB_learning_rate', 0.0001, 0.03, log=True)
+#        #params_opt['LGB_min_data_in_leaf'] = trial.suggest_int('LGB_min_data_in_leaf', 30, 430, step=20)
+#        #params_opt['LGB_min_gain_to_split'] = trial.suggest_float('LGB_min_gain_to_split', 0.001, 2.9, log=True)
+#        #params_opt['LGB_path_smooth'] = trial.suggest_float('LGB_path_smooth', 0.1, 0.9)
+#        #params_opt['LGB_min_sum_hessian_in_leaf'] = trial.suggest_float('LGB_min_sum_hessian_in_leaf', 0.01, 10.0, log=True)
+#        #params_opt['LGB_max_bin'] = trial.suggest_int('LGB_max_bin', 100, 1500, step=100)
+#        params_opt['LGB_test_size_pct'] = 0.01
 #        
 #        # MatchFeatures
 #        params_opt['TreeTime_MatchFeatures_run'] = False #trial.suggest_categorical('TreeTime_MatchFeatures_run', [True, False])

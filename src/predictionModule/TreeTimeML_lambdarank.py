@@ -729,7 +729,7 @@ class TreeTimeML:
 
             # Top m analysis
             logger.info("Reporting Error on top predicted:")
-            m = self.params['TreeTime_top_highest']
+            m = self.params['TreeTime_top_n']
             top_m_indices = np.flip(np.argsort(y_test_pred_ondate)[-m:])
             selected_df = meta_pl_test_ondate.with_columns(pl.Series("prediction_ratio", y_test_pred_ondate))[top_m_indices]
             
@@ -830,7 +830,7 @@ class TreeTimeML:
 
             # Top m analysis
             logger.info("Reporting Error on top predicted:")
-            m = self.params['TreeTime_top_highest']
+            m = self.params['TreeTime_top_n']
             top_m_indices = np.flip(np.argsort(y_test_pred_ondate)[-m:])
             selected_df = meta_pl_test_ondate.with_columns(pl.Series("prediction_ratio", y_test_pred_ondate))[top_m_indices]
             

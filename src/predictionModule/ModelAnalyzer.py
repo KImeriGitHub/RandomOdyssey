@@ -5,7 +5,6 @@ import pandas as pd
 from collections import Counter
 from typing import Optional
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
-from src.predictionModule.IML import IML
 import lightgbm as lgb
 from scipy import stats
 
@@ -13,51 +12,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ModelAnalyzer:
-    def __init__(self, module = None):
-        """
-        Initialize the ModelAnalyzer with a trained model instance.
-
-        Parameters:
-            model (FourierML): An instance of the FourierML class containing trained models and data.
-        """
-        self.module: IML = module
-        sns.set(style="whitegrid")
-
-    def plot_label_distribution(self, label_data: Optional[np.ndarray] = None, title: str = 'Percentage Distribution of Labels', palette: str = 'viridis'):
-        """
-        Plot the distribution of class labels with percentage annotations.
-
-        Parameters:
-            label_data (np.ndarray, optional): Array of labels to plot. Defaults to model's y_train.
-            title (str): Title of the plot.
-            palette (str): Seaborn color palette.
-        
-        Returns:
-            float: Sum of squared percentages.
-        """
-        if label_data is None:
-            label_data = self.module.y_train
-        
-        plt.figure(figsize=(10,6))
-        total = len(label_data)
-        ax = sns.countplot(x=label_data, palette=palette)
-
-        # Add percentage labels on top of each bar
-        percentages = []
-        for p in ax.patches:
-            perc = '{:.1f}%'.format(100 * p.get_height() / total)
-            percentages.append(p.get_height() / total)
-            height = p.get_height()
-            ax.text(p.get_x() + p.get_width()/2., height + 1, perc, ha="center") 
-        
-        plt.title(title)
-        plt.xlabel('Class Labels')
-        plt.ylabel('Frequency')
-        plt.show()
-        
-        percentage_sum_sq = np.sum(np.array(percentages) ** 2)
-        print(f"Sum of squared percentages: {percentage_sum_sq:.4f}")
-        return percentage_sum_sq
+    def __init__(self):
+        pass
     
     @staticmethod
     def print_label_distribution(*arrays):
@@ -112,23 +68,6 @@ class ModelAnalyzer:
             logger.info(f"      TPR: {TPR:.2f}, FPR: {FPR:.2f}, TNR: {TNR:.2f}, FNR: {FNR:.2f}") 
             
         logger.info("")
-
-    @staticmethod
-    def print_feature_importance_LGBM(model: IML, n_feature: int = 50):
-        importances = model.LGBMModel.feature_importances_
-        
-        feature_importances = pd.DataFrame({
-            'Feature': model.featureColumnNames,
-            'Importance': importances
-        })
-        feature_importances.sort_values(by='Importance', ascending=False, inplace=True)
-        top_n = min(n_feature, feature_importances.shape[0])
-        top_features = feature_importances.head(top_n).reset_index(drop=True)
-        top_features.index += 1  # Start ranking at 1
-        top_features.index.name = 'Rank'
-        top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
-        logger.info(f"Top {top_n} Feature Importances:")
-        logger.info(top_features.to_string())
     
     @staticmethod
     def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
@@ -202,66 +141,6 @@ class ModelAnalyzer:
         # Print overall metrics
         print(f'\nTest Accuracy: {test_acc:.4f}')
         print(f'Test Log Loss: {test_loss:.4f}')
-
-    def plot_lstm_absolute_diff_histogram(self, 
-                                          bins: int = 50, color: str = 'skyblue', 
-                                          edgecolor: str = 'black', alpha: float = 0.7, 
-                                          title: str = 'Histogram of Absolute Differences Between Predictions and Actual Values'):
-        """
-        Plot histograms of absolute and relative differences between LSTM predictions and actual values.
-
-        Parameters:
-            bins (int): Number of bins for the histogram.
-            color (str): Color of the histogram bars.
-            edgecolor (str): Edge color of the histogram bars.
-            alpha (float): Transparency level of the histogram bars.
-            title (str): Title of the histogram.
-        """
-        # Check if the LSTM model is trained
-        if self.module.LSTMModel is None:
-            raise ValueError("LSTM model is not trained or not available.")
-        
-        # Prepare and scale the test data
-        X_test: np.array = self.module.X_test_timeseries
-        y_test: np.array = self.module.y_test_timeseries  # shape (:,1)
-        
-        num_samples, timesteps, num_features = X_test.shape
-        
-        # Flatten X_test to 2D for scaling
-        X_test_flat = X_test.reshape(num_samples, -1)
-        X_test_scaled_flat = self.module.scaler_X.transform(X_test_flat)
-        X_test_scaled = X_test_scaled_flat.reshape(num_samples, timesteps, num_features)
-        
-        # Scale y_test
-        y_test_scaled = self.module.scaler_y.transform(y_test)
-        
-        # Predict with LSTM using scaled X_test
-        predictions_scaled = self.module.LSTMModel.predict(X_test_scaled)
-        
-        # Inverse scale the predictions
-        predictions = self.module.scaler_y.inverse_transform(predictions_scaled)
-        
-        # Compute the absolute and relative differences
-        abs_diff = np.abs(predictions.flatten() - y_test.flatten())
-        rel_diff = abs_diff / np.abs(y_test.flatten())
-        
-        # Plot the histogram of absolute differences
-        plt.figure(figsize=(10,6))
-        plt.hist(abs_diff, bins=bins, color=color, edgecolor=edgecolor, alpha=alpha)
-        plt.title('Histogram of Absolute Differences Between Predictions and Actual Values')
-        plt.xlabel('Absolute Difference')
-        plt.ylabel('Frequency')
-        plt.grid(True)
-        plt.show()
-        
-        # Plot the histogram of relative differences
-        plt.figure(figsize=(10,6))
-        plt.hist(rel_diff, bins=bins, color=color, edgecolor=edgecolor, alpha=alpha)
-        plt.title('Histogram of Relative Differences Between Predictions and Actual Values')
-        plt.xlabel('Relative Difference')
-        plt.ylabel('Frequency')
-        plt.grid(True)
-        plt.show()
 
     def print_model_results(pred: list, ret: list):
         logger.info(f"Resulting returns: {ret}")

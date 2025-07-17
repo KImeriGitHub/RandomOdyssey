@@ -44,7 +44,7 @@ class DistributionTools():
         """
         PRE: sam_tr and sam_te are the training and test samples; imp is the importance vector.
         POST: Returns a nonnegative weight vector (length=num_sam_tr) obtained via NNLS so that for each
-              feature and for each of n_bin equally‐spaced bins (in the sorted order of sam_tr[:,feat]),
+              feature and for each of n_bin equally-spaced bins (in the sorted order of sam_tr[:,feat]),
               the sum over the bin equals the target bin sum computed from the original sorted weights.
         """
         num_sam_tr, n_feat = sam_tr.shape
@@ -64,6 +64,10 @@ class DistributionTools():
             weights_sorted[:, i] = np.convolve(weights_sorted[:, i], window, mode='same')
             # Scale to preserve total mass
             weights_sorted[:, i] *= (num_sam_tr / weights_sorted[:, i].sum())
+
+            # If there's only one feature, return its weight vector directly
+        if n_feat == 1:
+            return weights_sorted[:, 0]
 
         # Build the sparse constraint matrix A_sparse and target vector b.
         # For each feature, we impose that in the sorted order (using permutation p),
@@ -92,8 +96,6 @@ class DistributionTools():
         # lsq_linear handles bounds and works efficiently with sparse A.
         sol = lsq_linear(A_sparse, b, bounds=(minbd, np.inf), lsmr_tol='auto', verbose=0)
         res = sol.x
-        
-        del A_sparse, b, rows, cols, data, b_vals, weights_sorted, lo, hi, p, bins, sorted_te, sorted_tr, sam_tr, sam_te
-        
+                
         res = res * num_sam_tr / res.sum()
         return res
