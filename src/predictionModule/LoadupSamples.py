@@ -410,6 +410,7 @@ class LoadupSamples:
         self.train_ytree = self.train_ytree[~mask_nan_inbetween_tree]
         self.train_ytime = self.train_ytime[~mask_nan_inbetween_time]
         
+        # the mask_nan_inbetween_time is not used here. It is planned to use independent to tree meta in the future.
         self.meta_pl_train = self.meta_pl_train.filter(~mask_nan_inbetween_tree)
         
     def __scale_tree_standard(self) -> None:

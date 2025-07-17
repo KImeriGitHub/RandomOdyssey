@@ -382,7 +382,7 @@ class FilterSamples:
             
             # subsample:
             mask = torch.zeros(probs.size(0), dtype=torch.bool, device=device)
-            idx  = torch.randperm(probs.size(0), device=device)[:subsample_size]
+            idx  = torch.randperm(probs.size(0), device=device)[:subsample_size]  # is slow for large num of parameters
             mask[idx] = True
             probs_sub   = probs * mask                                # (N,)
             v_sub       = v_tensor * mask          # (N,)
