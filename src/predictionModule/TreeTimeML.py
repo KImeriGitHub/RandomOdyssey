@@ -113,13 +113,20 @@ class TreeTimeML:
             inc_factor = self.params["LoadupSamples_time_inc_factor"]
             if lstm_model is None:
                 startTime  = datetime.datetime.now()
-                idx1 = np.where(self.featureTimeNames == "MathFeature_TradedPrice")[0][0]
-                idx2 = np.where(self.featureTimeNames == "FeatureTA_High")[0][0]
-                idx3 = np.where(self.featureTimeNames == "FeatureTA_Low")[0][0]
-                idx4 = np.where(self.featureTimeNames == "FeatureTA_volume_obv")[0][0]
-                idx5 = np.where(self.featureTimeNames == "FeatureTA_volume_vpt")[0][0]
+                required_features = [
+                    "MathFeature_TradedPrice",
+                    "FeatureTA_High",
+                    "FeatureTA_Low",
+                    "FeatureTA_volume_obv",
+                    "FeatureTA_volume_vpt"
+                ]
 
-                idxs_features = [idx1, idx2, idx3, idx4, idx5]
+                # Validate feature presence and retrieve indices
+                missing_features = [f for f in required_features if f not in self.featureTimeNames]
+                if missing_features:
+                    raise ValueError(f"Missing required features in featureTimeNames: {missing_features}")
+
+                idxs_features = [np.where(self.featureTimeNames == feature)[0][0] for feature in required_features]
                 lstm_model, lstm_res = mm.run_LSTM_torch(
                     X_train=self.train_Xtime[:, :, idxs_features],
                     y_train=self.train_ytime,
