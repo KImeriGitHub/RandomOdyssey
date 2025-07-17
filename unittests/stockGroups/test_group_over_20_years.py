@@ -1,36 +1,34 @@
-# tests/test_group_over_20_years.py
-import unittest
-from datetime import datetime, timedelta
 import pandas as pd
+from datetime import timedelta
 from src.common.AssetData import AssetData
 from src.stockGroupsService.GroupOver20Years import GroupOver20Years
 
-class TestGroupOver20Years(unittest.TestCase):
-    def test_check_asset_true(self):
-        """
-        Test that check_asset returns True when the asset has over 20 years of data.
-        """
-        # Create an AssetData object with share price data over 20 years
-        start_date = pd.Timestamp.now(tz='UTC') - timedelta(days=21 * 365.25 + 10)
-        dates = pd.date_range(start=start_date, periods=int(21 * 365.25) + 10)
-        prices = pd.Series(100, index=dates)
-        shareprice = pd.DataFrame({'Price': prices})
-        asset = AssetData(ticker='TEST', shareprice=shareprice)
-        group = GroupOver20Years()
-        self.assertTrue(group.checkAsset(asset))
 
-    def test_check_asset_false(self):
-        """
-        Test that check_asset returns False when the asset has less than 20 years of data.
-        """
-        # Create an AssetData object with share price data less than 20 years
-        start_date = pd.Timestamp.now(tz='UTC') - timedelta(days=19 * 365.25)
-        dates = pd.date_range(start=start_date, periods=int(19 * 365.25))
-        prices = pd.Series(100, index=dates)
-        shareprice = pd.DataFrame({'Price': prices})
-        asset = AssetData(ticker='TEST', shareprice=shareprice)
-        group = GroupOver20Years()
-        self.assertFalse(group.checkAsset(asset))
+def make_shareprice(days: int) -> pd.DataFrame:
+    start = pd.Timestamp.now() - timedelta(days=days)
+    dates = pd.date_range(start=start, periods=days)
+    data = {
+        "Date": dates.astype(str),
+        "Open": 1.0,
+        "High": 1.0,
+        "Low": 1.0,
+        "Close": 1.0,
+        "AdjClose": 1.0,
+        "Volume": 1.0,
+        "Dividends": 0.0,
+        "Splits": 0.0,
+    }
+    return pd.DataFrame(data)
 
-if __name__ == '__main__':
-    unittest.main()
+
+def test_check_asset_true():
+    shareprice = make_shareprice(int(21 * 365.25) + 10)
+    asset = AssetData(ticker="TEST", shareprice=shareprice)
+    assert GroupOver20Years().checkAsset(asset)
+
+
+def test_check_asset_false():
+    # create only a few years of data so requirement is not met
+    shareprice = make_shareprice(int(2 * 365.25))
+    asset = AssetData(ticker="TEST", shareprice=shareprice)
+    assert not GroupOver20Years().checkAsset(asset)
