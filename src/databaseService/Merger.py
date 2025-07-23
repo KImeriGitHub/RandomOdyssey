@@ -136,6 +136,9 @@ class Merger():
         existing_quar = self.asset.financials_quarterly.copy()
         existing_quar['fiscalDateEnding'] = existing_quar['fiscalDateEnding'].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
 
+        old_ann  = existing_ann.copy()
+        old_quar = existing_quar.copy()
+
         # Merging
         existing_ann = (
             full_ann.set_index('fiscalDateEnding')
@@ -155,6 +158,10 @@ class Merger():
         # Clean incongruencies
         existing_ann = CleanData.financial_fiscalDateIncongruence(existing_ann, daysDiscrep = 60)
         existing_quar = CleanData.financial_fiscalDateIncongruence(existing_quar, daysDiscrep = 15)
+
+        # BEFORE recasting to string -> log
+        self._log_fin_changes("annual",    old_ann,  existing_ann)
+        self._log_fin_changes("quarterly", old_quar, existing_quar)
 
         # Recasting
         existing_ann['fiscalDateEnding']  = existing_ann['fiscalDateEnding'].apply(lambda ts: str(ts))
@@ -193,3 +200,26 @@ class Merger():
         
         self.asset.financials_annually = existing_ann
         self.asset.financials_quarterly = existing_quar
+        
+    def _log_fin_changes(self, kind: str, old_df: pd.DataFrame, new_df: pd.DataFrame) -> None:
+        if old_df is None or old_df.empty:
+            logger.info("%s: first load (%d rows)", kind, len(new_df))
+            return
+
+        key = "fiscalDateEnding"
+
+        # 1) new lines
+        new_dates = new_df.loc[~new_df[key].isin(old_df[key]), key].tolist()
+        if len(new_dates) == 0:
+            logger.info("%s: no new rows", kind)
+            return
+        logger.info("%s: +%d new rows %s", kind, len(new_dates), new_dates)
+
+        # 2) differences vs previous periods
+        old_c = old_df[old_df[key].isin(new_df[key])].sort_values(key).reset_index(drop=True)
+        new_c = new_df[new_df[key].isin(old_df[key])].sort_values(key).reset_index(drop=True)
+        diff = new_c.compare(old_c, keep_equal=False)
+        logger.info("%s diffs: (%d rows, %d cells)",
+                    kind,
+                    diff.index.nunique(),
+                    diff.notna().sum().sum()) if not diff.empty else None
