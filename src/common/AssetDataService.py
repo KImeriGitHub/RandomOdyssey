@@ -19,47 +19,47 @@ class AssetDataService:
     def defaultInstance(ticker: str = "", isin: str = "") -> AssetData:
         # Define dtypes for shareprice
         shareprice_dtypes = {
-            'Date': 'object',
-            'Open': 'float64',
-            'High': 'float64',
-            'Low': 'float64',
-            'Close': 'float64',
-            'AdjClose': 'float64',
-            'Volume': 'float64',
-            'Dividends': 'float64',
-            'Splits': 'float64'
+            'Date': 'string',
+            'Open': 'Float64',
+            'High': 'Float64',
+            'Low': 'Float64',
+            'Close': 'Float64',
+            'AdjClose': 'Float64',
+            'Volume': 'Float64',
+            'Dividends': 'Float64',
+            'Splits': 'Float64'
         }
         # Define dtypes for quarterly financials
         quarterly_dtypes = {
-            'fiscalDateEnding': 'object',
-            'reportedDate': 'object',
-            'reportedEPS': 'float64',
-            'estimatedEPS': 'float64',
-            'surprise': 'float64',
-            'surprisePercentage': 'float64',
-            'reportTime': 'object',
-            'grossProfit': 'float64',
-            'totalRevenue': 'float64',
-            'ebit': 'float64',
-            'ebitda': 'float64',
-            'totalAssets': 'float64',
-            'totalCurrentLiabilities': 'float64',
-            'totalShareholderEquity': 'float64',
-            'commonStockSharesOutstanding': 'float64',
-            'operatingCashflow': 'float64'
+            'fiscalDateEnding': 'string',
+            'reportedDate': 'string',
+            'reportedEPS': 'Float64',
+            'estimatedEPS': 'Float64',
+            'surprise': 'Float64',
+            'surprisePercentage': 'Float64',
+            'reportTime': 'string',
+            'grossProfit': 'Float64',
+            'totalRevenue': 'Float64',
+            'ebit': 'Float64',
+            'ebitda': 'Float64',
+            'totalAssets': 'Float64',
+            'totalCurrentLiabilities': 'Float64',
+            'totalShareholderEquity': 'Float64',
+            'commonStockSharesOutstanding': 'Float64',
+            'operatingCashflow': 'Float64'
         }
         # Define dtypes for annual financials
         annual_dtypes = {
-            'fiscalDateEnding': 'object',
-            'reportedEPS': 'float64',
-            'grossProfit': 'float64',
-            'totalRevenue': 'float64',
-            'ebit': 'float64',
-            'ebitda': 'float64',
-            'totalAssets': 'float64',
-            'totalCurrentLiabilities': 'float64',
-            'totalShareholderEquity': 'float64',
-            'operatingCashflow': 'float64'
+            'fiscalDateEnding': 'string',
+            'reportedEPS': 'Float64',
+            'grossProfit': 'Float64',
+            'totalRevenue': 'Float64',
+            'ebit': 'Float64',
+            'ebitda': 'Float64',
+            'totalAssets': 'Float64',
+            'totalCurrentLiabilities': 'Float64',
+            'totalShareholderEquity': 'Float64',
+            'operatingCashflow': 'Float64'
         }
 
         # Create empty DataFrames with specified dtypes
