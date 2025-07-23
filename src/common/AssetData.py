@@ -22,14 +22,14 @@ class AssetData:
     shareprice: pd.DataFrame = None
     # Columns 
     #  'Date'      : str (YYYY-MM-DD)
-    #  'Open'      : float
-    #  'High'      : float
-    #  'Low'       : float
-    #  'Close'     : float
-    #  'AdjClose'  : float
-    #  'Volume'    : float
-    #  'Dividends' : float  
-    #  'Splits'    : float
+    #  'Open'      : Float64
+    #  'High'      : Float64
+    #  'Low'       : Float64
+    #  'Close'     : Float64
+    #  'AdjClose'  : Float64
+    #  'Volume'    : Float64
+    #  'Dividends' : Float64
+    #  'Splits'    : Float64
 
     ##############
     # FINANCIALS #
@@ -38,32 +38,32 @@ class AssetData:
     # Columns
     #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
     #  'reportedDate'                 : str  (YYYY-MM-DD)
-    #  'reportedEPS'                  : float
-    #  'estimatedEPS'                 : float
-    #  'surprise'                     : float
-    #  'surprisePercentage'           : float
+    #  'reportedEPS'                  : Float64
+    #  'estimatedEPS'                 : Float64
+    #  'surprise'                     : Float64
+    #  'surprisePercentage'           : Float64
     #  'reportTime'                   : str  ('pre-market', 'post-market')
-    #  'grossProfit'                  : float
-    #  'totalRevenue'                 : float
-    #  'ebit'                         : float
-    #  'ebitda'                       : float
-    #  'totalAssets'                  : float
-    #  'totalCurrentLiabilities'      : float
-    #  'totalShareholderEquity'       : float
-    #  'commonStockSharesOutstanding' : float
-    #  'operatingCashflow'            : float
-    
+    #  'grossProfit'                  : Float64
+    #  'totalRevenue'                 : Float64
+    #  'ebit'                         : Float64
+    #  'ebitda'                       : Float64
+    #  'totalAssets'                  : Float64
+    #  'totalCurrentLiabilities'      : Float64
+    #  'totalShareholderEquity'       : Float64
+    #  'commonStockSharesOutstanding' : Float64
+    #  'operatingCashflow'            : Float64
+
     financials_annually: pd.DataFrame = None
     # Columns
     #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
-    #  'reportedEPS'                  : float
-    #  'grossProfit'                  : float
-    #  'totalRevenue'                 : float
-    #  'ebit'                         : float
-    #  'ebitda'                       : float
-    #  'totalAssets'                  : float
-    #  'totalCurrentLiabilities'      : float
-    #  'totalShareholderEquity'       : float
-    #  'operatingCashflow'            : float
+    #  'reportedEPS'                  : Float64
+    #  'grossProfit'                  : Float64
+    #  'totalRevenue'                 : Float64
+    #  'ebit'                         : Float64
+    #  'ebitda'                       : Float64
+    #  'totalAssets'                  : Float64
+    #  'totalCurrentLiabilities'      : Float64
+    #  'totalShareholderEquity'       : Float64
+    #  'operatingCashflow'            : Float64
 
     

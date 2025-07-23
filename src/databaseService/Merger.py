@@ -22,6 +22,18 @@ class Merger():
         if mergingshareprice.empty: 
             raise ValueError("Mergingshareprice DataFrame is empty.")
         
+        shareprice_dtypes_dict = {
+            'Date': 'string',
+            'Open': 'Float64', 
+            'High': 'Float64',
+            'Low': 'Float64', 
+            'Close': 'Float64',
+            'AdjClose': 'Float64',
+            'Volume': 'Float64',
+            'Dividends': 'Float64',
+            'Splits': 'Float64'
+        }
+        
         ### PREPARE MERGING SHAREPRICE DATA
         fullSharePrice = mergingshareprice.copy()
         fullSharePrice["Date"] = fullSharePrice["Date"].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
@@ -29,7 +41,7 @@ class Merger():
         ### IF NO SHAREPRICE DATA IN DB, JUST ASSIGN
         if len(self.asset.shareprice) == 0:
             fullSharePrice["Date"] = fullSharePrice["Date"].apply(lambda ts: str(ts))
-            self.asset.shareprice = fullSharePrice.convert_dtypes()
+            self.asset.shareprice = fullSharePrice.astype(shareprice_dtypes_dict)
             logger.info(f"  No existing shareprice data for ticker {self.asset.ticker}.")
             return
             
@@ -102,7 +114,7 @@ class Merger():
         merged_pl = merged_pl.select(["Date",'Open','High','Low','Close','AdjClose','Volume','Dividends','Splits'])
         merged_pd = merged_pl.to_pandas()
         merged_pd['Date'] = merged_pd['Date'].apply(lambda ts: str(ts.date()))
-        merged_pd = merged_pd.convert_dtypes()
+        merged_pd = merged_pd.astype(shareprice_dtypes_dict)
         self.asset.shareprice = merged_pd
         
         # Further logging
@@ -117,31 +129,25 @@ class Merger():
         # Casting Quarterly Financials
         full_quar = fin_quar.copy()
         full_quar['fiscalDateEnding'] = full_quar['fiscalDateEnding'].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
-        full_quar['reportedDate'] = full_quar['reportedDate'].apply(
-            lambda x: x.date().__str__() if isinstance(x, datetime.datetime) else pd.NA
-        )
         
         # Casting existing Financials
         existing_ann = self.asset.financials_annually.copy()
         existing_ann['fiscalDateEnding'] = existing_ann['fiscalDateEnding'].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
         existing_quar = self.asset.financials_quarterly.copy()
         existing_quar['fiscalDateEnding'] = existing_quar['fiscalDateEnding'].apply(lambda ts: dt.strptime(ts, '%Y-%m-%d').date())
-        existing_quar['reportedDate'] = existing_quar['reportedDate'].apply(
-            lambda x: x.date().__str__() if isinstance(x, datetime.datetime) else pd.NA
-        )
 
         # Merging
         existing_ann = (
             full_ann.set_index('fiscalDateEnding')
             .combine_first(existing_ann.set_index('fiscalDateEnding'))
             .reset_index()
-        )
+        ) if not existing_ann.empty else full_ann
 
         existing_quar = (
             full_quar.set_index('fiscalDateEnding')
             .combine_first(existing_quar.set_index('fiscalDateEnding'))
             .reset_index()
-        )
+        ) if not existing_quar.empty else full_quar
 
         existing_ann = existing_ann.sort_values('fiscalDateEnding').reset_index(drop=True)
         existing_quar = existing_quar.sort_values('fiscalDateEnding').reset_index(drop=True)
@@ -153,12 +159,37 @@ class Merger():
         # Recasting
         existing_ann['fiscalDateEnding']  = existing_ann['fiscalDateEnding'].apply(lambda ts: str(ts))
         existing_quar['fiscalDateEnding'] = existing_quar['fiscalDateEnding'].apply(lambda ts: str(ts))
-        existing_quar['reportedDate'] = existing_quar['reportedDate'].apply(lambda ts: str(ts) if ts != pd.NA else pd.NA)
         
-        existing_ann = existing_ann.convert_dtypes()
-        existing_quar = existing_quar.convert_dtypes()
-        existing_quar["reportedDate"].dtype = object
-        existing_quar["reportTime"].dtype = object
+        existing_ann = existing_ann.astype({
+            'fiscalDateEnding'        : 'string',
+            'reportedEPS'             : 'Float64',
+            'grossProfit'             : 'Float64',
+            'totalRevenue'            : 'Float64',
+            'ebit'                    : 'Float64',
+            'ebitda'                  : 'Float64',
+            'totalAssets'             : 'Float64',
+            'totalCurrentLiabilities' : 'Float64',
+            'totalShareholderEquity'  : 'Float64',
+            'operatingCashflow'       : 'Float64'
+        })
+        existing_quar = existing_quar.astype({
+            'fiscalDateEnding'            : 'string',
+            'reportedDate'                : 'string',
+            'reportedEPS'                 : 'Float64',
+            'estimatedEPS'                : 'Float64',
+            'surprise'                    : 'Float64',
+            'surprisePercentage'          : 'Float64',
+            'reportTime'                  : 'string',
+            'grossProfit'                 : 'Float64',
+            'totalRevenue'                : 'Float64',
+            'ebit'                        : 'Float64',
+            'ebitda'                      : 'Float64',
+            'totalAssets'                 : 'Float64',
+            'totalCurrentLiabilities'     : 'Float64',
+            'totalShareholderEquity'      : 'Float64',
+            'commonStockSharesOutstanding': 'Float64',
+            'operatingCashflow'           : 'Float64'
+        })
         
         self.asset.financials_annually = existing_ann
         self.asset.financials_quarterly = existing_quar

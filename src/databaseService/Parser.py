@@ -86,7 +86,7 @@ class Parser_AV():
         # Drop missing values, except for last row
         if fullSharePrice[cols].iloc[:-1].isnull().values.any():
             logger.info("  Shareprice has empty Number values or NaN Number values.")
-            # build a mask: keep rows where *all* cols are notna, or it’s the last row
+            # build a mask: keep rows where *all* cols are notna, or it'’'s the last row
             last_idx = fullSharePrice.index[-1]
             mask = fullSharePrice[cols].notna().all(axis=1) | (fullSharePrice.index == last_idx)
             fullSharePrice = fullSharePrice[mask]
@@ -95,8 +95,18 @@ class Parser_AV():
         fullSharePrice['Date'] = fullSharePrice['Date'].apply(lambda ts: ts.strftime("%Y-%m-%d"))
 
         # Asses dtypes
-        fullSharePrice = fullSharePrice.convert_dtypes()
-        
+        fullSharePrice = fullSharePrice.astype({
+            'Date': 'string',
+            'Open': 'Float64', 
+            'High': 'Float64',
+            'Low': 'Float64', 
+            'Close': 'Float64',
+            'AdjClose': 'Float64',
+            'Volume': 'Float64',
+            'Dividends': 'Float64',
+            'Splits': 'Float64'
+        })
+
         # Validate data
         self.validate_shareprice(fullSharePrice)
         
@@ -195,11 +205,10 @@ class Parser_AV():
         financials_an = financials_an[fina_cols]
         financials_quar = financials_quar[finq_cols]
 
-        # Asses dtypes
+        # Pre-set dtypes
         financials_an = financials_an.convert_dtypes()
         financials_quar = financials_quar.convert_dtypes()
-        financials_quar["reportedDate"].dtype = object
-        financials_quar["reportTime"].dtype = object
+        financials_quar = financials_quar.astype({'reportedDate': 'string', 'reportTime': 'string'})
 
         # Clean data
         financials_quar = CleanData.financial_fiscalDateIncongruence(financials_quar, daysDiscrep = 15)
@@ -218,6 +227,37 @@ class Parser_AV():
         financials_an['fiscalDateEnding']   = financials_an['fiscalDateEnding'].apply(lambda ts: ts.strftime("%Y-%m-%d"))
         financials_quar['fiscalDateEnding'] = financials_quar['fiscalDateEnding'].apply(lambda ts: ts.strftime("%Y-%m-%d"))
         financials_quar['reportedDate']     = financials_quar['reportedDate'].apply(lambda ts: ts.strftime("%Y-%m-%d") if (ts is not None and ts is not pd.NA) else pd.NA)
+
+        financials_an = financials_an.astype({
+            'fiscalDateEnding'        : 'string',
+            'reportedEPS'             : 'Float64',
+            'grossProfit'             : 'Float64',
+            'totalRevenue'            : 'Float64',
+            'ebit'                    : 'Float64',
+            'ebitda'                  : 'Float64',
+            'totalAssets'             : 'Float64',
+            'totalCurrentLiabilities' : 'Float64',
+            'totalShareholderEquity'  : 'Float64',
+            'operatingCashflow'       : 'Float64'
+        })
+        financials_quar = financials_quar.astype({
+            'fiscalDateEnding'            : 'string',
+            'reportedDate'                : 'string',
+            'reportedEPS'                 : 'Float64',
+            'estimatedEPS'                : 'Float64',
+            'surprise'                    : 'Float64',
+            'surprisePercentage'          : 'Float64',
+            'reportTime'                  : 'string',
+            'grossProfit'                 : 'Float64',
+            'totalRevenue'                : 'Float64',
+            'ebit'                        : 'Float64',
+            'ebitda'                      : 'Float64',
+            'totalAssets'                 : 'Float64',
+            'totalCurrentLiabilities'     : 'Float64',
+            'totalShareholderEquity'      : 'Float64',
+            'commonStockSharesOutstanding': 'Float64',
+            'operatingCashflow'           : 'Float64'
+        })
 
         # Validate data
         self.validate_financials(financials_quar, financials_an)
@@ -276,18 +316,18 @@ class Parser_AV():
 
             # reportedDate
             rd = finquar['reportedDate']
-            if rd.dtype != object:
-                logger.error(f"PARSER VALIDATION: 'reportedDate' must be dtype object (str), got {rd.dtype}")
+            if rd.dtype != pd.StringDtype(storage="python"):
+                logger.error(f"PARSER VALIDATION: 'reportedDate' must be dtype string[python], got {rd.dtype}")
             mask = rd.notna() & ~rd.astype(str).str.match(DATE_RE)
             bad  = finquar[mask]
             if not bad.empty:
-                logger.error(f"PARSER VALIDATION: Column {'reportedDate'} has invalid date‐strings: {bad['reportedDate'].unique().tolist()}")
+                logger.error(f"PARSER VALIDATION: Column {'reportedDate'} has invalid date-strings: {bad['reportedDate'].unique().tolist()}")
 
             # reportTime
             rt = finquar['reportTime']
-            if rt.dtype != object:
-                logger.error(f"PARSER VALIDATION: 'reportTime' must be dtype object (str), got {rt.dtype}")
-            if not rt.empty and (rt.dtype != object or not set(rt.unique()).issubset(VALID_REPORT_TIMES)):
+            if rt.dtype != pd.StringDtype(storage="python"):
+                logger.error(f"PARSER VALIDATION: 'reportTime' must be dtype str, got {rt.dtype}")
+            if not rt.empty and (rt.dtype != pd.StringDtype(storage="python") or not set(rt.unique()).issubset(VALID_REPORT_TIMES)):
                 logger.error(f"PARSER VALIDATION: reportTime must be in {VALID_REPORT_TIMES}, got {rt.unique()}")
             
             # numeric
