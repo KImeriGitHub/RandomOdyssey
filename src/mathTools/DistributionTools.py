@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, linalg
 from scipy.optimize import lsq_linear
 
 from src.mathTools.SpecialMatrix import SpecialMatrix
@@ -94,8 +94,13 @@ class DistributionTools():
 
         # Solve the nonnegative least-squares problem: min ||A_sparse*x - b||_2  s.t. x >= 0.
         # lsq_linear handles bounds and works efficiently with sparse A.
-        sol = lsq_linear(A_sparse, b, bounds=(minbd, np.inf), lsmr_tol='auto', verbose=0)
-        res = sol.x
+        x0, *_ = linalg.lsmr(A_sparse, b, atol=1e-4, btol=1e-4) #solve A_sparse x ≈ b quickly (unconstrained)
+        # enforce x ≥ minbd by simple clipping
+        res = np.maximum(x0, minbd)
+        
+        #Original
+        #sol = lsq_linear(A_sparse, b, bounds=(minbd, np.inf), lsmr_tol='auto', verbose=0)
+        #res = sol.x
                 
         res = res * num_sam_tr / res.sum()
         return res

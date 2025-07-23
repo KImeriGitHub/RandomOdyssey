@@ -7,6 +7,7 @@ import polars as pl
 import datetime
 import secrets
 import copy
+import random
 import logging
 import optuna
 from optuna.exceptions import TrialPruned
@@ -17,25 +18,25 @@ stock_group_short = "snp500_finanTo2011"
     
 params = {
     "idxAfterPrediction": 5,
-    'timesteps': 25,
+    'timesteps': 40,
     'target_option': 'last',
     
     "TreeTime_top_n": 5,
     "TreeTime_stoploss": 0.92,
     
-    "FilterSamples_days_to_train_end": 390,
+    "FilterSamples_days_to_train_end": 500,
     
     "FilterSamples_lincomb_q_up": 0.95,
-    "FilterSamples_lincomb_lr": 0.0008384895113158295,
-    "FilterSamples_lincomb_epochs": 800,
+    "FilterSamples_lincomb_lr": 0.0008,
+    "FilterSamples_lincomb_epochs": 500,
     "FilterSamples_lincomb_probs_noise_std": 0.010503627436184224,
-    "FilterSamples_lincomb_subsample_ratio": 0.2424109747001177,
-    "FilterSamples_lincomb_sharpness": 0.59226051089996,
+    "FilterSamples_lincomb_subsample_ratio": 0.10,
+    "FilterSamples_lincomb_sharpness": 0.6,
     "FilterSamples_lincomb_featureratio": 0.33269072850403053,
     "FilterSamples_lincomb_itermax": 1,
     "FilterSamples_lincomb_show_progress": True,
 
-    'TreeTime_run_lstm': True,
+    'TreeTime_run_lstm': False,
     "LSTM_units": 32,
     "LSTM_num_layers": 3,
     "LSTM_dropout": 0.00001,
@@ -44,7 +45,7 @@ params = {
     "LSTM_optimizer": "adam",
     "LSTM_bidirectional": True,
     "LSTM_batch_size": 2**12,
-    "LSTM_epochs": 5,
+    "LSTM_epochs": 3,
     "LSTM_l1": 0.0001,
     "LSTM_l2": 0.0001,
     "LSTM_inter_dropout": 0.0001,
@@ -53,20 +54,20 @@ params = {
     "LSTM_conv1d_kernel_size": 3,
     "LSTM_loss": "mse",
     
-    "LGB_num_boost_round": 1500,
+    "LGB_num_boost_round": 100,
     "LGB_lambda_l1": 0.04614242128149404,
     "LGB_lambda_l2": 0.009786276249261908,
     "LGB_feature_fraction": 0.20813359498274574,
-    "LGB_num_leaves": 182,
-    "LGB_max_depth": 11,
+    "LGB_num_leaves": 180,
+    "LGB_max_depth": 6,
     "LGB_learning_rate": 0.02887444408582576,
-    "LGB_min_data_in_leaf": 272,
+    "LGB_min_data_in_leaf": 150,
     "LGB_min_gain_to_split": 0.10066457576238419,
     "LGB_path_smooth": 0.5935679203578974,
     "LGB_min_sum_hessian_in_leaf": 0.3732876155751053,
-    "LGB_max_bin": 150,
+    "LGB_max_bin": 250,
         
-    'TreeTime_MatchFeatures_run': False,
+    'TreeTime_MatchFeatures_run': True,
     'TreeTime_MatchFeatures_minWeight': 0.4,
     'TreeTime_MatchFeatures_truncation': 2,
     'TreeTime_MatchFeatures_Pricediff': True,
@@ -74,7 +75,7 @@ params = {
     'TreeTime_MatchFeatures_FinData_metrics': False,
     'TreeTime_MatchFeatures_Fourier_RSME': False,
     'TreeTime_MatchFeatures_Fourier_Sign': False,
-    'TreeTime_MatchFeatures_TA_trend': True,
+    'TreeTime_MatchFeatures_TA_trend': False,
     'TreeTime_MatchFeatures_FeatureGroup_VolGrLvl': False,
     'TreeTime_MatchFeatures_LSTM_Prediction': False,
 }
@@ -94,41 +95,81 @@ logger.info(f" Params: {params}")
 ## ANALYZING ##
 ###############
 if __name__ == "__main__":
-    last_date = datetime.date(2025,  2,  1)
-    start_date = datetime.date(2014,  1,  1)
-    
+    # Static config
+    global_start_date = datetime.date(2014, 1, 1)     # earliest data
+    final_eval_date   = datetime.date(2025, 2, 10)    # last date you want to consider cutoffs up to
+    test_horizon_days = 7                            # days after train cutoff for test slice
+
+    # Pre-load once
     ls = LoadupSamples(
-        train_start_date=start_date,
-        test_dates=[last_date],
+        train_start_date=global_start_date,
+        test_dates=[final_eval_date],  # will be overridden in split loop; kept for init
         group=stock_group,
         params=params,
     )
-    
-    start_train_date = datetime.date(2014,  1,  1)
-    end_train_date = datetime.date(2024, 6, 1)
-    
-    starttime = datetime.datetime.now()
-    
     ls.load_samples(main_path="./src/featureAlchemy/bin/")
-    ls.split_dataset(
-        start_date = start_train_date,
-        last_train_date = end_train_date,
-    )
-    
-    tt = TreeTimeML(
-        train_start_date = ls.train_start_date,
-        test_dates = ls.test_dates,
-        group = stock_group,
-        params = params,
-        loadup = ls
-    )
-    
-    tt.analyze()
-    
-    logger.info(f"Time taken for analysis: {datetime.datetime.now() - starttime}")
-    
-    formatted_date = end_train_date.strftime('%d%b%Y')
 
+    results = []
+
+    # Generate many training cutoff dates (month-end roll). Change freq as desired.
+    cutoffs = [datetime.date(2025, 1, 15) - datetime.timedelta(days=i*8+random.randint(-3, 3)) for i in range(280)][::-1]
+
+    starttime_all = datetime.datetime.now()
+
+    for end_train_date in cutoffs:
+        end_test_date = end_train_date + datetime.timedelta(days=test_horizon_days)
+        lsc = copy.deepcopy(ls)  # Create a copy of the LoadupSamples instance
+        # Re-split dataset for this window
+        lsc.split_dataset(
+            start_date=global_start_date,
+            last_train_date=end_train_date,
+            last_test_date=end_test_date,
+        )
+
+        # Train/analyze for this cutoff
+        tt = TreeTimeML(
+            train_start_date=lsc.train_start_date,
+            test_dates=lsc.test_dates,
+            group=stock_group,
+            params=params,
+            loadup=lsc,
+        )
+        try:
+            starttime = datetime.datetime.now()
+            res_dict = tt.analyze()
+            elapsed = datetime.datetime.now() - starttime
+        except Exception as e:
+            logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
+            continue  # Skip to next cutoff if error occurs
+
+        logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
+        logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
+
+        results.append(
+            {
+                "end_train_date": end_train_date,
+                "end_test_date": end_test_date,
+                "mean_return": res_dict['result'],
+                "n_entries": res_dict['n_entries'],
+                "analysis_time": elapsed.total_seconds(),
+                "max_pred": res_dict['max_pred'],
+                "mean_pred": res_dict['mean_pred'],
+            }
+        )
+
+    total_elapsed = datetime.datetime.now() - starttime_all
+    logger.info(f"Completed {len(results)} rolling backtests in {total_elapsed}.")
+
+    # Optional: DataFrame of all results
+    results_df = pd.DataFrame(results).sort_values("end_train_date").reset_index(drop=True)
+    logger.info(results_df)
+    
+    logger.info(f"Mean return over all cutoffs: {results_df['mean_return'].mean()}")
+    logger.info(f"Max prediction over all cutoffs: {results_df['max_pred'].mean()}")
+    logger.info(f"Mean prediction over all cutoffs: {results_df['mean_pred'].mean()}")
+    logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
+    
+    results_df.to_parquet(f"analysis_df_{formatted_date}.parquet", index=False)
 
 ###########################
 ## HYPERPARAMETER TUNING ##

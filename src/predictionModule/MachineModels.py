@@ -401,7 +401,7 @@ class MachineModels:
                     val_rmses.append(torch.sqrt(mse).item())
             val_rmse = sum(val_rmses) / len(val_rmses)
 
-            print(f"Epoch {epoch+1}/{epochs} — "
+            logger.info(f"Epoch {epoch+1}/{epochs} — "
                 f"Train RMSE: {train_rmse:.4f} — "
                 f"Validation RMSE: {val_rmse:.4f}")
 

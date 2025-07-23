@@ -230,32 +230,36 @@ class LoadupSamples:
             (self.meta_pl_train["date"] > last_train_date) & 
             (self.meta_pl_train["date"] <= last_test_date)
         ).fill_null(False).to_numpy()
-        
+        test_split_mask = (
+            (self.meta_pl_test["date"] > last_train_date) & 
+            (self.meta_pl_test["date"] <= last_test_date)
+        ).fill_null(False).to_numpy()
+
         self.test_Xtree = np.concatenate(
             [
                 self.train_Xtree[train_split_te_mask], 
-                self.test_Xtree
+                self.test_Xtree[test_split_mask]
             ], 
             axis = 0
         )
         self.test_Xtime = np.concatenate(
             [
                 self.train_Xtime[train_split_te_mask], 
-                self.test_Xtime
+                self.test_Xtime[test_split_mask]
             ], 
             axis = 0
         )
         self.test_ytree = np.concatenate(
             [
                 self.train_ytree[train_split_te_mask], 
-                self.test_ytree
+                self.test_ytree[test_split_mask]
             ], 
             axis = 0
         )
         self.test_ytime = np.concatenate(
             [
                 self.train_ytime[train_split_te_mask], 
-                self.test_ytime
+                self.test_ytime[test_split_mask]
             ], 
             axis = 0
         )
@@ -267,7 +271,7 @@ class LoadupSamples:
         
         self.meta_pl_test = pl.concat([
             self.meta_pl_train.filter(train_split_te_mask),
-            self.meta_pl_test
+            self.meta_pl_test.filter(test_split_mask)
         ])
         self.meta_pl_train = self.meta_pl_train.filter(train_split_tr_mask)
 
@@ -316,7 +320,7 @@ class LoadupSamples:
             pl.col("Close")
             .shift(-1)
             .over("ticker")
-            .rolling_mean(window_size=idx_after)
+            .rolling_mean(window_size=max(idx_after//2, 1))
             .alias("target_mean_close")
         )
 

@@ -173,11 +173,11 @@ class TreeTimeML:
         if lgb_model is None:
             startTime  = datetime.datetime.now()
             lgb_model, lgb_res_dict = mm.run_LGB(
-                X_train=self.train_Xtree,
-                y_train=self.train_ytree,
-                X_test=self.test_Xtree,
-                y_test=self.test_ytree,
-                weights=self.tree_weights,
+                X_train=self.train_Xtree[mask_train],
+                y_train=self.train_ytree[mask_train],
+                X_test=self.test_Xtree[mask_test],
+                y_test=self.test_ytree[mask_test],
+                weights=self.tree_weights[mask_train],
             )
             logger.info(f"LGB completed in {datetime.datetime.now() - startTime}.")
         
@@ -369,13 +369,21 @@ class TreeTimeML:
                 
         res_ = meta_pred_df.filter(
             pl.col("result_ratio") > 0.60
-        ).group_by("date").agg(
-            pl.col("result_ratio").mean().alias("mean_result_ratio")
-        )
-        logger.info(f"Over all P/L Ratio: {res_['mean_result_ratio'].mean():.4f}")
-
-        return meta_pred_df
+        ).group_by("date").agg([
+            pl.col("result_ratio").mean().alias("mean_result_ratio"),
+            pl.col("result_ratio").count().alias("n_entries"),
+            pl.col("prediction_ratio").max().alias("max_pred_ratio"),
+            pl.col("prediction_ratio").mean().alias("mean_pred_ratio"),
+        ])
         
+        res_pl = res_['mean_result_ratio'].mean()
+        res_n = res_['n_entries'].sum()
+        res_max_pred = res_['max_pred_ratio'].mean()
+        res_mean_pred = res_['mean_pred_ratio'].mean()
+        logger.info(f"Over all P/L Ratio: {res_pl:.4f}")
+
+        return {'result': res_pl, "n_entries": res_n, "max_pred": res_max_pred, "mean_pred": res_mean_pred}
+
     def predict(self):
         # Run common pipeline in "analyze" mode
         data = self.pipeline()
