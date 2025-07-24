@@ -9,7 +9,12 @@ from src.common.AssetData import AssetData
 from src.common.AssetDataPolars import AssetDataPolars
 
 import logging
+
 logger = logging.getLogger(__name__)
+
+# Common constants used for validation
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+VALID_REPORT_TIMES = {"pre-market", "post-market"}
 
 class AssetDataService:
     def __init__(self):
@@ -162,10 +167,132 @@ class AssetDataService:
             financials_annually=ad.financials_annually.copy()
         )
 
+    # ------------------------------------------------------------------
+    # Validation helper methods
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _check_string_col(df: pd.DataFrame, col: str) -> None:
+        """Ensure column has pandas string dtype."""
+        if df[col].dtype != pd.StringDtype(storage="python"):
+            logger.error(
+                f"VALIDATION ERROR: {col} must be dtype string, got {df[col].dtype}"
+            )
+
+    @staticmethod
+    def _check_date_col(df: pd.DataFrame, col: str) -> None:
+        AssetDataService._check_string_col(df, col)
+        bad = df[~df[col].astype(str).str.match(DATE_RE)]
+        if not bad.empty:
+            logger.error(
+                f"VALIDATION ERROR: Column {col} has invalid dates:\n{bad[col].unique()}"
+            )
+
+    @staticmethod
+    def _check_float_col(df: pd.DataFrame, col: str) -> None:
+        if df[col].dtype != pd.Float64Dtype():
+            logger.error(
+                f"VALIDATION ERROR: {col} must be float dtype, got {df[col].dtype}"
+            )
+
+    @staticmethod
+    def validate_shareprice_df(df: pd.DataFrame) -> None:
+        if df is None:
+            return
+        if df.empty:
+            logger.error("VALIDATION ERROR: Shareprice data is empty.")
+
+        exp = [
+            "Date",
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "AdjClose",
+            "Volume",
+            "Dividends",
+            "Splits",
+        ]
+        if list(df.columns) != exp:
+            logger.error(f"VALIDATION ERROR: shareprice.columns must be {exp}")
+
+        AssetDataService._check_date_col(df, "Date")
+        for c in exp[1:]:
+            AssetDataService._check_float_col(df, c)
+
+        price_columns = ["Open", "High", "Low", "Close", "AdjClose"]
+        if not df.empty and (df[price_columns] < 0).any().any():
+            logger.error(
+                "VALIDATION ERROR: Float Shareprice data contains negative values."
+            )
+
+    @staticmethod
+    def validate_financials_df(finquar: pd.DataFrame, finann: pd.DataFrame) -> None:
+        if finquar is not None:
+            exp_q = [
+                "fiscalDateEnding",
+                "reportedDate",
+                "reportedEPS",
+                "estimatedEPS",
+                "surprise",
+                "surprisePercentage",
+                "reportTime",
+                "grossProfit",
+                "totalRevenue",
+                "ebit",
+                "ebitda",
+                "totalAssets",
+                "totalCurrentLiabilities",
+                "totalShareholderEquity",
+                "commonStockSharesOutstanding",
+                "operatingCashflow",
+            ]
+            if list(finquar.columns) != exp_q:
+                logger.error(
+                    f"VALIDATION ERROR: financials_quarterly.columns must be {exp_q}"
+                )
+
+            AssetDataService._check_date_col(finquar, "fiscalDateEnding")
+            AssetDataService._check_date_col(finquar, "reportedDate")
+
+            rt = finquar["reportTime"]
+            AssetDataService._check_string_col(finquar, "reportTime")
+            rtset = set(rt.unique()) - set([pd.NA])
+            if not rt.empty and (
+                rt.dtype != pd.StringDtype(storage="python")
+                or not rtset.issubset(VALID_REPORT_TIMES)
+            ):
+                logger.error(
+                    f"VALIDATION ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {set(rt.unique())}"
+                )
+
+            for c in exp_q:
+                if c not in {"fiscalDateEnding", "reportedDate", "reportTime"}:
+                    AssetDataService._check_float_col(finquar, c)
+
+        if finann is not None:
+            exp_a = [
+                "fiscalDateEnding",
+                "reportedEPS",
+                "grossProfit",
+                "totalRevenue",
+                "ebit",
+                "ebitda",
+                "totalAssets",
+                "totalCurrentLiabilities",
+                "totalShareholderEquity",
+                "operatingCashflow",
+            ]
+            if list(finann.columns) != exp_a:
+                logger.error(
+                    f"VALIDATION ERROR: financials_annually.columns must be {exp_a}. Got {list(finann.columns)}"
+                )
+            AssetDataService._check_date_col(finann, "fiscalDateEnding")
+            for c in exp_a[1:]:
+                AssetDataService._check_float_col(finann, c)
+
     @staticmethod
     def validate_asset_data(ad: AssetData):
-        DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-        VALID_REPORT_TIMES = {"pre-market", "post-market"}
         
         # 1. Field names
         dc_fields = {f.name for f in fields(AssetData)}
@@ -185,63 +312,6 @@ class AssetDataService:
         if ad.about is not None and not isinstance(ad.about, dict):
             logger.error("VALIDATION ERROR: about must be dict or None")
 
-        # Helper to check a date‐string column
-        def check_string_col(df: pd.DataFrame, col: str):
-            if df[col].dtype != pd.StringDtype(storage="python"):
-                logger.error(f"VALIDATION ERROR: {col} must be dtype string, got {df[col].dtype}")
-                
-        def check_date_col(df: pd.DataFrame, col: str):
-            check_string_col(df, col)
-            bad = df[~df[col].astype(str).str.match(DATE_RE)]
-            if not bad.empty:
-                logger.error(f"VALIDATION ERROR: Column {col} has invalid dates:\n{bad[col].unique()}")
-
-        # Helper to check float columns
-        def check_float_col(df: pd.DataFrame, col: str):
-            if not df[col].dtype == pd.Float64Dtype():
-                logger.error(f"VALIDATION ERROR: {col} must be float dtype, got {df[col].dtype}")
-
-        # 3. shareprice
-        if ad.shareprice is not None:
-            exp = ['Date','Open','High','Low','Close','AdjClose','Volume','Dividends','Splits']
-            if list(ad.shareprice.columns) != exp:
-                logger.error(f"VALIDATION ERROR: shareprice.columns must be {exp}")
-            check_date_col(ad.shareprice, 'Date')
-            for c in exp[1:]:
-                check_float_col(ad.shareprice, c)
-
-        # 4. financials_quarterly
-        if ad.financials_quarterly is not None:
-            exp_q = [
-                'fiscalDateEnding','reportedDate','reportedEPS','estimatedEPS','surprise',
-                'surprisePercentage','reportTime','grossProfit','totalRevenue','ebit',
-                'ebitda','totalAssets','totalCurrentLiabilities','totalShareholderEquity',
-                'commonStockSharesOutstanding','operatingCashflow'
-            ]
-            if list(ad.financials_quarterly.columns) != exp_q:
-                logger.error(f"VALIDATION ERROR: financials_quarterly.columns must be {exp_q}")
-            check_date_col(ad.financials_quarterly, 'fiscalDateEnding')
-            check_date_col(ad.financials_quarterly, 'reportedDate')
-            # reportTime
-            rt = ad.financials_quarterly['reportTime']
-            check_string_col(ad.financials_quarterly, 'reportTime')
-            rtset = set(rt.unique()) - set([pd.NA])
-            if not rt.empty and (rt.dtype != pd.StringDtype(storage="python") or not rtset.issubset(VALID_REPORT_TIMES)):
-                logger.error(f"VALIDATION ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {set(rt.unique())}")
-            # numeric
-            for c in exp_q:
-                if c not in {'fiscalDateEnding','reportedDate','reportTime'}:
-                    check_float_col(ad.financials_quarterly, c)
-
-        # 5. financials_annually
-        if ad.financials_annually is not None:
-            exp_a = [
-                'fiscalDateEnding','reportedEPS','grossProfit','totalRevenue','ebit',
-                'ebitda','totalAssets','totalCurrentLiabilities','totalShareholderEquity',
-                'operatingCashflow'
-            ]
-            if list(ad.financials_annually.columns) != exp_a:
-                logger.error(f"VALIDATION ERROR: financials_annually.columns must be {exp_a}. Got {list(ad.financials_annually.columns)}")
-            check_date_col(ad.financials_annually, 'fiscalDateEnding')
-            for c in exp_a[1:]:
-                check_float_col(ad.financials_annually, c)
+        # 3. shareprice and financials
+        AssetDataService.validate_shareprice_df(ad.shareprice)
+        AssetDataService.validate_financials_df(ad.financials_quarterly, ad.financials_annually)
