@@ -2,8 +2,7 @@ from typing import Dict
 import pandas as pd
 import re
 import datetime
-from typing import Dict
-from pandas.api.types import is_numeric_dtype, is_string_dtype
+from src.common.AssetDataService import AssetDataService
 
 from src.databaseService.CleanData import CleanData
 
@@ -269,107 +268,11 @@ class Parser_AV():
         return financials_an, financials_quar
     
     def validate_shareprice(self, sData: pd.DataFrame) -> None:
-        """
-        Used for Manual checks on all incoming data to the Parser.
-        Does not raise errors, but logs them.
-        """
-        if sData.empty:
-            logger.error("PARSER VALIDATION: Shareprice data is empty.")
-        
-        # Check for negative values in price columns
-        price_columns = ['Open', 'High', 'Low', 'Close', 'AdjClose']
-        if (sData[price_columns] < 0).any().any():
-            logger.error("PARSER VALIDATION: Float Shareprice data contains negative values.")
-
-        # 3. shareprice
-        if sData is not None:
-            exp = ['Date','Open','High','Low','Close','AdjClose','Volume','Dividends','Splits']
-            if list(sData.columns) != exp:
-                logger.error(f"PARSER VALIDATION: Shareprice data columns must be {exp}")
-            self.__check_date_col(sData, 'Date')
-            for c in exp[1:]:
-                self.__check_numeric_col(sData, c)
-        
+        """Delegate shareprice validation to AssetDataService."""
+        AssetDataService.validate_shareprice_df(sData)
         return True
     
     def validate_financials(self, finquar: pd.DataFrame, finann: pd.DataFrame) -> None:
-        """
-        Used for Manual checks on all incoming data to the Parser.
-        Does not raise errors, but logs them.
-        """
-        if finquar.empty:
-            logger.error("PARSER VALIDATION: Finanicals quarterly is empty.")
-        if finann.empty:
-            logger.error("PARSER VALIDATION: Finanicals annual is empty.")
-        
-        # 4. financials_quarterly
-        VALID_REPORT_TIMES = {"pre-market", "post-market", pd.NA}
-        DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-        if finquar is not None:
-            exp_q = [
-                'fiscalDateEnding','reportedDate','reportedEPS','estimatedEPS','surprise',
-                'surprisePercentage','reportTime','grossProfit','totalRevenue','ebit',
-                'ebitda','totalAssets','totalCurrentLiabilities','totalShareholderEquity',
-                'commonStockSharesOutstanding','operatingCashflow'
-            ]
-            if list(finquar.columns) != exp_q:
-                logger.error(f"PARSER VALIDATION: financials_quarterly.columns must be {exp_q}")
-
-            #fiscalDateEnding
-            self.__check_date_col(finquar, 'fiscalDateEnding')
-
-            # reportedDate
-            rd = finquar['reportedDate']
-            self.__check_date_col(finquar, 'reportedDate')
-            mask = rd.notna() & ~rd.astype(str).str.match(DATE_RE)
-            bad  = finquar[mask]
-            if not bad.empty:
-                logger.error(f"PARSER VALIDATION: Column 'reportedDate' has invalid date-strings: {bad['reportedDate'].unique().tolist()}")
-
-            # reportTime
-            rt = finquar['reportTime']
-            self.__check_string_col(finquar, 'reportTime')
-            if not rt.empty and (rt.dtype != pd.StringDtype(storage="python") or not set(rt.unique()).issubset(VALID_REPORT_TIMES)):
-                logger.error(f"PARSER VALIDATION: reportTime must be in {VALID_REPORT_TIMES}, got {set(rt.unique())}")
-            
-            # numeric
-            for c in exp_q[2:]:
-                if c not in {'reportTime'}:
-                    self.__check_numeric_col(finquar, c)
-
-        # 5. financials_annually
-        if finann is not None:
-            exp_a = [
-                'fiscalDateEnding','reportedEPS','grossProfit','totalRevenue','ebit',
-                'ebitda','totalAssets','totalCurrentLiabilities','totalShareholderEquity',
-                'operatingCashflow'
-            ]
-            if list(finann.columns) != exp_a:
-                logger.error(f"PARSER VALIDATION: financials_annually.columns must be {exp_a}")
-            self.__check_date_col(finann, 'fiscalDateEnding')
-            for c in exp_a[1:]:
-                self.__check_numeric_col(finann, c)
-        
+        """Delegate financials validation to AssetDataService."""
+        AssetDataService.validate_financials_df(finquar, finann)
         return True
-    
-    # Helper to check a string column
-    def __check_string_col(self, df: pd.DataFrame, col: str):
-        # accept object (py-str) or pandas StringDtype
-        if not df[col].dtype == pd.StringDtype(storage="python"):
-            logger.error(f"PARSER VALIDATION: Column {col} must be a string dtype, got {df[col].dtype}")
-    
-    # Helper to check a date‐string column
-    def __check_date_col(self, df: pd.DataFrame, col: str):
-        DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-        self.__check_string_col(df, col)
-
-        # find any values which, when cast to str, don’t match YYYY-MM-DD
-        bad = df[~df[col].astype(str).str.match(DATE_RE)]
-        if not bad.empty:
-            logger.error(f"PARSER VALIDATION: Column {col} has invalid date-strings: {bad[col].unique().tolist()}")
-
-    # Helper to check float columns
-    def __check_numeric_col(self, df: pd.DataFrame, col: str):
-        if not df[col].dtype == pd.Float64Dtype():
-            logger.error(f"PARSER VALIDATION: Column {col} must be numeric dtype, got {df[col].dtype}")
