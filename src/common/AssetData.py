@@ -21,7 +21,7 @@ class AssetData:
     ###########################
     shareprice: pd.DataFrame = None
     # Columns 
-    #  'Date'      : str (YYYY-MM-DD)
+    #  'Date'      : str (YYYY-MM-DD)  CANNOT BE NULL
     #  'Open'      : Float64
     #  'High'      : Float64
     #  'Low'       : Float64
@@ -36,13 +36,13 @@ class AssetData:
     ##############
     financials_quarterly: pd.DataFrame = None 
     # Columns
-    #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
-    #  'reportedDate'                 : str  (YYYY-MM-DD)
-    #  'reportedEPS'                  : Float64
+    #  'fiscalDateEnding'             : str  (YYYY-MM-DD) CANNOT BE NULL
+    #  'reportedDate'                 : str  (YYYY-MM-DD) CANNOT BE NULL
+    #  'reportedEPS'                  : Float64 
     #  'estimatedEPS'                 : Float64
     #  'surprise'                     : Float64
     #  'surprisePercentage'           : Float64
-    #  'reportTime'                   : str  ('pre-market', 'post-market')
+    #  'reportTime'                   : str  ('pre-market', 'post-market', pd.NA)
     #  'grossProfit'                  : Float64
     #  'totalRevenue'                 : Float64
     #  'ebit'                         : Float64
@@ -55,7 +55,7 @@ class AssetData:
 
     financials_annually: pd.DataFrame = None
     # Columns
-    #  'fiscalDateEnding'             : str  (YYYY-MM-DD)
+    #  'fiscalDateEnding'             : str  (YYYY-MM-DD) CANNOT BE NULL
     #  'reportedEPS'                  : Float64
     #  'grossProfit'                  : Float64
     #  'totalRevenue'                 : Float64

@@ -173,7 +173,7 @@ class AssetDataService:
         if dc_fields != inst_fields:
             extra = inst_fields - dc_fields
             missing = dc_fields - inst_fields
-            logger.error(f"VALIDATION ERROR: Field mismatch – extra: {extra}, missing: {missing}")
+            logger.error(f"VALIDATION ERROR: Field mismatch - extra: {extra}, missing: {missing}")
 
         # 2. Attribute types
         if not isinstance(ad.ticker, str):
@@ -186,16 +186,19 @@ class AssetDataService:
             logger.error("VALIDATION ERROR: about must be dict or None")
 
         # Helper to check a date‐string column
-        def check_date_col(df, col):
-            if df[col].dtype != object:
-                logger.error(f"VALIDATION ERROR: {col} must be dtype object (str), got {df[col].dtype}")
+        def check_string_col(df: pd.DataFrame, col: str):
+            if df[col].dtype != pd.StringDtype(storage="python"):
+                logger.error(f"VALIDATION ERROR: {col} must be dtype string, got {df[col].dtype}")
+                
+        def check_date_col(df: pd.DataFrame, col: str):
+            check_string_col(df, col)
             bad = df[~df[col].astype(str).str.match(DATE_RE)]
             if not bad.empty:
                 logger.error(f"VALIDATION ERROR: Column {col} has invalid dates:\n{bad[col].unique()}")
 
         # Helper to check float columns
-        def check_float_col(df, col):
-            if not is_float_dtype(df[col]):
+        def check_float_col(df: pd.DataFrame, col: str):
+            if not df[col].dtype == pd.Float64Dtype():
                 logger.error(f"VALIDATION ERROR: {col} must be float dtype, got {df[col].dtype}")
 
         # 3. shareprice
@@ -221,13 +224,13 @@ class AssetDataService:
             check_date_col(ad.financials_quarterly, 'reportedDate')
             # reportTime
             rt = ad.financials_quarterly['reportTime']
-            if ad.financials_quarterly['reportTime'].dtype != object:
-                logger.error(f"VALIDATION ERROR: 'reportTime' must be dtype object (str), got {ad.financials_quarterly['reportTime'].dtype}")
-            if not rt.empty and (rt.dtype != object or not set(rt.unique()).issubset(VALID_REPORT_TIMES)):
-                logger.error(f"VALIDATION ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {rt.unique()}")
+            check_string_col(ad.financials_quarterly, 'reportTime')
+            rtset = set(rt.unique()) - set([pd.NA])
+            if not rt.empty and (rt.dtype != pd.StringDtype(storage="python") or not rtset.issubset(VALID_REPORT_TIMES)):
+                logger.error(f"VALIDATION ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {set(rt.unique())}")
             # numeric
-            for c in exp_q[2:] :
-                if c not in {'reportTime'}:
+            for c in exp_q:
+                if c not in {'fiscalDateEnding','reportedDate','reportTime'}:
                     check_float_col(ad.financials_quarterly, c)
 
         # 5. financials_annually
@@ -238,7 +241,7 @@ class AssetDataService:
                 'operatingCashflow'
             ]
             if list(ad.financials_annually.columns) != exp_a:
-                logger.error(f"VALIDATION ERROR: financials_annually.columns must be {exp_a}")
+                logger.error(f"VALIDATION ERROR: financials_annually.columns must be {exp_a}. Got {list(ad.financials_annually.columns)}")
             check_date_col(ad.financials_annually, 'fiscalDateEnding')
             for c in exp_a[1:]:
                 check_float_col(ad.financials_annually, c)
