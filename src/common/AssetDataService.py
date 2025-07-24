@@ -257,7 +257,7 @@ class AssetDataService:
 
             rt = finquar["reportTime"]
             AssetDataService._check_string_col(finquar, "reportTime")
-            rtset = set(rt.unique()) - {pd.NA}
+            rtset = set(rt.unique()) - set([pd.NA])
             if not rt.empty and (
                 rt.dtype != pd.StringDtype(storage="python")
                 or not rtset.issubset(VALID_REPORT_TIMES)
