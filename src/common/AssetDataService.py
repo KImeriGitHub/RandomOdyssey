@@ -172,35 +172,35 @@ class AssetDataService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _check_string_col(df: pd.DataFrame, col: str) -> None:
+    def _check_string_col(df: pd.DataFrame, col: str, prefix: str = "VALIDATION") -> None:
         """Ensure column has pandas string dtype."""
         if df[col].dtype != pd.StringDtype(storage="python"):
             logger.error(
-                f"VALIDATION ERROR: {col} must be dtype string, got {df[col].dtype}"
+                f"{prefix} ERROR: {col} must be dtype string, got {df[col].dtype}"
             )
 
     @staticmethod
-    def _check_date_col(df: pd.DataFrame, col: str) -> None:
+    def _check_date_col(df: pd.DataFrame, col: str, prefix: str = "VALIDATION") -> None:
         AssetDataService._check_string_col(df, col)
         bad = df[~df[col].astype(str).str.match(DATE_RE)]
         if not bad.empty:
             logger.error(
-                f"VALIDATION ERROR: Column {col} has invalid dates:\n{bad[col].unique()}"
+                f"{prefix} ERROR: Column {col} has invalid dates:\n{bad[col].unique()}"
             )
 
     @staticmethod
-    def _check_float_col(df: pd.DataFrame, col: str) -> None:
+    def _check_float_col(df: pd.DataFrame, col: str, prefix: str = "VALIDATION") -> None:
         if df[col].dtype != pd.Float64Dtype():
             logger.error(
-                f"VALIDATION ERROR: {col} must be float dtype, got {df[col].dtype}"
+                f"{prefix} ERROR: {col} must be float dtype, got {df[col].dtype}"
             )
 
     @staticmethod
-    def validate_shareprice_df(df: pd.DataFrame) -> None:
+    def validate_shareprice_df(df: pd.DataFrame, prefix: str = "VALIDATION") -> None:
         if df is None:
             return
         if df.empty:
-            logger.error("VALIDATION ERROR: Shareprice data is empty.")
+            logger.error(f"{prefix} ERROR: Shareprice data is empty.")
 
         exp = [
             "Date",
@@ -214,7 +214,7 @@ class AssetDataService:
             "Splits",
         ]
         if list(df.columns) != exp:
-            logger.error(f"VALIDATION ERROR: shareprice.columns must be {exp}")
+            logger.error(f"{prefix} ERROR: shareprice.columns must be {exp}")
 
         AssetDataService._check_date_col(df, "Date")
         for c in exp[1:]:
@@ -223,11 +223,11 @@ class AssetDataService:
         price_columns = ["Open", "High", "Low", "Close", "AdjClose"]
         if not df.empty and (df[price_columns] < 0).any().any():
             logger.error(
-                "VALIDATION ERROR: Float Shareprice data contains negative values."
+                f"{prefix} ERROR: Float Shareprice data contains negative values."
             )
 
     @staticmethod
-    def validate_financials_df(finquar: pd.DataFrame, finann: pd.DataFrame) -> None:
+    def validate_financials_df(finquar: pd.DataFrame, finann: pd.DataFrame, prefix: str = "VALIDATION") -> None:
         if finquar is not None:
             exp_q = [
                 "fiscalDateEnding",
@@ -249,7 +249,7 @@ class AssetDataService:
             ]
             if list(finquar.columns) != exp_q:
                 logger.error(
-                    f"VALIDATION ERROR: financials_quarterly.columns must be {exp_q}"
+                    f"{prefix} ERROR: financials_quarterly.columns must be {exp_q}"
                 )
 
             AssetDataService._check_date_col(finquar, "fiscalDateEnding")
@@ -263,7 +263,7 @@ class AssetDataService:
                 or not rtset.issubset(VALID_REPORT_TIMES)
             ):
                 logger.error(
-                    f"VALIDATION ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {set(rt.unique())}"
+                    f"{prefix} ERROR: reportTime must be in {VALID_REPORT_TIMES}, got {set(rt.unique())}"
                 )
 
             for c in exp_q:
@@ -285,14 +285,14 @@ class AssetDataService:
             ]
             if list(finann.columns) != exp_a:
                 logger.error(
-                    f"VALIDATION ERROR: financials_annually.columns must be {exp_a}. Got {list(finann.columns)}"
+                    f"{prefix} ERROR: financials_annually.columns must be {exp_a}. Got {list(finann.columns)}"
                 )
             AssetDataService._check_date_col(finann, "fiscalDateEnding")
             for c in exp_a[1:]:
                 AssetDataService._check_float_col(finann, c)
 
     @staticmethod
-    def validate_asset_data(ad: AssetData):
+    def validate_asset_data(ad: AssetData, prefix: str = "VALIDATION"):
         
         # 1. Field names
         dc_fields = {f.name for f in fields(AssetData)}
@@ -300,18 +300,18 @@ class AssetDataService:
         if dc_fields != inst_fields:
             extra = inst_fields - dc_fields
             missing = dc_fields - inst_fields
-            logger.error(f"VALIDATION ERROR: Field mismatch - extra: {extra}, missing: {missing}")
+            logger.error(f"{prefix} ERROR: Field mismatch - extra: {extra}, missing: {missing}")
 
         # 2. Attribute types
         if not isinstance(ad.ticker, str):
-            logger.error("VALIDATION ERROR: ticker must be str")
+            logger.error(f"{prefix} ERROR: ticker must be str")
         if not isinstance(ad.isin, str):
-            logger.error("VALIDATION ERROR: isin must be str")
+            logger.error(f"{prefix} ERROR: isin must be str")
         if not isinstance(ad.sector, str):
-            logger.error("VALIDATION ERROR: sector must be str")
+            logger.error(f"{prefix} ERROR: sector must be str")
         if ad.about is not None and not isinstance(ad.about, dict):
-            logger.error("VALIDATION ERROR: about must be dict or None")
+            logger.error(f"{prefix} ERROR: about must be dict or None")
 
         # 3. shareprice and financials
-        AssetDataService.validate_shareprice_df(ad.shareprice)
-        AssetDataService.validate_financials_df(ad.financials_quarterly, ad.financials_annually)
+        AssetDataService.validate_shareprice_df(ad.shareprice, prefix=prefix)
+        AssetDataService.validate_financials_df(ad.financials_quarterly, ad.financials_annually, prefix=prefix)

@@ -106,7 +106,7 @@ class Parser_AV():
         })
 
         # Validate data
-        AssetDataService.validate_shareprice_df(fullSharePrice)
+        AssetDataService.validate_shareprice_df(fullSharePrice, prefix="PARSER")
         
         return fullSharePrice
     
@@ -262,7 +262,7 @@ class Parser_AV():
         }, errors='raise')
 
         # Validate data
-        AssetDataService.validate_financials_df(financials_quar, financials_an)
+        AssetDataService.validate_financials_df(financials_quar, financials_an, prefix="PARSER")
         
         return financials_an, financials_quar
     
