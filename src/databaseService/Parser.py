@@ -1,6 +1,5 @@
 from typing import Dict
 import pandas as pd
-import re
 import datetime
 from src.common.AssetDataService import AssetDataService
 
@@ -107,7 +106,7 @@ class Parser_AV():
         })
 
         # Validate data
-        self.validate_shareprice(fullSharePrice)
+        AssetDataService.validate_shareprice_df(fullSharePrice)
         
         return fullSharePrice
     
@@ -263,16 +262,7 @@ class Parser_AV():
         }, errors='raise')
 
         # Validate data
-        self.validate_financials(financials_quar, financials_an)
+        AssetDataService.validate_financials_df(financials_quar, financials_an)
         
         return financials_an, financials_quar
     
-    def validate_shareprice(self, sData: pd.DataFrame) -> None:
-        """Delegate shareprice validation to AssetDataService."""
-        AssetDataService.validate_shareprice_df(sData)
-        return True
-    
-    def validate_financials(self, finquar: pd.DataFrame, finann: pd.DataFrame) -> None:
-        """Delegate financials validation to AssetDataService."""
-        AssetDataService.validate_financials_df(finquar, finann)
-        return True
