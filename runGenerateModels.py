@@ -112,7 +112,7 @@ if __name__ == "__main__":
     results = []
 
     # Generate many training cutoff dates (month-end roll). Change freq as desired.
-    cutoffs = [datetime.date(2025, 1, 15) - datetime.timedelta(days=i*8+random.randint(-3, 3)) for i in range(280)][::-1]
+    cutoffs = [datetime.date(2025, 1, 15) - datetime.timedelta(days=i*8*2+random.randint(-3, 3)) for i in range(40)][::-1]
 
     starttime_all = datetime.datetime.now()
 
@@ -126,21 +126,30 @@ if __name__ == "__main__":
             last_test_date=end_test_date,
         )
 
-        # Train/analyze for this cutoff
-        tt = TreeTimeML(
-            train_start_date=lsc.train_start_date,
-            test_dates=lsc.test_dates,
-            group=stock_group,
-            params=params,
-            loadup=lsc,
-        )
-        try:
-            starttime = datetime.datetime.now()
-            res_dict = tt.analyze()
-            elapsed = datetime.datetime.now() - starttime
-        except Exception as e:
-            logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
-            continue  # Skip to next cutoff if error occurs
+        num_reruns = 3
+        res_dict = {}
+        res_dict_list = []
+        for _ in range(num_reruns):
+            # Train/analyze for this cutoff
+            tt = TreeTimeML(
+                train_start_date=lsc.train_start_date,
+                test_dates=lsc.test_dates,
+                group=stock_group,
+                params=params,
+                loadup=lsc,
+            )
+            try:
+                starttime = datetime.datetime.now()
+                res_dict_loop = tt.analyze()
+                elapsed = datetime.datetime.now() - starttime
+            except Exception as e:
+                logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
+                continue  # Skip to next cutoff if error occurs
+            
+            res_dict_list.append(res_dict_loop)
+
+        res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
+        res_dict = res_dict_list[np.argmax(res_mean_pred_list)]
 
         logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
         logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
