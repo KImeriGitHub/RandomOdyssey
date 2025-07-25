@@ -80,7 +80,7 @@ class Merger():
             .sort("Date")
             # 1) anchor AdjClose where present
             .with_columns(
-                pl.coalesce([pl.col("AdjClose_new"), pl.col("AdjClose")]).alias("AdjClose")
+                pl.col("AdjClose_new").alias("AdjClose")
             )
             .with_columns(
                 (pl.col("AdjClose") / pl.col("Close")).alias("ratio_known")

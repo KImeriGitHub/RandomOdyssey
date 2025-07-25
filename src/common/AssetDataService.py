@@ -16,57 +16,57 @@ logger = logging.getLogger(__name__)
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 VALID_REPORT_TIMES = {"pre-market", "post-market"}
 
+# Define dtypes for shareprice
+shareprice_dtypes = {
+    'Date': 'string',
+    'Open': 'Float64',
+    'High': 'Float64',
+    'Low': 'Float64',
+    'Close': 'Float64',
+    'AdjClose': 'Float64',
+    'Volume': 'Float64',
+    'Dividends': 'Float64',
+    'Splits': 'Float64'
+}
+# Define dtypes for quarterly financials
+quarterly_dtypes = {
+    'fiscalDateEnding': 'string',
+    'reportedDate': 'string',
+    'reportedEPS': 'Float64',
+    'estimatedEPS': 'Float64',
+    'surprise': 'Float64',
+    'surprisePercentage': 'Float64',
+    'reportTime': 'string',
+    'grossProfit': 'Float64',
+    'totalRevenue': 'Float64',
+    'ebit': 'Float64',
+    'ebitda': 'Float64',
+    'totalAssets': 'Float64',
+    'totalCurrentLiabilities': 'Float64',
+    'totalShareholderEquity': 'Float64',
+    'commonStockSharesOutstanding': 'Float64',
+    'operatingCashflow': 'Float64'
+}
+# Define dtypes for annual financials
+annual_dtypes = {
+    'fiscalDateEnding': 'string',
+    'reportedEPS': 'Float64',
+    'grossProfit': 'Float64',
+    'totalRevenue': 'Float64',
+    'ebit': 'Float64',
+    'ebitda': 'Float64',
+    'totalAssets': 'Float64',
+    'totalCurrentLiabilities': 'Float64',
+    'totalShareholderEquity': 'Float64',
+    'operatingCashflow': 'Float64'
+}
+
 class AssetDataService:
     def __init__(self):
         pass
 
     @staticmethod
     def defaultInstance(ticker: str = "", isin: str = "") -> AssetData:
-        # Define dtypes for shareprice
-        shareprice_dtypes = {
-            'Date': 'string',
-            'Open': 'Float64',
-            'High': 'Float64',
-            'Low': 'Float64',
-            'Close': 'Float64',
-            'AdjClose': 'Float64',
-            'Volume': 'Float64',
-            'Dividends': 'Float64',
-            'Splits': 'Float64'
-        }
-        # Define dtypes for quarterly financials
-        quarterly_dtypes = {
-            'fiscalDateEnding': 'string',
-            'reportedDate': 'string',
-            'reportedEPS': 'Float64',
-            'estimatedEPS': 'Float64',
-            'surprise': 'Float64',
-            'surprisePercentage': 'Float64',
-            'reportTime': 'string',
-            'grossProfit': 'Float64',
-            'totalRevenue': 'Float64',
-            'ebit': 'Float64',
-            'ebitda': 'Float64',
-            'totalAssets': 'Float64',
-            'totalCurrentLiabilities': 'Float64',
-            'totalShareholderEquity': 'Float64',
-            'commonStockSharesOutstanding': 'Float64',
-            'operatingCashflow': 'Float64'
-        }
-        # Define dtypes for annual financials
-        annual_dtypes = {
-            'fiscalDateEnding': 'string',
-            'reportedEPS': 'Float64',
-            'grossProfit': 'Float64',
-            'totalRevenue': 'Float64',
-            'ebit': 'Float64',
-            'ebitda': 'Float64',
-            'totalAssets': 'Float64',
-            'totalCurrentLiabilities': 'Float64',
-            'totalShareholderEquity': 'Float64',
-            'operatingCashflow': 'Float64'
-        }
-
         # Create empty DataFrames with specified dtypes
         empty_shareprice = pd.DataFrame({col: pd.Series(dtype=dt)
             for col, dt in shareprice_dtypes.items()})
@@ -119,14 +119,17 @@ class AssetDataService:
         # Load shareprice
         sp_dict = assetdict.get("shareprice", {})
         instance.shareprice = pd.DataFrame(sp_dict)
+        instance.shareprice = instance.shareprice.astype(shareprice_dtypes)
 
         # Load financials quarterly
         fq_dict = assetdict.get("financials_quarterly", {})
         instance.financials_quarterly = pd.DataFrame(fq_dict)
+        instance.financials_quarterly = instance.financials_quarterly.astype(quarterly_dtypes)
 
         # Load financials annually
         fa_dict = assetdict.get("financials_annually", {})
         instance.financials_annually = pd.DataFrame(fa_dict)
+        instance.financials_annually = instance.financials_annually.astype(annual_dtypes)
 
         return instance
     
