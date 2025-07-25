@@ -4,7 +4,6 @@ import polars as pl
 from typing import Dict, List
 import itertools
 import datetime
-import logging
 
 from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
@@ -19,6 +18,9 @@ from src.featureAlchemy.FeatureSeasonal import FeatureSeasonal
 from src.featureAlchemy.FeatureTA import FeatureTA
 from src.featureAlchemy.FeatureGroupDynamic import FeatureGroupDynamic
 
+import logging
+logger = logging.getLogger(__name__)
+
 class FeatureMain():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
@@ -28,25 +30,21 @@ class FeatureMain():
     }
 
     def __init__(self, 
-                 assets: Dict[str, AssetDataPolars],
-                 startDate: datetime.date, 
-                 endDate: datetime.date, 
-                 lagList: List[int],
-                 monthHorizonList: List[int],
-                 params: dict = None,
-                 logger: logging.Logger = None):
+            assets: Dict[str, AssetDataPolars],
+            feature_classes: List[str],
+            startDate: datetime.date, 
+            endDate: datetime.date, 
+            lagList: List[int],
+            monthHorizonList: List[int],
+            params: dict = None
+        ):
         
         self.assets = assets
+        self.feature_classes = feature_classes
         self.startDate = startDate
         self.endDate = endDate
         self.lagList = lagList
         self.monthHorizonList = monthHorizonList
-        
-        if logger is None:
-            logging.basicConfig(level=logging.INFO, format="%(message)s")
-            self.logger = logging.getLogger(__name__)
-        else:   
-            self.logger = logger
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -73,7 +71,7 @@ class FeatureMain():
         self.idxAssets_exc = {ticker: DOps(self.assets[ticker].shareprice).getIndices(self.business_days) for ticker in self.assets.keys()}
             
         self.FGD = FeatureGroupDynamic(self.assets, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
-        self.logger.info(f"  FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
+        logger.info(f"  FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
     
     def getTreeFeatures(self) -> tuple[np.array, np.array, list[str]]:
         # 1) gather feature‑name lists
@@ -100,7 +98,7 @@ class FeatureMain():
         niveau = 1.0
         FGD_tick_date = {date: self.FGD.apply(date, {tic: idxlist[i] for tic, idxlist in self.idxAssets.items()}) for i, date in enumerate(self.business_days)}
         for tidx, ticker in enumerate(self.assets.keys()):
-            self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
+            logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
             FC = FeatureCategory(self.assets[ticker], self.params)
             FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
             FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
@@ -157,7 +155,7 @@ class FeatureMain():
         # 3) fill arrays
         FGD_tick_date = {date: self.FGD.apply_timeseries(date, {tic: idxlist[i] for tic, idxlist in self.idxAssets.items()}) for i, date in enumerate(self.business_days)}
         for tidx, ticker in enumerate(self.assets.keys()):
-            self.logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
+            logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
             #FC = FeatureCategory(self.assets[ticker], self.params)
             FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
             FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
