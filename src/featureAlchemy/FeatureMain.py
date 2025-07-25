@@ -27,15 +27,15 @@ class FeatureMain():
         'fouriercutoff': 15,
         'multFactor': 8,
         'timesteps': 15,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
+        'monthHorizonList': [1, 2, 4, 6, 8, 12],
     }
 
     def __init__(self, 
             assets: Dict[str, AssetDataPolars],
             feature_classes: List[str],
             startDate: datetime.date, 
-            endDate: datetime.date, 
-            lagList: List[int],
-            monthHorizonList: List[int],
+            endDate: datetime.date,
             params: dict = None
         ):
         
@@ -43,8 +43,6 @@ class FeatureMain():
         self.feature_classes = feature_classes
         self.startDate = startDate
         self.endDate = endDate
-        self.lagList = lagList
-        self.monthHorizonList = monthHorizonList
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -54,6 +52,8 @@ class FeatureMain():
         self.fouriercutoff = self.params['fouriercutoff']
         self.multFactor = self.params['multFactor']
         self.timesteps = self.params['timesteps']
+        self.lagList = self.params['lagList']
+        self.monthHorizonList = self.params['monthHorizonList']
         
         # get business days
         self.tickers = list(self.assets.keys())
@@ -70,7 +70,7 @@ class FeatureMain():
         self.idxAssets = {ticker: DOps(self.assets[ticker].shareprice).getNextLowerOrEqualIndices(self.business_days) for ticker in self.assets.keys()}
         self.idxAssets_exc = {ticker: DOps(self.assets[ticker].shareprice).getIndices(self.business_days) for ticker in self.assets.keys()}
             
-        self.FGD = FeatureGroupDynamic(self.assets, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
+        self.FGD = FeatureGroupDynamic(self.assets, self.startBDate, self.endBDate, self.params)
         logger.info(f"  FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
     
     def getTreeFeatures(self) -> tuple[np.array, np.array, list[str]]:
@@ -78,11 +78,11 @@ class FeatureMain():
         exampleAsset = self.assets[self.tickers[0]]
         featureNames = [
             FeatureCategory(exampleAsset, self.params).getFeatureNames(),
-            FeatureMathematical(exampleAsset, self.lagList, self.monthHorizonList, self.params).getFeatureNames(),
-            FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params).getFeatureNames(),
-            FeatureFinancialData(exampleAsset, self.lagList, self.params).getFeatureNames(),
-            FeatureSeasonal(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getFeatureNames(),
-            FeatureTA(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getFeatureNames(),
+            FeatureMathematical(exampleAsset, self.params).getFeatureNames(),
+            FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.params).getFeatureNames(),
+            FeatureFinancialData(exampleAsset, self.params).getFeatureNames(),
+            FeatureSeasonal(exampleAsset, self.startBDate, self.endBDate, self.params).getFeatureNames(),
+            FeatureTA(exampleAsset, self.startBDate, self.endBDate, self.params).getFeatureNames(),
             self.FGD.getFeatureNames()
         ]
         # flatten into one long list
@@ -100,11 +100,11 @@ class FeatureMain():
         for tidx, ticker in enumerate(self.assets.keys()):
             logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
             FC = FeatureCategory(self.assets[ticker], self.params)
-            FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
-            FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
-            FFD = FeatureFinancialData(self.assets[ticker], self.lagList, self.params)
-            FS = FeatureSeasonal(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
-            FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
+            FM = FeatureMathematical(self.assets[ticker], self.params)
+            FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.params)
+            FFD = FeatureFinancialData(self.assets[ticker], self.params)
+            FS = FeatureSeasonal(self.assets[ticker], self.startBDate, self.endBDate, self.params)
+            FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.params)
             idcs = self.idxAssets_exc[ticker]
             for date_idx, date in enumerate(self.business_days):
                 if idcs[date_idx] is None:
@@ -136,11 +136,11 @@ class FeatureMain():
         exampleAsset = next(iter(self.assets.values()))
         featureNames = [
             #FeatureCategory(exampleAsset, self.params).getTimeFeatureNames(),
-            FeatureMathematical(exampleAsset, self.lagList, self.monthHorizonList, self.params).getTimeFeatureNames(),
-            FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params).getTimeFeatureNames(),
-            FeatureFinancialData(exampleAsset, self.lagList, self.params).getTimeFeatureNames(),
-            FeatureSeasonal(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getTimeFeatureNames(),
-            FeatureTA(exampleAsset, self.startBDate, self.endBDate, self.lagList, self.params).getTimeFeatureNames(),
+            FeatureMathematical(exampleAsset, self.params).getTimeFeatureNames(),
+            FeatureFourierCoeff(exampleAsset, self.startBDate, self.endBDate, self.params).getTimeFeatureNames(),
+            FeatureFinancialData(exampleAsset, self.params).getTimeFeatureNames(),
+            FeatureSeasonal(exampleAsset, self.startBDate, self.endBDate, self.params).getTimeFeatureNames(),
+            FeatureTA(exampleAsset, self.startBDate, self.endBDate, self.params).getTimeFeatureNames(),
             self.FGD.getTimeFeatureNames()
         ]
         # flatten into one long list
@@ -157,11 +157,11 @@ class FeatureMain():
         for tidx, ticker in enumerate(self.assets.keys()):
             logger.info(f"  Processing ticker {ticker} ({tidx+1}/{self.nAssets})")
             #FC = FeatureCategory(self.assets[ticker], self.params)
-            FM = FeatureMathematical(self.assets[ticker], self.lagList, self.monthHorizonList, self.params)
-            FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.monthHorizonList, self.params)
-            FFD = FeatureFinancialData(self.assets[ticker], self.lagList, self.params)
-            FS = FeatureSeasonal(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
-            FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.lagList, self.params)
+            FM = FeatureMathematical(self.assets[ticker], self.params)
+            FFC = FeatureFourierCoeff(self.assets[ticker], self.startBDate, self.endBDate, self.params)
+            FFD = FeatureFinancialData(self.assets[ticker], self.params)
+            FS = FeatureSeasonal(self.assets[ticker], self.startBDate, self.endBDate, self.params)
+            FTA = FeatureTA(self.assets[ticker], self.startBDate, self.endBDate, self.params)
             idcs = self.idxAssets_exc[ticker]
             for date_idx, date in enumerate(self.business_days):
                 if idcs[date_idx] is None:

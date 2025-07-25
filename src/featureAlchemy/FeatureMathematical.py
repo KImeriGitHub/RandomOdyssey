@@ -11,24 +11,25 @@ class FeatureMathematical():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'timesteps': 10,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
+        'monthHorizonList': [1, 2, 4, 6, 8, 12],
     }
 
     def __init__(self, 
             asset: AssetDataPolars, 
-            lagList: List[int] = [],
-            monthHorizonList: List[int] = [],
-            params: dict = None):
+            params: dict = None
+        ):
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
         
         self.asset = asset
-        self.lagList = lagList
-        self.monthHorizonList = monthHorizonList
 
         self.timeseries_ivalList = [3,7]
 
         self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
+        self.lagList = self.params['lagList']
+        self.monthHorizonList = self.params['monthHorizonList']
         
         #preprocess
         self.tradedPrice = self.asset.shareprice["Close"]

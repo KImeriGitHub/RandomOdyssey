@@ -13,21 +13,19 @@ class FeatureFourierCoeff():
         'fouriercutoff': 3,
         'multFactor': 8,
         'timesteps': 10,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
+        'monthsHorizonList': [1, 2, 4, 6, 8, 12],
     }
     
     def __init__(self, 
             asset: AssetDataPolars, 
             startDate: datetime.date, 
             endDate: datetime.date, 
-            lagList: List[int] = [], 
-            monthHorizonList: List[int] = [],
             params: dict = None
         ):
         self.startDate = startDate
         self.endDate = endDate
         self.asset = asset
-        self.lagList = lagList
-        self.monthHorizonList = monthHorizonList
         
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -36,9 +34,8 @@ class FeatureFourierCoeff():
         self.fouriercutoff = self.params['fouriercutoff']
         self.multFactor = self.params['multFactor']
         self.timesteps = self.params['timesteps']
-
-        if self.monthHorizonList == [] and isinstance(self.params['monthsHorizon'], (int, float)):
-            raise ValueError("Deprecation warning: monthsHorizonList should be provided as a list. 'monthsHorizon' is deprecated.")
+        self.lagList = self.params['lagList']
+        self.monthHorizonList = self.params['monthsHorizonList']
         
         self.buffer = 10
         self.startIdx = (DOps(self.asset.shareprice).getNextLowerOrEqualIndex(self.startDate) 

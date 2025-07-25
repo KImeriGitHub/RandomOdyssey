@@ -19,6 +19,7 @@ class FeatureFinancialData():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'timesteps': 10,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
     }
     
     # Class-level default parameters
@@ -104,15 +105,17 @@ class FeatureFinancialData():
         'reportTime', #0 for pre and 1 for post
     ]
     
-    def __init__(self, asset: AssetDataPolars, 
-            lagList: List[int] = [],
-            params: dict = None):
+    def __init__(self, 
+            asset: AssetDataPolars,
+            params: dict = None
+        ):
         self.asset = asset
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
         
         self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
+        self.lagList = self.params['lagList']
         
         self.fin_quar = self.asset.financials_quarterly.clone()
         self.fin_ann = self.asset.financials_annually.clone()
@@ -131,7 +134,7 @@ class FeatureFinancialData():
         self.__operateOnFinData()
         self.__operateOnFinData_lag()
         self.__operateOnPriceData()
-        self.__operateOnPriceData_lag(lagList)
+        self.__operateOnPriceData_lag(self.lagList)
         
         #make sure that some categories are in other categories
         assert all(item in self.catav_quar for item in self.catav_binary)

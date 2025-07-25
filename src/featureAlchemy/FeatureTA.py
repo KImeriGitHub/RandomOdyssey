@@ -11,24 +11,24 @@ class FeatureTA():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'timesteps': 10,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
     }
     
     def __init__(self, 
             asset: AssetDataPolars, 
             startDate: datetime.date, 
             endDate: datetime.date, 
-            lagList: List[int] = [], 
             params: dict = None
         ):
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
         self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
+        self.lagList = self.params['lagList']
         
         self.asset = asset
         self.startDate = startDate
         self.endDate = endDate
-        self.lagList = lagList
         
         self.buffer = 21*12+10  # 12 months + 10 days (see also rolling buffer in TAIndicators)
         self.startIdx = DOps(self.asset.shareprice).getNextLowerOrEqualIndex(self.startDate) - max(self.lagList, default=0) - self.buffer

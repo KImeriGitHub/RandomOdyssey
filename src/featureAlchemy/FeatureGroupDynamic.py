@@ -11,14 +11,14 @@ class FeatureGroupDynamic():
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'timesteps': 10,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
+        'monthHorizonList': [1, 2, 4, 6, 8, 12],
     }
 
     def __init__(self, 
             assetspl: Dict[str, AssetDataPolars], 
             startDate: datetime.date, 
             endDate: datetime.date, 
-            lagList: List[int] = [],
-            monthHorizonList: List[int] = [],
             params: dict = None):
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -26,11 +26,12 @@ class FeatureGroupDynamic():
         self.assetspl = assetspl
         self.startDate = startDate
         self.endDate = endDate
-        self.lagList = lagList
-        self.monthHorizonList = monthHorizonList
         
         self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
+        self.lagList = self.params['lagList']
+        self.monthHorizonList = self.params['monthHorizonList']
+
         
         idx_to_days_factor = 365.0/255.0
         self.buffer = 2*self.idxLengthOneMonth
@@ -52,29 +53,8 @@ class FeatureGroupDynamic():
         self.nDates = len(self.business_days)
         
         self.idxAssets: Dict[str, List[int]] = {ticker: DOps(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndices(self.business_days) for ticker in self.tickers}
-        
-        #self.business_days = exampleAsset.shareprice["Date"].slice(exampleTicker_rec_idx, exampleTicker_end_idx - exampleTicker_rec_idx + 1).to_numpy()
-        #self.business_days = np.array([pd.Timestamp(x, tz ="UTC") for x in self.business_days])
-        #first_bd_rec = self.business_days[0]
-        #self.first_bd_date = self.business_days[self.business_days <= self.startDate][-1]
-        #last_bd = self.business_days[-1]
-        #
-        #self.sdate_idx = np.where(self.business_days >= self.startDate)[0][0]
-        #assert self.sdate_idx > 0, "Start date must be in the business days."
-        #
-        #self.idxAssets_startDate = {}
-        #self.idxAssets_startRec = {}
-        #self.idxAssets_end = {}
-        #for ticker, _ in self.assetspl.items():
-        #    self.idxAssets_startRec[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(first_bd_rec)
-        #    self.idxAssets_startDate[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(self.first_bd_date)
-        #    self.idxAssets_end[ticker] = DPl(self.assetspl[ticker].shareprice).getNextLowerOrEqualIndex(last_bd)
             
         self.__preprocess()
-        
-        # asserts
-        #assert np.all([self.idxAssets_startRec[ticker] > 0 for ticker in self.idxAssets_startRec.keys()]), "All assets must have a start date greater than 0."
-        #assert np.all([(self.idxAssets_end[ticker]-self.idxAssets_startRec[ticker]+1) == self.nDates for ticker in self.idxAssets_startRec.keys()]), "All assets must have the same number of dates."
         
     def __preprocess(self):
         self.avgVolume = np.zeros((self.nDates))
