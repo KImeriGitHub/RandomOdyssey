@@ -36,12 +36,13 @@ class Checks:
         df = asset.financials_quarterly.copy()
         mask_quar = df['fiscalDateEnding'].apply(lambda ts: pd.to_datetime(ts)) >= start
         df['fiscalDateEnding'] = pd.to_datetime(df['fiscalDateEnding'])
-        last_date = df['fiscalDateEnding'].max()
-        cutoff = today - pd.Timedelta(days=30)
+        df['reportedDate'] = pd.to_datetime(df['reportedDate'])
+        last_date = df['reportedDate'].max()
+        cutoff = today - pd.Timedelta(days=70) # 2 months + buffer for delayed informations
         if last_date >= cutoff:
             # allow NaNs only in the last row
-            mask = df['fiscalDateEnding'] == last_date
-            df_hist: pd.DataFrame = df.loc[~mask & mask_quar]
+            mask_last_day = df['reportedDate'] == last_date
+            df_hist: pd.DataFrame = df.loc[~mask_last_day & mask_quar]
             if df_hist.isnull().any().any():
                 return False
         else:
