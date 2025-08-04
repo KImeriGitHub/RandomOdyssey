@@ -1,6 +1,6 @@
 import numpy as np
 import datetime
-from typing import List
+from typing import List, Dict
 from numpy.lib.stride_tricks import sliding_window_view
 
 from src.featureAlchemy.IFeature import IFeature
@@ -8,12 +8,13 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.mathTools.SeriesExpansion import SeriesExpansion
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
-class FeatureFourierCoeff(IFeature):
+class FeatureFourierCoeffTS(IFeature):
     # Class-level default parameters
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
         'fouriercutoff': 3,
         'multFactor': 8,
+        'timesteps': 10,
         'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
         'monthsHorizonList': [1, 2, 4, 6, 8, 12],
     }
@@ -34,6 +35,7 @@ class FeatureFourierCoeff(IFeature):
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.fouriercutoff = self.params['fouriercutoff']
         self.multFactor = self.params['multFactor']
+        self.timesteps = self.params['timesteps']
         self.lagList = self.params['lagList']
         self.monthHorizonList = self.params['monthsHorizonList']
         
@@ -55,7 +57,7 @@ class FeatureFourierCoeff(IFeature):
         self.ReturnPreMatrix_ampcoeff = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
         self.ReturnPreMatrix_signcoeff = np.zeros((self.asset.shareprice['AdjClose'].len(), (self.fouriercutoff-1), n_mhl))
         self.__preprocess_fourierConst()
-    
+        
     def __preprocess_fourierConst(self):
         adj = self.asset.shareprice['AdjClose'].to_numpy()
         idxs = np.arange(self.startIdx, self.endIdx+1)
@@ -103,86 +105,41 @@ class FeatureFourierCoeff(IFeature):
             self.ReturnPreMatrix_rsmeRatio[idxs, sl, m_idx] = rsme_r[:, 1:] / rsme_r[:, :-1]
             self.ReturnPreMatrix_ampcoeff[idxs, sl, m_idx] =  amp_r[:, 1:]
             self.ReturnPreMatrix_signcoeff[idxs, sl, m_idx] = sign_r[:, 1:]
-
+    
     def getFeatureNames(self) -> list[str]:
         res_names = []
-        for m in self.monthHorizonList:
-            res_names += (
-                  [f"Fourier_Price_SignCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)]
-                + [f"Fourier_Price_RSMERatioCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
-            
-            res_names += (
-                  [f"Fourier_ReturnLog_SignCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)]
-                + [f"Fourier_ReturnLog_RSMERatioCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
-
-            res_names += (
-                  [f"Fourier_Price_RSMECoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)] 
-                + [f"Fourier_Price_AmpCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
-
-            res_names += (
-                  [f"Fourier_ReturnLog_RSMECoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)] 
-                + [f"Fourier_ReturnLog_AmpCoeff_{i}_MH_{m}" for i in range(1,self.fouriercutoff)])
-
-            for lag in self.lagList:
-                res_names += (
-                      [f"Fourier_Price_RSMECoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)] 
-                    + [f"Fourier_Price_AmpCoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)])
-                res_names += (
-                      [f"Fourier_ReturnLog_RSMECoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)]
-                    + [f"Fourier_ReturnLog_AmpCoeff_{i}_MH_{m}_lag_m{lag}" for i in range(1,self.fouriercutoff)])
+        
+        MH_val = np.min(self.monthHorizonList)
+        
+        res_names += [f"Fourier_Price_RSMECoeff_{i}_MH_{MH_val}" for i in range(1,self.fouriercutoff)]
+        res_names += [f"Fourier_Price_RSMERatioCoeff_{i}_MH_{MH_val}" for i in range(1,self.fouriercutoff)]
         
         return res_names
-        
-        
+    
     def apply(self, dates: List[datetime.date]) -> np.ndarray:
-        # compute raw indices per ticker
-        idcs = DOps(self.asset.shareprice).getNextLowerOrEqualIndices(dates)
-        idcs = np.array(idcs)
-        D = len(idcs)
+        # 1) get integer indices for each date
+        idcs = np.array(DOps(self.asset.shareprice)
+            .getNextLowerOrEqualIndices(dates), dtype=np.int64)
 
-        # 2) dims
-        F = self.fouriercutoff - 1
-        M = len(self.monthHorizonList)
-        C = len(self.getFeatureNames()) // (F * M)
+        # 2) figure out which horizon to use
+        MH_val = min(self.monthHorizonList)
+        MH_idx = self.monthHorizonList.index(MH_val)
 
-        # 3) pre‑allocate
-        feats = np.empty((D, F, C, M), dtype=np.float32)
+        # 3) build a (n_dates, timesteps) array of time‐step indices
+        #    for each date: idx - (timesteps-1) + ts
+        ts = np.arange(self.timesteps, dtype=np.int64)
+        offsets = ts - (self.timesteps - 1)
+        time_idx = idcs[:, None] + offsets[None, :]    # shape (n_dates, timesteps)
 
-        # 4) niveau & scaling per date
-        prices = self.asset.shareprice['AdjClose'].to_numpy()
-        niveau = prices[idcs]                   # (D,)
-        sf_price = 1.0 / (niveau + 1e-6)        # (D,)
-        sf_return = 1.0                         # scalar
+        # 4) pull out the raw matrices in one shot
+        #    PricesPreMatrix_rsme has shape (T, n_assets, n_horizons)
+        raw_rsme  = self.PricesPreMatrix_rsme [time_idx, :, MH_idx]  # → (n_dates, timesteps, n_assets)
+        raw_ratio = self.PricesPreMatrix_rsmeRatio[time_idx, :, MH_idx]  # same shape
 
-        # 5) build lag indices matrix once
-        lags = np.array(self.lagList)           # (L,)
-        idx_lags = idcs[:, None] - lags[None, :]  # (D, L)
-        
-        # 6) fill in each horizon
-        for m, _ in enumerate(self.monthHorizonList):
-            base = 0
-            # prices & returns at t
-            feats[:, :, base,   m] = self.PricesPreMatrix_signcoeff[idcs, :, m]
-            feats[:, :, base+1, m] = self.PricesPreMatrix_rsmeRatio[idcs, :, m]
-            feats[:, :, base+2, m] = self.ReturnPreMatrix_signcoeff[idcs, :, m]
-            feats[:, :, base+3, m] = self.ReturnPreMatrix_rsmeRatio[idcs, :, m]
-            base += 4
-            # scaled price features at t
-            feats[:, :, base,   m] = self.PricesPreMatrix_rsme[idcs, :, m] * sf_price[:, None]
-            feats[:, :, base+1, m] = self.PricesPreMatrix_ampcoeff[idcs, :, m] * sf_price[:, None]
-            # scaled return features at t
-            feats[:, :, base+2, m] = self.ReturnPreMatrix_rsme[idcs, :, m] * sf_return
-            feats[:, :, base+3, m] = self.ReturnPreMatrix_ampcoeff[idcs, :, m] * sf_return
-            base += 4
-            # lagged features
-            L = len(self.lagList)
-            for j in range(L):
-                i_lag = idx_lags[:, j]
-                feats[:, :, base,   m] = self.PricesPreMatrix_rsme[i_lag, :, m] * sf_price[:, None]
-                feats[:, :, base+1, m] = self.PricesPreMatrix_ampcoeff[i_lag, :, m] * sf_price[:, None]
-                feats[:, :, base+2, m] = self.ReturnPreMatrix_rsme[i_lag, :, m] * sf_return
-                feats[:, :, base+3, m] = self.ReturnPreMatrix_ampcoeff[i_lag, :, m] * sf_return
-                base += 4
+        # 5) do all the nonlinear transforms at once
+        feat1 = np.tanh(raw_rsme)                                   # (n_dates, timesteps, n_assets)
+        feat2 = np.tanh(raw_ratio - 1.0) / 2.0 + 0.5                # same shape
 
-        # 7) flatten per date
-        return feats.reshape(D, -1, order='F')
+        # 6) concatenate into your feature‐matrix and return
+        features = np.concatenate([feat1, feat2], axis=2)           # (n_dates, timesteps, 2*n_assets)
+        return features.astype(np.float32)

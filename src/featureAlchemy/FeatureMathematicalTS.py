@@ -8,9 +8,10 @@ from src.featureAlchemy.IFeature import IFeature
 from src.common.AssetDataPolars import AssetDataPolars
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
-class FeatureMathematical(IFeature):
+class FeatureMathematicalTS(IFeature):
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
+        'timesteps': 10,
         'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
         'monthHorizonList': [1, 2, 4, 6, 8, 12],
     }
@@ -28,6 +29,7 @@ class FeatureMathematical(IFeature):
 
         self.timeseries_ivalList = [3,7]
 
+        self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.lagList = self.params['lagList']
         self.monthHorizonList = self.params['monthHorizonList']
@@ -64,89 +66,57 @@ class FeatureMathematical(IFeature):
         #TODO: Autocovariance and autocorrelation
         #TODO: Idea: How far away is the traded price from a number like 100 or 500 or 1000
         # and did it pass that number already recently
-        
+    
     def getFeatureNames(self) -> list[str]:
-        featureNames = [
-            'MathFeature_TradedPrice_log',
-            "MathFeature_Price_Diff",
-            "MathFeature_Price_DiffDiff",
-            "MathFeature_Price_logDiff",
-            "MathFeature_Price_logDiffDiff",
+        featureNames = ['MathFeature_TradedPrice']
+        for i in range(len(self.timeseries_ivalList)):
+            featureNames.append(f"MathFeature_TradedPrice_sp{i}")
+
+        featureNames.extend([
             "MathFeature_Return",
-            "MathFeature_Return_log",
-            "MathFeature_PriceAdjustment",
-        ]
+            "MathFeature_PriceAdjustment"
+        ])
 
-        for m in self.monthHorizonList:
-            featureNames.extend([
-                f"MathFeature_Drawdown_MH{m}",
-                f"MathFeature_Drawup_MH{m}",
-            ])
-        
-        for lag in self.lagList:
-            featureNames.extend([
-                f"MathFeature_Price_Diff_lag_m{lag}",
-                f"MathFeature_Price_DiffDiff_lag_m{lag}",
-                f"MathFeature_Price_logDiff_lag_m{lag}",
-                f"MathFeature_Price_logDiffDiff_lag_m{lag}",
-                f"MathFeature_Return_lag_m{lag}",
-                f"MathFeature_Return_log_lag_m{lag}",
-                f"MathFeature_PriceAdjustment_lag_m{lag}",
-            ])
-
-            for m in self.monthHorizonList:
-                featureNames.extend([
-                    f"MathFeature_Drawdown_lag_m{lag}_MH{m}",
-                    f"MathFeature_Drawup_lag_m{lag}_MH{m}",
-                ])
         return featureNames
     
     def apply(self, dates: List[datetime.date]) -> np.ndarray:
         # compute raw indices per ticker
         idcs = DOps(self.asset.shareprice).getNextLowerOrEqualIndices(dates)
         idcs = np.array(idcs)
-        max_lag = max(self.lagList, default=0)
-        if min(idcs) - max_lag < 4:
+        if min(idcs) - max(self.lagList, default=0) < 0 + 4:
             raise ValueError("Lag is too far back.")
+        if min(idcs) - self.timesteps * np.max(self.timeseries_ivalList) < 0:
+            raise ValueError("Not enough data for time series.")
         
-        # -------- fast per‑date scalars -------------------------------------------------
-        niveau        = self.prices[idcs]
-        scalingfactor = 1.0 / niveau 
-        nv_scaled     = niveau * scalingfactor  
-        
-        # -------- base block (independent of lags) -------------------------------------
-        blocks = [
-            self.tradedPrice_log[idcs],
-            self.prices_Diff[idcs]            * nv_scaled,
-            self.prices_DiffDiff[idcs]        * nv_scaled,
-            self.prices_logDiff[idcs]         * nv_scaled,
-            self.prices_logDiffDiff[idcs]     * nv_scaled,
-            self.pricesReturns[idcs]      * niveau * scalingfactor,
-            self.pricesReturns_log[idcs]  * niveau * scalingfactor,
-            self.priceAdjustments[idcs]   * niveau * scalingfactor,
-        ]
+        nD = len(dates)
+        coreLen = len(self.getFeatureNames())
+        T = self.timesteps
 
-        for i, _ in enumerate(self.monthHorizonList):
-            blocks += [
-                self.drawdown[i][idcs] * niveau * scalingfactor,
-                self.drawup[i][idcs]   * niveau * scalingfactor,
-            ]
-        
-        for lag in self.lagList:
-            lag_idcs = idcs - lag
-            blocks += [
-                self.prices_Diff[lag_idcs]        * nv_scaled,
-                self.prices_DiffDiff[lag_idcs]    * nv_scaled,
-                self.prices_logDiff[lag_idcs]     * nv_scaled,
-                self.prices_logDiffDiff[lag_idcs] * nv_scaled,
-                self.pricesReturns[lag_idcs]      * niveau * scalingfactor,
-                self.pricesReturns_log[lag_idcs]  * niveau * scalingfactor,
-                self.priceAdjustments[lag_idcs]   * niveau * scalingfactor,
-            ]
-            for i, _ in enumerate(self.monthHorizonList):
-                blocks += [
-                    self.drawdown[i][lag_idcs] * niveau * scalingfactor,
-                    self.drawup[i][lag_idcs]   * niveau * scalingfactor,
-                ]
-        
-        return np.column_stack(blocks).astype(np.float32)
+        # pull entire series into numpy once
+        prices = self.prices.to_numpy()
+        returns = self.pricesReturns.to_numpy()
+        adj   = self.priceAdjustments.to_numpy()
+        traded= self.tradedPrice.to_numpy()
+
+        # per‐date leakage‐safe factors
+        nivel = traded[idcs]              # (nD,)
+        factor= traded[idcs] / prices[idcs]
+
+        # build a (nD, T) matrix of base‐time indices
+        t_off = np.arange(T) - (T-1)
+        baseIdx = idcs[:,None] + t_off[None,:]     # shape (nD,T)
+
+        # compute the “price‐level” feature
+        lvl = np.tanh(prices[baseIdx]*factor[:,None]/nivel[:,None] - 1)/2 + .5
+        # compute lagged‐interval features
+        featuresMat = np.zeros((nD, T, coreLen), dtype=np.float32)
+        featuresMat[:,:,0] = lvl
+        for i, sp in enumerate(self.timeseries_ivalList, start=1):
+            idx_sp = idcs[:,None] + (t_off*sp)[None,:]
+            featuresMat[:,:,i] = np.tanh(prices[idx_sp]*factor[:,None]/nivel[:,None] - 1)/2 + .5
+
+        # compute returns‐and‐adjustments
+        featuresMat[:,:,coreLen-2] = np.tanh(returns[baseIdx] - 1)/2 + .5
+        featuresMat[:,:,coreLen-1] = np.tanh(adj[baseIdx])/2
+
+        return featuresMat.astype(np.float32)

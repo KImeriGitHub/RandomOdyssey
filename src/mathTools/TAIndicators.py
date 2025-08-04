@@ -282,8 +282,27 @@ class TAIndicators():
         
         return tadata_rescaled
     
-    def getReScaledDataFrame_timeseries(self, curClosePrice: float, curVolume: float) -> pl.DataFrame:
+    def getRescaledExprs(self, curClosePrice: float, curVolume: float) -> list[pl.Expr]:
+        colNames = self.getTAColumnNames()
+        cols = [
+            pl.col(c) for c in colNames
+        ]
+
+        # scale-to-close
+        for col in [c for c in colNames if c in self.tacolumns_ScaledToClose]:
+            idx = colNames.index(col)
+            cols[idx] = (pl.col(col) / curClosePrice).alias(col)
+
+        # special volume scaling
+        idx = colNames.index("Volume")
+        cols[idx] = (pl.col("Volume") / curVolume).alias("Volume")
+
+        idx = colNames.index("volume_adi")
+        cols[idx] = (pl.col("volume_adi") / (curVolume * curClosePrice)).alias("volume_adi")
+
+        return cols
         
+    def getReScaledDataFrame_timeseries(self, curClosePrice: float, curVolume: float) -> pl.DataFrame:
         def tanh_R(col: pl.Expr) -> pl.Expr:
             return col.tanh()/2.0 + 0.5
         def tanh_Rplus(col: pl.Expr, scale=1.0) -> pl.Expr:
@@ -351,3 +370,65 @@ class TAIndicators():
         ])
         
         return tadata_rescaled
+
+    def getRescaledExprs_timeseries(self, curClosePrice: float, curVolume: float) -> list[pl.Expr]:
+        # helper transforms
+        def tanh_R(expr: pl.Expr) -> pl.Expr:
+            return expr.tanh()/2 + 0.5
+        def tanh_Rplus(expr: pl.Expr, scale=1.0) -> pl.Expr:
+            return (expr/scale).tanh()/2 + 0.5
+        def tanh_R_centerOne(expr: pl.Expr) -> pl.Expr:
+            return (expr - 1.0).tanh()/2 + 0.5
+        def clipExpr(expr: pl.Expr) -> pl.Expr:
+            return expr.clip(0, 1)
+        def lin_m1to1(expr: pl.Expr) -> pl.Expr:
+            return ((expr + 1.0) / 2.0).clip(0, 1)
+
+        # base
+        colNamesTs = self.getTAColumnNames_timeseries()
+        cols = [pl.col(c) for c in colNamesTs]
+
+        # --- tacolumns_ScaledToClose ---
+        for name in [
+            "High", "Low",
+            "trend_macd", "trend_macd_signal",
+            "trend_sma_slow", "trend_ema_fast", "trend_ema_slow",
+            "volatility_atr", "volatility_bbm",
+            "momentum_ao", "trend_visual_ichimoku_b"
+        ]:
+            i = colNamesTs.index(name)
+            cols[i] = tanh_R_centerOne(pl.col(name) / curClosePrice).alias(name)
+
+        # --- special ---
+        # volume_nvi
+        i = colNamesTs.index("volume_nvi")
+        cols[i] = tanh_R(pl.col("volume_nvi").diff(n=21).fill_null(0)).alias("volume_nvi")
+        # Volume
+        i = colNamesTs.index("Volume")
+        cols[i] = tanh_R_centerOne(pl.col("Volume") / (curVolume + 1e-8)).alias("Volume")
+        # ROC-style & CMF
+        for name in ["momentum_roc", "trend_aroon_ind", "momentum_pvo", "volume_cmf"]:
+            i = colNamesTs.index(name)
+            cols[i] = lin_m1to1(pl.col(name)).alias(name)
+        # Stoch RSI variants
+        for name in ["momentum_stoch_rsi", "momentum_stoch_rsi_k", "momentum_stoch_rsi_d"]:
+            i = colNamesTs.index(name)
+            cols[i] = clipExpr(pl.col(name)).alias(name)
+
+        # --- sigmoided ---
+        for name in ["trend_adx", "trend_kst", "trend_kst_sig", "trend_kst_diff", "momentum_ppo"]:
+            i = colNamesTs.index(name)
+            cols[i] = clipExpr(pl.col(name)).alias(name)
+
+        # --- rolling maxed ---
+        i = colNamesTs.index("volume_obv")
+        cols[i] = clipExpr(pl.col("volume_obv")).alias("volume_obv")
+        i = colNamesTs.index("volume_vpt")
+        cols[i] = tanh_Rplus(pl.col("volume_vpt"), 100.0).alias("volume_vpt")
+
+        # --- to clip ---
+        for name in ["trend_mass_index", "trend_stc", "volatility_ui", "momentum_stoch"]:
+            i = colNamesTs.index(name)
+            cols[i] = clipExpr(pl.col(name)).alias(name)
+
+        return cols

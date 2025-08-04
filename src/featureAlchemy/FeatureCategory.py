@@ -1,16 +1,16 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-from typing import Dict
+from typing import Dict, List
+import datetime
 
+from src.featureAlchemy.IFeature import IFeature
 from src.common.AssetDataPolars import AssetDataPolars
 
-class FeatureCategory():
+class FeatureCategory(IFeature):
     operator = "alphavantage"
     
-    DEFAULT_PARAMS = {
-        'timesteps': 10,
-    }
+    DEFAULT_PARAMS = {}
     
     # Class-level default parameters
     cat_alphavantage = [
@@ -31,36 +31,37 @@ class FeatureCategory():
         'consumer-cyclical'
     ]
     
-    def __init__(self, asset: AssetDataPolars, params: dict = None):
+    def __init__(self, 
+            asset: AssetDataPolars,
+            startDate: datetime.date = None, 
+            endDate: datetime.date = None, 
+            params: dict = None
+        ):
             
         self.asset = asset
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
-        self.timesteps = self.params['timesteps']
         
         self.cat = self.cat_alphavantage if self.operator == "alphavantage" else self.cat_yfinance
     
     def getFeatureNames(self) -> list[str]:
         features_names = ["Category_" + val for val in self.cat]
         features_names += ["Category_inSnP500", "Category_inNas100"]
-            
+        
         return features_names
     
-    def getTimeFeatureNames(self) -> list[str]:
-        return []
-    
-    def apply(self, scaleToNiveau: float):
+    def apply(self, dates: List[datetime.date]) -> np.ndarray:
         sector = self.asset.sector
-        
+        nD = len(dates)
+        nF = len(self.getFeatureNames())
+
+
         # Create a one-hot encoding where the category matches the sector
-        features = np.zeros(len(self.cat)+2, dtype=np.float32)
-        features[:len(self.cat)] = np.array([1.0 if category == sector else 0.0 for category in self.cat])
-        features[len(self.cat)] = self.asset.ticker in self.snp500tickers
-        features[len(self.cat)+1] = self.asset.ticker in self.nas100tickers
-        
-        return features*scaleToNiveau
-    
-    def apply_timeseries(self, date: pd.Timestamp, idx: int = None) -> np.ndarray:
-        return np.empty((self.timesteps, 0), dtype=np.float32)
+        features = np.zeros((nD, nF), dtype=np.float32)
+        features[:, :len(self.cat)] = np.array([1.0 if category == sector else 0.0 for category in self.cat])
+        features[:, len(self.cat)] = self.asset.ticker in self.snp500tickers
+        features[:, len(self.cat)+1] = self.asset.ticker in self.nas100tickers
+
+        return features
     
     
     nas100tickers = [

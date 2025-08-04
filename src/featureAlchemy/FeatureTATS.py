@@ -8,9 +8,10 @@ from src.common.AssetDataPolars import AssetDataPolars
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 from src.mathTools.TAIndicators import TAIndicators
 
-class FeatureTA(IFeature):
+class FeatureTATS(IFeature):
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
+        'timesteps': 10,
         'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
     }
     
@@ -22,6 +23,7 @@ class FeatureTA(IFeature):
         ):
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
+        self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.lagList = self.params['lagList']
         
@@ -37,44 +39,43 @@ class FeatureTA(IFeature):
             raise ValueError("Start Date is too old or lag too long.")
         
         self.taindic = TAIndicators(asset.shareprice.slice(self.startIdx, self.endIdx - self.startIdx + 1))
-        self.ColumnToUse = self.taindic.getTAColumnNames()
-        #self.ColumnToUse_timeseries = self.taindic.getTAColumnNames_timeseries()
+        #self.ColumnToUse = self.taindic.getTAColumnNames()
+        self.ColumnToUse_timeseries = self.taindic.getTAColumnNames_timeseries()
     
     def getFeatureNames(self) -> list[str]:
-        res_raw = [f"FeatureTA_{col}" for col in self.ColumnToUse]
+        res = [f"FeatureTA_{col}"  for col in self.ColumnToUse_timeseries]
         
-        res_lag = []
-        for lag in self.lagList:
-            for col in self.ColumnToUse:
-                res_lag.append(f'FeatureTA_{col}_lag_m{lag}')
-        
-        return res_raw + res_lag
+        return res
     
     def apply(self, dates: List[datetime.date]) -> np.ndarray:
-        # 1) get raw indices for all dates
+        # compute raw indices per ticker
         idcs = DOps(self.asset.shareprice).getNextLowerOrEqualIndices(dates)
         idcs = np.array(idcs)
         if min(idcs) < self.startIdx:
             raise ValueError("Date is too old.")
-        
+
         # 2) grab prices & volumes at those indices
         sp = self.asset.shareprice
         closes = sp['Close'].to_numpy()[idcs]
         vols   = sp['Volume'].to_numpy()[idcs]
         vols   = np.where(vols < 2, 1.0, vols)
-
+        
         # 3) build frames
-        dfTA_exprs = [self.taindic.getRescaledExprs(closes[i], vols[i]) for i in range(len(closes))]
+        dfTA_exprs = [self.taindic.getRescaledExprs_timeseries(closes[i], vols[i]) for i in range(len(closes))]
         cur_arrs = [self.taindic.tadata.select(dfTA_expr).to_numpy() for dfTA_expr in dfTA_exprs]
 
         idxs = idcs - self.startIdx           # shape (N,)
-        lags = np.concatenate(([0], np.array(self.lagList, dtype=int)))  # shape (L+1,)
-        idx_matrix = idxs[:, None] - lags[None, :]  # shape (N, L+1)
 
-        # 4) build a list of features for each index. Must match the order of 'getFeatureNames()'
-        windows: list[np.ndarray] = [cur_arr[idx_matrix[i]].flatten() for i, cur_arr in enumerate(cur_arrs)]
+        # 2. View of *every* length‑t window (no extra memory!)
+        #    result shape = (n_rows‑t+1, timesteps, n_features)
+        windows: list[np.ndarray] = [
+            np.lib.stride_tricks.sliding_window_view(
+                    cur_arr, (self.timesteps, cur_arr.shape[1]))[:, 0]
+            for cur_arr in cur_arrs
+        ]
+        
+        features  = np.array([
+            window[idxs[i]] for i, window in enumerate(windows)
+        ])
 
-        # 5) reshape to (N, (L+1)*F) in C order 
-        features: np.ndarray = np.vstack(windows)                 # shape (N, F*(L+1))
-
-        return features.astype(np.float32)
+        return features.astype(np.float32) 

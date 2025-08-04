@@ -8,7 +8,7 @@ from src.featureAlchemy.IFeature import IFeature
 from src.common.AssetDataPolars import AssetDataPolars
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as DOps
 
-class FeatureFinancialData(IFeature):
+class FeatureFinancialDataTS(IFeature):
     """
     NOTE: Only alpha vantage implemented as of yet. 
     """
@@ -20,6 +20,7 @@ class FeatureFinancialData(IFeature):
     
     DEFAULT_PARAMS = {
         'idxLengthOneMonth': 21,
+        'timesteps': 10,
         'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
     }
     
@@ -116,6 +117,7 @@ class FeatureFinancialData(IFeature):
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
         
+        self.timesteps = self.params['timesteps']
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.lagList = self.params['lagList']
         
@@ -127,11 +129,11 @@ class FeatureFinancialData(IFeature):
         self.fin_ann = self.fin_ann.with_columns(pl.all().forward_fill())
         
         #Columns to use at feature
-        self.columns_toFeature_quar: list[str] = []  # corresponds to columns in self.fin_quar
-        self.columns_toFeature_ann: list[str] = [] # corresponds to columns in self.fin_ann
-        self.columns_toFeature_metric: list[str] = [] # corresponds to columns in self.asset.shareprice
-        self.columns_toFeature_timestep: list[str] = [] # corresponds to columns in self.asset.shareprice
-
+        self.columns_toFeature_quar = []  # corresponds to columns in self.fin_quar
+        self.columns_toFeature_ann = [] # corresponds to columns in self.fin_ann
+        self.columns_toFeature_metric = [] # corresponds to columns in self.asset.shareprice
+        self.columns_toFeature_timestep = [] # corresponds to columns in self.asset.shareprice
+        
         # Make extra columns
         self.__operateOnFinData()
         self.__operateOnFinData_lag()
@@ -232,7 +234,7 @@ class FeatureFinancialData(IFeature):
         )
         self.columns_toFeature_quar += ["reportTime"]
     
-    def __operateOnFinData_lag(self):  
+    def __operateOnFinData_lag(self):
         for lag in range(1, self.num_quar_lag+1):
             self.fin_quar = self.fin_quar.with_columns([
                 (pl.col(col).shift(lag) / pl.col("totalRevenue")).alias(f"{col}_nivRevLag_qm{lag}")
@@ -260,7 +262,7 @@ class FeatureFinancialData(IFeature):
                 [f"{col}_nivRevLag_am{lag}" for col in self.catav_ann_lag] +
                 [f"{col}_lagquot_am{lag}" for col in self.catav_ann_lag]
             )
-                
+    
     def __operateOnPriceData(self):
         metricsColumns_quar = ["reportedEPS", "estimatedEPS", "reportedDate", "totalShareholderEquity", "commonStockSharesOutstanding", "ebit_lagquot_qm1", "totalShareholderEquity_lagquot_qm1"]
         metricsColumns_ann = []
@@ -362,26 +364,56 @@ class FeatureFinancialData(IFeature):
     
     def getFeatureNames(self) -> list[str]:
         features_names = []
-        features_names += ["FinData_quar_" + val for val in self.columns_toFeature_quar]
-        features_names += ["FinData_ann_" + val for val in self.columns_toFeature_ann]
-        features_names += ["FinData_metrics_" + val for val in self.columns_toFeature_metric]
+        features_names += ["FinData_metrics_" + val for val in self.columns_toFeature_timestep]
         
         return features_names
     
     def apply(self, dates: List[datetime.date]) -> np.ndarray:
         # compute raw indices per ticker
         idcs = DOps(self.shareprice).getNextLowerOrEqualIndices(dates)
-        if min(idcs) < 0:
-            raise ValueError("Some dates are not available in the shareprice data.")
-
-        # Get corresponding row indexes
-        q_idx = self.shareprice["q_idx"].gather(idcs)
-        a_idx = self.shareprice["a_idx"].gather(idcs)
-
-        features = np.column_stack(
-            [self.fin_quar.select(col).to_series().gather(q_idx).to_numpy() for col in self.columns_toFeature_quar]
-            + [self.fin_ann.select(col).to_series().gather(a_idx).to_numpy() for col in self.columns_toFeature_ann]
-            + [self.shareprice.select(col).to_series().gather(idcs).to_numpy() for col in self.columns_toFeature_metric]
-        )
+        if min(idcs) - (self.num_quar_lag + 1.6) * 4 * self.idxLengthOneMonth < 0:
+            raise ValueError("Lag is too far back.")
         
-        return features.astype(np.float32)
+        # parameters
+        ts = self.timesteps
+        colNames = self.columns_toFeature_timestep
+        coreLen = len(colNames)
+        ival = int(
+            (self.num_quar_lag * 4 * self.idxLengthOneMonth + 
+            self.idxLengthOneMonth * 1.5)
+            // (ts - 1)
+        )
+
+        # build a (n_dates × timesteps) array of positions into the price series
+        idcs_arr = np.array(idcs, dtype=int)[:, None]               # shape (N,1)
+        offsets  = (ts - 1 - np.arange(ts)) * ival                  # shape (ts,)
+        positions: np.ndarray = idcs_arr - offsets[None, :]         # shape (N,ts)
+
+        # grab raw values in one shot: shape → (total_positions, coreLen)
+        price_matrix = self.shareprice[colNames].to_numpy()        # (T, coreLen)
+        flat_pos = positions.ravel()
+        raw_vals = price_matrix.take(flat_pos, axis=0)            # (N*ts, coreLen)
+        raw_vals = raw_vals.reshape(-1, ts, coreLen)              # (N, ts, coreLen)
+        
+        # get the “niveau” (close at each idx) and broadcast
+        closes = self.shareprice["Close"].to_numpy()[idcs]        # (N,)
+        closes = closes[:, None] 
+
+        # now compute each feature channel
+        # PE‐style features
+        f0 = np.tanh((raw_vals[:,:,0] - np.log(20.0)) / np.log(10.0)) / 2 + 0.5 # 20 is a avg value, 10 good ival value for pe ratio
+        f1 = np.tanh((raw_vals[:,:,1] - np.log(20.0)) / np.log(10.0)) / 2 + 0.5 # 20 is a avg value, 10 good ival value for pe ratios
+        f2 = np.tanh((raw_vals[:,:,2] - np.log( 6.0)) / np.log( 2.0)) / 2 + 0.5 # 6 is a avg value, 2 good ival value for pe ratios
+        # price‐relative features
+        f3 = np.tanh(raw_vals[:,:,3] / closes - 1.0) / 2 + 0.5
+        f4 = np.tanh(raw_vals[:,:,4] / closes - 1.0) / 2 + 0.5
+        
+        # replace any NaNs (from missing data) by 0
+        for f in (f0, f1, f2, f3, f4):
+            np.nan_to_num(f, copy=False, nan=0.0)
+
+        # stack into final array: shape (N, timesteps, coreLen)
+        features = np.stack([f0, f1, f2, f3, f4], axis=2).astype(np.float32)
+
+        return features
+    

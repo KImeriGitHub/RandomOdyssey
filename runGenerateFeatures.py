@@ -1,17 +1,19 @@
 import os
 import logging
-from typing import Dict, List
+from typing import Dict, List, Type
 
 import pandas as pd
 import numpy as np
 import datetime
 from datetime import datetime as dt
 import argparse
+from multiprocessing import Pool, cpu_count
 
 from src.common.AssetFileInOut import AssetFileInOut
 from src.common.AssetDataService import AssetDataService
 from src.common.AssetDataPolars import AssetDataPolars
-from src.featureAlchemy.FeatureMain import FeatureMain
+from src.featureAlchemy.IFeature import IFeature
+from src.featureAlchemy.MainFeature import MainFeature
 
 from src.featureAlchemy.FeatureFourierCoeff import FeatureFourierCoeff
 from src.featureAlchemy.FeatureCategory import FeatureCategory
@@ -21,15 +23,15 @@ from src.featureAlchemy.FeatureSeasonal import FeatureSeasonal
 from src.featureAlchemy.FeatureTA import FeatureTA
 from src.featureAlchemy.FeatureGroupDynamic import FeatureGroupDynamic
 
-FCo = FeatureFourierCoeff.__name__
-FCa = FeatureCategory.__name__
-FD = FeatureFinancialData.__name__
-FM = FeatureMathematical.__name__
-FS = FeatureSeasonal.__name__
-FT = FeatureTA.__name__
-FGD = FeatureGroupDynamic.__name__
+FCa = FeatureCategory
+FFD = FeatureFinancialData
+FM  = FeatureMathematical
+FS  = FeatureSeasonal
+FT  = FeatureTA
+FGD = FeatureGroupDynamic
+FFC = FeatureFourierCoeff
 
-feature_classes = [FCo, FCa, FD, FM, FS, FT, FGD]
+feature_classes = [FCa, FFD, FM, FS, FT, FGD, FFC]
 
 formatted_date = dt.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
@@ -42,7 +44,7 @@ logger = logging.getLogger(__name__)
 ## VARIABLES
 groups_features = {
     "group_debug": feature_classes,
-    "group_snp500_finanTo2011": feature_classes,
+    #"group_snp500_finanTo2011": feature_classes,
 }
 lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
 month_horizons = [1, 2, 4, 6, 8, 12]
@@ -51,6 +53,8 @@ params = {
     "fouriercutoff": 5,
     "multFactor": 8,
     "timesteps": 90,
+    'lagList': lag_list,
+    'monthHorizonList': month_horizons,
 }
 
 ## CODE FOR GENERATING FEATURES
@@ -64,54 +68,71 @@ def load_assets(group_name: str, base_path: str = "src/stockGroups/bin") -> Dict
         assets_polars[ticker] = AssetDataService.to_polars(asset)
     return assets_polars
 
-
 def process_period(
     assets: Dict[str, AssetDataPolars],
     group: str,
-    feature_classes: List[str],
+    feature_classes: List[Type[IFeature]],
     label: str,
     start: datetime.date,
     end: datetime.date,
-    lag_list: List[int],
-    month_horizons: List[int],
     params: dict,
 ):
-    fm = FeatureMain(
+    fm = MainFeature(
         assets,
         feature_classes,
         start,
         end,
-        lagList=lag_list,
-        monthHorizonList=month_horizons,
         params=params,
     )
-    meta_tree, arr_tree, names_tree = fm.getTreeFeatures()
-    meta_time, arr_time, names_time = fm.getTimeFeatures()
+    meta_feat, arr_feat, names_feat = fm.get_features()
 
     # Ensure output directory exists
     out_dir = "src/featureAlchemy/bin"
     os.makedirs(out_dir, exist_ok=True)
 
-    # Save tree features
-    tree_path = os.path.join(out_dir, f"TreeFeatures_{label}_{group}.npz")
+    # Save features
+    features_path = os.path.join(out_dir, f"Features_{label}_{group}.npz")
     np.savez_compressed(
-        tree_path,
-        meta_tree=meta_tree,
-        treeFeatures=arr_tree,
-        treeFeaturesNames=names_tree,
+        features_path,
+        meta_feat=meta_feat,
+        featuresArr=arr_feat,
+        featuresNames=names_feat,
     )
-    logging.info("Saved tree features to %s", tree_path)
+    logging.info("Saved features to %s", features_path)
 
-    # Save time features
-    time_path = os.path.join(out_dir, f"TimeFeatures_{label}_{group}.npz")
-    np.savez_compressed(
-        time_path,
-        meta_time=meta_time,
-        timeFeatures=arr_time,
-        timeFeaturesNames=names_time,
-    )
-    logging.info("Saved time features to %s", time_path)
-    
+def process_year(year):
+    label = str(year)
+    for group, feature_classes in groups_features.items():
+        assets_pl = load_assets(group)
+        start_date = pd.Timestamp(year, 1, 1).date()
+
+        if year < dt.now().year:
+            end_date = pd.Timestamp(year, 12, 31).date()
+        else:
+            last_dates = {
+                ticker: df.shareprice["Date"].item(-1)
+                for ticker, df in assets_pl.items()
+            }
+            end_date = max(last_dates.values())
+
+        logger.info("Processing %s for group %s", label, group)
+        t0 = dt.now()
+        try:
+            process_period(
+                assets_pl,
+                group,
+                feature_classes,
+                label,
+                start_date,
+                end_date,
+                params,
+            )
+        except Exception as e:
+            logger.error("Error processing %s for group %s: %s", label, group, e)
+            continue
+        logger.info("Processed %s in %.1f s",
+                    label, (dt.now() - t0).total_seconds())
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Year to form features")
     parser.add_argument(
@@ -130,35 +151,8 @@ if __name__ == "__main__":
     else:
         years = [dt.now().year]
 
-    for year in years:
-        label = str(year)
-        for group, feature_classes in groups_features.items():
-            label = str(year)
-            assets_pl = load_assets(group)
-            start_date = pd.Timestamp(year, 1, 1).date()
-            
-            end_date = 0
-            if year < dt.now().year:
-                end_date = pd.Timestamp(year, 12, 31).date()
-            else:
-                # Use Polars max to safely get last date
-                first_ticker = list(assets_pl.keys())[0]
-                date = assets_pl[first_ticker].shareprice["Date"].item(-1)
-                last_ts = pd.Timestamp(date)
-                end_date = last_ts.date()
-            
-            logger.info("Processing %s for group %s", label, group)
-            starttime = dt.now()
-            process_period(
-                assets_pl,
-                group,
-                feature_classes,
-                label,
-                start_date,
-                end_date,
-                lag_list,
-                month_horizons,
-                params,
-            )
-            endtime = dt.now()
-            logger.info("Processed %s in %s seconds", label, (endtime - starttime).total_seconds())
+    
+    # spawn one worker per CPU (or cap it)
+    n_workers = 2
+    with Pool(processes=n_workers) as pool:
+        pool.map(process_year, years)
