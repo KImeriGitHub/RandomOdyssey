@@ -155,7 +155,6 @@
 - AWR
 - AWRE
 - AWX
-- AXDX
 - AXGN
 - AXL
 - AXON
@@ -244,7 +243,6 @@
 - BOTJ
 - BP
 - BPOP
-- BPT
 - BRC
 - BRFS
 - BRID
@@ -576,14 +574,12 @@
 - ES
 - ESCA
 - ESE
-- ESGR
 - ESLT
 - ESP
 - ESS
 - ETD
 - ETN
 - ETR
-- EVBN
 - EVC
 - EVI
 - EW
@@ -637,7 +633,6 @@
 - FL
 - FLEX
 - FLG
-- FLIC
 - FLL
 - FLO
 - FLR
@@ -833,7 +828,6 @@
 - IESC
 - IEX
 - IFF
-- IGT
 - IHG
 - IHT
 - IIIN
@@ -897,13 +891,11 @@
 - JKHY
 - JLL
 - JNJ
-- JNPR
 - JOB
 - JOE
 - JOUT
 - JPM
 - JSM
-- JWN
 - K
 - KAI
 - KB
@@ -948,7 +940,6 @@
 - LAD
 - LAKE
 - LAMR
-- LANC
 - LARK
 - LCII
 - LCNB
@@ -1182,7 +1173,6 @@
 - NTWK
 - NTZ
 - NUE
-- NURO
 - NUS
 - NVAX
 - NVDA
@@ -1225,7 +1215,6 @@
 - OMI
 - 'ON'
 - ONB
-- ONCT
 - ONIT
 - ONTO
 - OPCH
@@ -1292,7 +1281,6 @@
 - PHG
 - PHI
 - PHM
-- PHX
 - PII
 - PIPR
 - PKBK
@@ -1343,7 +1331,6 @@
 - PSTV
 - PTC
 - PTEN
-- PTN
 - PUK
 - PVH
 - PW
@@ -1356,7 +1343,6 @@
 - QDEL
 - QGEN
 - QMCO
-- QRTEB
 - QUIK
 - R
 - RAND
@@ -1372,7 +1358,6 @@
 - RDIB
 - RDN
 - RDNT
-- RDUS
 - RDWR
 - RDY
 - REFR
@@ -1475,7 +1460,6 @@
 - SHG
 - SHOO
 - SHW
-- SHYF
 - SID
 - SIEB
 - SIF
@@ -1562,9 +1546,7 @@
 - SU
 - SUI
 - SUNE
-- SUP
 - SVC
-- SVT
 - SWBI
 - SWK
 - SWKS
@@ -1795,7 +1777,6 @@
 - WMT
 - WNC
 - WNEB
-- WOLF
 - WOR
 - WPC
 - WPP
@@ -1815,13 +1796,11 @@
 - WTS
 - WULF
 - WVVI
-- WW
 - WWD
 - WWW
 - WY
 - WYNN
 - WYY
-- X
 - XEL
 - XELB
 - XOM
