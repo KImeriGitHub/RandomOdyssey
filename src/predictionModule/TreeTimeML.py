@@ -172,12 +172,13 @@ class TreeTimeML:
         # LGB model
         if lgb_model is None:
             startTime  = datetime.datetime.now()
+            maskless = self.params.get('TreeTime_lgb_maskless', True)
             lgb_model, lgb_res_dict = mm.run_LGB(
-                X_train=self.train_Xtree[mask_train],
-                y_train=self.train_ytree[mask_train],
-                X_test=self.test_Xtree[mask_test],
-                y_test=self.test_ytree[mask_test],
-                weights=self.tree_weights[mask_train],
+                X_train=self.train_Xtree[mask_train] if not maskless else self.train_Xtree,
+                y_train=self.train_ytree[mask_train] if not maskless else self.train_ytree,
+                X_test=self.test_Xtree[mask_test] if not maskless else self.test_Xtree,
+                y_test=self.test_ytree[mask_test] if not maskless else self.test_ytree,
+                weights=self.tree_weights[mask_train] if not maskless else self.tree_weights,
             )
             logger.info(f"LGB completed in {datetime.datetime.now() - startTime}.")
         
@@ -366,6 +367,7 @@ class TreeTimeML:
                 logger.info(f"DataFrame:\n{meta_pl_test_ondate}")
                 
             logger.info(f"  P/L Ratio: {meta_pl_test_ondate['result_ratio'].mean():.4f}")
+            logger.info(f"  Mean Prediction Ratio: {meta_pl_test_ondate['prediction_ratio'].mean():.4f}")
                 
         res_ = meta_pred_df.filter(
             pl.col("result_ratio") > 0.60
@@ -380,7 +382,8 @@ class TreeTimeML:
         res_n = res_['n_entries'].sum()
         res_max_pred = res_['max_pred_ratio'].mean()
         res_mean_pred = res_['mean_pred_ratio'].mean()
-        logger.info(f"Over all P/L Ratio: {res_pl:.4f}")
+        logger.info(f"Over all mean P/L Ratio: {res_pl:.4f}")
+        logger.info(f"Over all mean prediction ratio: {res_mean_pred:.4f}")
 
         return {'result': res_pl, "n_entries": res_n, "max_pred": res_max_pred, "mean_pred": res_mean_pred}
 

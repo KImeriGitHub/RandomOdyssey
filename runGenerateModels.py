@@ -23,10 +23,11 @@ params = {
     
     "TreeTime_top_n": 5,
     "TreeTime_stoploss": 0.92,
+    "TreeTime_lgb_maskless": False,  # WIthout masks, it seems to be bad
     
     "FilterSamples_days_to_train_end": 500,
     
-    "FilterSamples_lincomb_q_up": 0.95,
+    "FilterSamples_lincomb_q_up": 0.96,
     "FilterSamples_lincomb_lr": 0.0008,
     "FilterSamples_lincomb_epochs": 500,
     "FilterSamples_lincomb_probs_noise_std": 0.010503627436184224,
@@ -35,6 +36,7 @@ params = {
     "FilterSamples_lincomb_featureratio": 0.33269072850403053,
     "FilterSamples_lincomb_itermax": 1,
     "FilterSamples_lincomb_show_progress": True,
+    "FilterSamples_lincomb_init_toprand": 2,
 
     'TreeTime_run_lstm': False,
     "LSTM_units": 32,
@@ -107,12 +109,12 @@ if __name__ == "__main__":
         group=stock_group,
         params=params,
     )
-    ls.load_samples(main_path="./src/featureAlchemy/bin/")
-
+    ls.load_samples()
+    
     results = []
 
     # Generate many training cutoff dates (month-end roll). Change freq as desired.
-    cutoffs = [datetime.date(2025, 1, 15) - datetime.timedelta(days=i*8*2+random.randint(-3, 3)) for i in range(40)][::-1]
+    cutoffs = [datetime.date(2025, 1, 15) - datetime.timedelta(days=i*7+random.randint(-3, 3)) for i in range(20)][::-1]
 
     starttime_all = datetime.datetime.now()
 
