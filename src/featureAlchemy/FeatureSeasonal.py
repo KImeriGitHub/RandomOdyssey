@@ -12,20 +12,26 @@ class FeatureSeasonal():
         'idxLengthOneMonth': 21,
         'monthsHorizon': 12,
         'timesteps': 10,
+        'lagList': [1, 2, 5, 10, 20, 50, 100, 200, 300, 500],
     }
     
-    def __init__(self, asset: AssetDataPolars, startDate: datetime.date, endDate: datetime.date, lagList: List[int] = [], params: dict = None):
-        self.startDate = startDate-pd.Timedelta(days=max(lagList, default=0))
-        self.endDate = endDate
-        self.asset = asset
-        self.lagList = lagList
-        
+    def __init__(self, 
+            asset: AssetDataPolars, 
+            startDate: datetime.date, 
+            endDate: datetime.date, 
+            params: dict = None
+        ):
         # Update default parameters with any provided parameters
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
 
         self.idxLengthOneMonth = self.params['idxLengthOneMonth']
         self.monthsHorizon = self.params['monthsHorizon']
         self.timesteps = self.params['timesteps']
+        self.lagList = self.lagList['lagList']
+
+        self.startDate = startDate-pd.Timedelta(days=max(self.lagList, default=0))
+        self.endDate = endDate
+        self.asset = asset
         
         self.holidate_dates: list[datetime.date] = self.__USHolidays()
         
