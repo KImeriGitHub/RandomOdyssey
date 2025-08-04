@@ -318,17 +318,17 @@ class LoadupSamples:
         # get mean over all future close prices after idx_after days
         mean_expr = (
             pl.col("Close")
-            .shift(-1)
-            .over("ticker")
-            .rolling_mean(window_size=max(idx_after//2, 1))
+            .over("ticker")         #TODO: two expr after over seems to lead to wrong results. Make two separate expressions.
+            .shift(-(idx_after-(idx_after//2)))
+            .rolling_mean(window_size=idx_after)
             .alias("target_mean_close")
         )
 
         # get max over all future close prices after idx_after days
         max_expr = (
             pl.col("Close")
+            .over("ticker")         #TODO: two expr after over seems to lead to wrong results. Make two separate expressions.
             .shift(-1)
-            .over("ticker")
             .rolling_max(window_size=idx_after)
             .alias("target_max_close")
         )
