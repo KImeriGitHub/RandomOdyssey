@@ -4,7 +4,7 @@ import datetime
 from typing import Optional
 import torch
 from tqdm import tqdm
-
+import random
 from src.mathTools.DistributionTools import DistributionTools
 
 import logging
@@ -25,6 +25,7 @@ class FilterSamples:
         "FilterSamples_lincomb_featureratio": 0.5,
         "FilterSamples_lincomb_itermax": 6,
         "FilterSamples_lincomb_show_progress": True,
+        "FilterSamples_lincomb_init_toprand": 1
     }
     
     def __init__(self, 
@@ -321,12 +322,18 @@ class FilterSamples:
                 perdate_m = sum_pv / (sum_p + 1e-7)                 # (D,)
                 score[i]  = perdate_m.mean().item()
 
+        # Select from the top toprand scores by randomly picking one
+        toprand = self.params.get("FilterSamples_lincomb_init_toprand", 1)
+        topidx = random.randint(1, toprand) if toprand > 0 else 0
+        
+        # Sort scores and get the best one
+        argsort_score = np.argsort(score)
         if maximize:
-            best_idx   = int(np.argmax(score))
-            best_score = float(np.max(score))
+            best_idx   = int(argsort_score[-topidx])
+            best_score = float(score[argsort_score[-topidx]])
         else:
-            best_idx   = int(np.argmin(score))
-            best_score = float(np.min(score))
+            best_idx   = int(argsort_score[topidx-1])
+            best_score = float(score[argsort_score[topidx-1]])
             
         return best_score, best_idx
         
