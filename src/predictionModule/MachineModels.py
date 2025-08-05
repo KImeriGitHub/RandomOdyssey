@@ -117,6 +117,101 @@ class MachineModels:
             'feature_importance': gbm.feature_importance(importance_type='gain'),
         }
         return gbm, res_dict
+    
+    
+    def __run_LGB_lambdarank(self, 
+        X_train: np.ndarray, 
+        y_train: np.ndarray,
+        X_test: np.ndarray = None,
+        y_test: np.ndarray = None,
+        weights: np.ndarray = None,
+    ) -> tuple[lgb.Booster, dict]:
+        # Must be adjusted to the class
+        pass
+        """
+        num_boost_round = self.params['TreeTime_lgb_num_boost_round']
+        lgb_params  = {
+            'verbosity': -1,
+            'n_jobs': -1,
+            'is_unbalance': True,
+            'objective': 'lambdarank',
+            'ndcg_eval_at': [1,5],
+            'label_gain': tuple(np.array(range(1,400))**(2)), 
+            'metric': 'ndcg',  
+            #'lambdarank_truncation_level': 10,
+            #'lambdarank_norm': True,
+            'lambda_l1': self.params['TreeTime_lgb_lambda_l1'],
+            'lambda_l2': self.params['TreeTime_lgb_lambda_l2'],
+            'early_stopping_rounds': num_boost_round//2,
+            'feature_fraction': self.params['TreeTime_lgb_feature_fraction'],
+            'num_leaves': self.params['TreeTime_lgb_num_leaves'], 
+            'max_depth': self.params['TreeTime_lgb_max_depth'],
+            'learning_rate': self.params['TreeTime_lgb_learning_rate'],
+            'min_data_in_leaf': self.params['TreeTime_lgb_min_data_in_leaf'],
+            'min_gain_to_split': self.params['TreeTime_lgb_min_gain_to_split'],
+            'path_smooth': self.params['TreeTime_lgb_path_smooth'],
+            'min_sum_hessian_in_leaf': self.params['TreeTime_lgb_min_sum_hessian_in_leaf'],
+            "max_bin": self.params["TreeTime_lgb_max_bin"],
+            'random_state': 41,
+        }   
+        
+        counts_df = self.meta_pl_train.group_by("date", maintain_order=True).agg(pl.count("date").alias("cnt"))
+        group_sizes = counts_df['cnt'].to_list()
+        
+        test_size_pct = self.params['TreeTime_lgb_test_size_pct']   
+        n_test = max(1, int(len(group_sizes) * test_size_pct))
+        train_group_sizes = group_sizes[:-n_test]
+        test_group_sizes  = group_sizes[-n_test:]
+        split_idx = sum(train_group_sizes)
+        
+        ytree_df = pl.DataFrame({
+            "date": self.meta_pl_train.select('date').to_series(), 
+            "y": self.train_ytree
+        }).with_columns(
+            pl.col("y")
+            .rank(method="dense")
+            .over("date")
+            .cast(pl.UInt64)  
+            .alias("y_rank")
+        )
+        
+        y_rank_list = ytree_df["y_rank"].to_list()
+        # split features and labels
+        X_all = self.train_Xtree
+        y_all = y_rank_list
+        X_train, X_test = X_all[:split_idx], X_all[split_idx:]
+        y_train, y_test = y_all[:split_idx], y_all[split_idx:]
+        train_data = lgb.Dataset(X_train, label=y_train, group=train_group_sizes)
+        valid_data = lgb.Dataset(X_test,  label=y_test,  group=test_group_sizes)
+        
+        def print_eval_after_100(env):
+            if env.iteration % 100 == 0 or env.iteration == num_boost_round:
+                results = [
+                    f"{data_name}'s {eval_name}: {result}"
+                    for data_name, eval_name, result, _ in env.evaluation_result_list
+                ]
+                logger.info(f"Iteration {env.iteration}: " + ", ".join(results))
+        
+        evals_result = {}
+        gbm: lgb.Booster = lgb.train(
+            lgb_params,
+            train_data,
+            valid_sets=[train_data, valid_data],
+            valid_names=['train', 'test'],
+            callbacks=[
+                #record_evaluation(evals_result),
+                print_eval_after_100
+            ],
+            num_boost_round=num_boost_round,
+        )
+        #ndcg5 = np.array(evals_result['test']['ndcg@5'])
+        #best_it = int(ndcg5.argmax()) + 1
+        #best_score = ndcg5.max()
+        #gbm.best_iteration = best_it
+        #gbm.best_score['test']['ndcg@5'] = best_score
+        
+        return gbm
+        """
         
     def run_LSTM_tf(self, 
             X_train: np.ndarray, 
