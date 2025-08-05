@@ -32,6 +32,7 @@ FGD = FeatureGroupDynamic
 FFC = FeatureFourierCoeff
 
 feature_classes = [FCa, FFD, FM, FS, FT, FGD, FFC]
+feature_classes_noFourier = [FCa, FFD, FM, FS, FT, FGD]
 
 formatted_date = dt.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
@@ -43,8 +44,10 @@ logger = logging.getLogger(__name__)
 
 ## VARIABLES
 groups_features = {
-    "group_debug": feature_classes,
-    #"group_snp500_finanTo2011": feature_classes,
+    #"group_debug": (feature_classes, 'Tree'),
+    #"group_snp500_finanTo2011": (feature_classes, 'Tree'),
+    #"group_finanTo2011": (feature_classes_noFourier, 'Tree'),
+    "group_over20Years": ([FCa, FM, FS, FT, FGD], 'Tree'),
 }
 lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
 month_horizons = [1, 2, 4, 6, 8, 12]
@@ -56,6 +59,7 @@ params = {
     'lagList': lag_list,
     'monthHorizonList': month_horizons,
 }
+n_workers = 6 # For parallel processing, set to number of CPU cores or desired number of workers
 
 ## CODE FOR GENERATING FEATURES
 def load_assets(group_name: str, base_path: str = "src/stockGroups/bin") -> Dict[str, AssetDataPolars]:
@@ -71,6 +75,7 @@ def load_assets(group_name: str, base_path: str = "src/stockGroups/bin") -> Dict
 def process_period(
     assets: Dict[str, AssetDataPolars],
     group: str,
+    group_type: str,
     feature_classes: List[Type[IFeature]],
     label: str,
     start: datetime.date,
@@ -91,7 +96,8 @@ def process_period(
     os.makedirs(out_dir, exist_ok=True)
 
     # Save features
-    features_path = os.path.join(out_dir, f"Features_{label}_{group}.npz")
+    prefix = f"{group_type}Features"
+    features_path = os.path.join(out_dir, f"{prefix}_{label}_{group}.npz")
     np.savez_compressed(
         features_path,
         meta_feat=meta_feat,
@@ -102,7 +108,7 @@ def process_period(
 
 def process_year(year):
     label = str(year)
-    for group, feature_classes in groups_features.items():
+    for group, (feature_classes, group_type) in groups_features.items():
         assets_pl = load_assets(group)
         start_date = pd.Timestamp(year, 1, 1).date()
 
@@ -121,6 +127,7 @@ def process_year(year):
             process_period(
                 assets_pl,
                 group,
+                group_type,
                 feature_classes,
                 label,
                 start_date,
@@ -150,9 +157,7 @@ if __name__ == "__main__":
         years = [args.year]
     else:
         years = [dt.now().year]
-
     
     # spawn one worker per CPU (or cap it)
-    n_workers = 2
     with Pool(processes=n_workers) as pool:
         pool.map(process_year, years)
