@@ -13,8 +13,8 @@ import optuna
 from optuna.exceptions import TrialPruned
 import argparse
 
-stock_group = "group_snp500_finanTo2011"
-stock_group_short = "snp500_finanTo2011"
+stock_group = "group_finanTo2011"
+stock_group_short = "finanTo2011"
     
 params = {
     "idxAfterPrediction": 5,
@@ -23,11 +23,11 @@ params = {
     
     "TreeTime_top_n": 5,
     "TreeTime_stoploss": 0.92,
-    "TreeTime_lgb_maskless": False,  # WIthout masks, it seems to be bad
+    "TreeTime_lgb_maskless": False,  # WIthout masks, it seems to perform worse
     
     "FilterSamples_days_to_train_end": 500,
     
-    "FilterSamples_lincomb_q_up": 0.96,
+    "FilterSamples_lincomb_q_up": 0.98,
     "FilterSamples_lincomb_lr": 0.0008,
     "FilterSamples_lincomb_epochs": 500,
     "FilterSamples_lincomb_probs_noise_std": 0.010503627436184224,
@@ -69,7 +69,7 @@ params = {
     "LGB_min_sum_hessian_in_leaf": 0.3732876155751053,
     "LGB_max_bin": 250,
         
-    'TreeTime_MatchFeatures_run': True,
+    'TreeTime_MatchFeatures_run': False,
     'TreeTime_MatchFeatures_minWeight': 0.4,
     'TreeTime_MatchFeatures_truncation': 2,
     'TreeTime_MatchFeatures_Pricediff': True,
@@ -107,6 +107,7 @@ if __name__ == "__main__":
         train_start_date=global_start_date,
         test_dates=[final_eval_date],  # will be overridden in split loop; kept for init
         group=stock_group,
+        group_type='Tree',
         params=params,
     )
     ls.load_samples()
@@ -114,7 +115,7 @@ if __name__ == "__main__":
     results = []
 
     # Generate many training cutoff dates (month-end roll). Change freq as desired.
-    cutoffs = [datetime.date(2025, 1, 15) - datetime.timedelta(days=i*7+random.randint(-3, 3)) for i in range(20)][::-1]
+    cutoffs = [datetime.date(2025, 7, 15) - datetime.timedelta(days=i*8+random.randint(-3, 3)) for i in range(100)][::-1]
 
     starttime_all = datetime.datetime.now()
 
@@ -128,45 +129,45 @@ if __name__ == "__main__":
             last_test_date=end_test_date,
         )
 
-        num_reruns = 3
+        num_reruns = 2
         res_dict = {}
         res_dict_list = []
-        for _ in range(num_reruns):
-            # Train/analyze for this cutoff
-            tt = TreeTimeML(
-                train_start_date=lsc.train_start_date,
-                test_dates=lsc.test_dates,
-                group=stock_group,
-                params=params,
-                loadup=lsc,
-            )
-            try:
+        try:
+            for _ in range(num_reruns):
+                # Train/analyze for this cutoff
+                tt = TreeTimeML(
+                    train_start_date=lsc.train_start_date,
+                    test_dates=lsc.test_dates,
+                    group=stock_group,
+                    params=params,
+                    loadup=lsc
+                )
                 starttime = datetime.datetime.now()
                 res_dict_loop = tt.analyze()
                 elapsed = datetime.datetime.now() - starttime
-            except Exception as e:
-                logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
-                continue  # Skip to next cutoff if error occurs
-            
-            res_dict_list.append(res_dict_loop)
+                res_dict_list.append(res_dict_loop)
+                    
+            if res_mean_pred_list.size > 0:
+                res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
+                res_dict = res_dict_list[np.argmax(res_mean_pred_list)] if res_mean_pred_list.size > 0 else None
 
-        res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
-        res_dict = res_dict_list[np.argmax(res_mean_pred_list)]
+                logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
+                logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
 
-        logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
-        logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
-
-        results.append(
-            {
-                "end_train_date": end_train_date,
-                "end_test_date": end_test_date,
-                "mean_return": res_dict['result'],
-                "n_entries": res_dict['n_entries'],
-                "analysis_time": elapsed.total_seconds(),
-                "max_pred": res_dict['max_pred'],
-                "mean_pred": res_dict['mean_pred'],
-            }
-        )
+                results.append(
+                    {
+                        "end_train_date": end_train_date,
+                        "end_test_date": end_test_date,
+                        "mean_return": res_dict['result'],
+                        "n_entries": res_dict['n_entries'],
+                        "analysis_time": elapsed.total_seconds(),
+                        "max_pred": res_dict['max_pred'],
+                        "mean_pred": res_dict['mean_pred'],
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
+            continue
 
     total_elapsed = datetime.datetime.now() - starttime_all
     logger.info(f"Completed {len(results)} rolling backtests in {total_elapsed}.")
