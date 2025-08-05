@@ -84,12 +84,7 @@ class TreeTimeML:
         """
         Common pipeline steps shared by both analyze() and predict().
         Returns a dictionary of all relevant masked data, trained model, and predictions.
-        """
-        # Log distributions
-        logger.info(f"Number of time features: {len(self.featureTimeNames)}")
-        logger.info("Overall Training Label Distribution:")
-        ModelAnalyzer().print_label_distribution(self.train_ytime > 0.50)
-        
+        """        
         # Filter samples
         samples_dates_train = self.meta_pl_train.select(pl.col("date")).to_series()
         samples_dates_test = self.meta_pl_test.select(pl.col("date")).to_series()
@@ -110,6 +105,7 @@ class TreeTimeML:
 
         # LSTM model
         if self.params['TreeTime_run_lstm']:
+            logger.info(f"Number of time features: {len(self.featureTimeNames)}")
             inc_factor = self.params["LoadupSamples_time_inc_factor"]
             if lstm_model is None:
                 startTime  = datetime.datetime.now()
@@ -277,7 +273,8 @@ class TreeTimeML:
             pl.Series("prediction_ratio", y_test_pred)
         )
         
-        def cond(col):
+        # stoploss, to be implemented:
+        """def cond(col):
             return col <= self.params['TreeTime_stoploss']
         
         cols = [f"target_close_at{i}" for i in range(1, self.idxDaysAfter + 1)]
@@ -292,6 +289,10 @@ class TreeTimeML:
             (pl.coalesce(*exprs)).alias("result_close")
         ).with_columns(
             (pl.col('result_close')/pl.col('Close')).alias("result_ratio")
+        )"""
+        
+        meta_pred_df = meta_pred_df.with_columns(
+            (pl.col("target_ratio")).alias("result_ratio")
         )
         
         meta_pred_df = (
@@ -304,7 +305,7 @@ class TreeTimeML:
                 .alias("prediction_rank")
             ).filter(
                 pl.col("prediction_rank") <= m
-            )        
+            )
         )
         
         meta_pred_df_perdate = (
@@ -349,17 +350,13 @@ class TreeTimeML:
                 .select(
                     ['date', 'ticker', 'Close']
                     +[f"target_close_at{i}" for i in range(1, self.idxDaysAfter + 1)]
-                    +['prediction_ratio', 'result_close']
+                    +['prediction_ratio']
                     +['result_ratio']
                 )
             )
             if meta_pl_test_ondate.is_empty():
                 logger.error(f"No data available for test date {test_date}.")
                 continue
-            
-            meta_pl_test_ondate = meta_pl_test_ondate.filter(
-                pl.col("result_ratio") > 0.60    # TODO: We need to incorporate adj close
-            )
 
             with pl.Config(ascii_tables=True):
                 pl.Config.set_tbl_rows(15)
@@ -369,9 +366,7 @@ class TreeTimeML:
             logger.info(f"  P/L Ratio: {meta_pl_test_ondate['result_ratio'].mean():.4f}")
             logger.info(f"  Mean Prediction Ratio: {meta_pl_test_ondate['prediction_ratio'].mean():.4f}")
                 
-        res_ = meta_pred_df.filter(
-            pl.col("result_ratio") > 0.60
-        ).group_by("date").agg([
+        res_ = meta_pred_df.group_by("date").agg([
             pl.col("result_ratio").mean().alias("mean_result_ratio"),
             pl.col("result_ratio").count().alias("n_entries"),
             pl.col("prediction_ratio").max().alias("max_pred_ratio"),
