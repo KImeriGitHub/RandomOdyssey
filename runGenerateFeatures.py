@@ -23,6 +23,9 @@ from src.featureAlchemy.FeatureSeasonal import FeatureSeasonal
 from src.featureAlchemy.FeatureTA import FeatureTA
 from src.featureAlchemy.FeatureGroupDynamic import FeatureGroupDynamic
 
+from src.featureAlchemy.FeatureMathematicalTS import FeatureMathematicalTS
+from src.featureAlchemy.FeatureTATS import FeatureTATS
+
 FCa = FeatureCategory
 FFD = FeatureFinancialData
 FM  = FeatureMathematical
@@ -30,6 +33,8 @@ FS  = FeatureSeasonal
 FT  = FeatureTA
 FGD = FeatureGroupDynamic
 FFC = FeatureFourierCoeff
+FMTS = FeatureMathematicalTS
+FTATS = FeatureTATS
 
 feature_classes = [FCa, FFD, FM, FS, FT, FGD, FFC]
 feature_classes_noFourier = [FCa, FFD, FM, FS, FT, FGD]
@@ -47,7 +52,7 @@ groups_features = {
     #"group_debug": (feature_classes, 'Tree'),
     #"group_snp500_finanTo2011": (feature_classes, 'Tree'),
     #"group_finanTo2011": (feature_classes_noFourier, 'Tree'),
-    "group_over20Years": ([FCa, FM, FS, FT, FGD], 'Tree'),
+    "group_over20Years": ([FMTS, FTATS], 'Time'),
 }
 lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
 month_horizons = [1, 2, 4, 6, 8, 12]
