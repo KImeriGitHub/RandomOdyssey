@@ -124,6 +124,7 @@ class TAIndicators():
         # to close
         'High',
         'Low',
+        'Open',
         'trend_macd',
         'trend_macd_signal',
         'trend_sma_slow',
@@ -390,7 +391,7 @@ class TAIndicators():
 
         # --- tacolumns_ScaledToClose ---
         for name in [
-            "High", "Low",
+            "High", "Low", "Open",
             "trend_macd", "trend_macd_signal",
             "trend_sma_slow", "trend_ema_fast", "trend_ema_slow",
             "volatility_atr", "volatility_bbm",

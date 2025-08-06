@@ -59,7 +59,7 @@ class FeatureTATS(IFeature):
         closes = sp['Close'].to_numpy()[idcs]
         vols   = sp['Volume'].to_numpy()[idcs]
         vols   = np.where(vols < 2, 1.0, vols)
-        
+
         # 3) build frames
         dfTA_exprs = [self.taindic.getRescaledExprs_timeseries(closes[i], vols[i]) for i in range(len(closes))]
         cur_arrs = [self.taindic.tadata.select(dfTA_expr).to_numpy() for dfTA_expr in dfTA_exprs]
@@ -75,7 +75,7 @@ class FeatureTATS(IFeature):
         ]
         
         features  = np.array([
-            window[idxs[i]] for i, window in enumerate(windows)
+            window[idxs[i]-self.timesteps+1] for i, window in enumerate(windows)
         ])
 
         return features.astype(np.float32) 
