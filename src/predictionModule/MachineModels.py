@@ -122,7 +122,7 @@ class MachineModels:
         if test_data is not None:
             res_dict.update({
                 'best_iteration': gbm.best_iteration,
-                'best_score': gbm.best_score['valid_0']['l2_root']
+                'best_score': gbm.best_score['valid_0']['rmse']
             })
 
         return gbm, res_dict
