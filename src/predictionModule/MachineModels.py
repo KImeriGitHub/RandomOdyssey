@@ -60,7 +60,7 @@ class MachineModels:
     def __init__(self, params: dict):
         self.params = {**self.default_params, **params}
         
-    def run_LGB(self, 
+    def run_LGB_(self, 
         X_train: np.ndarray, 
         y_train: np.ndarray,
         X_test: np.ndarray = None,
@@ -126,6 +126,66 @@ class MachineModels:
             })
 
         return gbm, res_dict
+    
+    def run_LGB(self, X_train, y_train, X_test=None, y_test=None, weights=None):
+        num_boost_round = self.params['LGB_num_boost_round']
+        lgb_params = {
+            'objective': 'regression',
+            'metric': 'l2_root',     # NOTE: the string 'rsme' is not recognized, v 4.5.0
+            'n_jobs': -1,       
+            'verbosity': -1,
+            'lambda_l1': self.params['LGB_lambda_l1'],
+            'lambda_l2': self.params['LGB_lambda_l2'],
+            'feature_fraction': self.params['LGB_feature_fraction'],
+            'num_leaves': self.params['LGB_num_leaves'],
+            'max_depth': self.params['LGB_max_depth'],
+            'learning_rate': self.params['LGB_learning_rate'],
+            'min_data_in_leaf': self.params['LGB_min_data_in_leaf'],
+            'min_gain_to_split': self.params['LGB_min_gain_to_split'],
+            'path_smooth': self.params['LGB_path_smooth'],
+            'min_sum_hessian_in_leaf': self.params['LGB_min_sum_hessian_in_leaf'],
+            'random_state': 41, 
+        }
+
+        if weights is None:
+            weights = np.ones_like(y_train, dtype=np.float32)
+
+        train = lgb.Dataset(X_train, label=y_train, weight=weights)
+
+        def log_to_logger(period=100, level=logging.INFO):
+            def _cb(env):
+                end_it = getattr(env, "end_iteration", None)
+                if period and (env.iteration % period == 0 or (end_it is not None and env.iteration == end_it)):
+                    msg = ", ".join(f"{d}'s {m}: {v}" for d, m, v, _ in env.evaluation_result_list)
+                    logger.log(level, f"Iteration {env.iteration}: {msg}")
+            _cb.order = 10
+            return _cb
+        
+        valid_sets = valid_names = None
+        callbacks = [log_to_logger(50)]
+
+        if y_test is not None and not np.any(np.isnan(y_test)):
+            valid = lgb.Dataset(X_test, label=y_test, reference=train)
+            valid_sets = [valid, train]
+            valid_names = ['valid', 'train']
+            callbacks.append(lgb.early_stopping(stopping_rounds=max(1, num_boost_round // 10), verbose=False))
+        
+        gbm = lgb.train(
+            lgb_params,
+            train,
+            num_boost_round=num_boost_round,
+            valid_sets=valid_sets,
+            valid_names=valid_names,
+            callbacks=callbacks
+        )
+
+        res = {'feature_importance': gbm.feature_importance(importance_type='gain')}
+        if valid_sets is not None:
+            res.update({
+                'best_iteration': gbm.best_iteration,
+                'best_score': gbm.best_score['valid']['rmse']   
+            })
+        return gbm, res
     
     def __run_LGB_lambdarank(self, 
         X_train: np.ndarray, 
