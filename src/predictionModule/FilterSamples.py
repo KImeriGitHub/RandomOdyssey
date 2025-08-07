@@ -186,7 +186,7 @@ class FilterSamples:
         
         for i in range(itermax):
             logger.debug(f"  FilterSamples: Lincomb Iteration {i}/{itermax} running.")
-            dates_recent = dates_train.filter(mask_dates_reduced)
+            dates_recent = dates_train.filter(pl.Series(mask_dates_reduced))
             lincomb = self.ml_train_lincomb(
                 A=A_lincomb[mask_dates_reduced][:, lincomb_fmask],
                 v=y_lincomb[mask_dates_reduced],
