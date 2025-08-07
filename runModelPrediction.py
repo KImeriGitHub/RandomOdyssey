@@ -11,7 +11,7 @@ stock_group_short = '_'.join(stock_group.split('_')[1:])
 import logging
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
-    filename=f'logs/output_TreeTime_{stock_group_short}_{formatted_date}.log',
+    filename=f'logs/output_prediction_TreeTime_{stock_group_short}_{formatted_date}.log',
     level=logging.DEBUG,
     format='%(asctime)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M'
