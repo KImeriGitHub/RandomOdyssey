@@ -321,7 +321,7 @@ class TreeTimeML:
         
         return meta_pred_df, meta_pred_df_perdate
     
-    def analyze(self, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> tuple:
+    def analyze(self, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> tuple[float, dict]:
         logger.disabled = logger_disabled
         
         # Run common pipeline in "analyze" mode
@@ -380,7 +380,15 @@ class TreeTimeML:
         logger.info(f"Over all mean P/L Ratio: {res_pl:.4f}")
         logger.info(f"Over all mean prediction ratio: {res_mean_pred:.4f}")
 
-        return {'result': res_pl, "n_entries": res_n, "max_pred": res_max_pred, "mean_pred": res_mean_pred}
+        return (
+            res_pl, 
+            {
+                'result': res_pl, 
+                "n_entries": res_n, 
+                "max_pred": res_max_pred, 
+                "mean_pred": res_mean_pred
+            }
+        )
 
     def predict(self):
         # Run common pipeline in "analyze" mode

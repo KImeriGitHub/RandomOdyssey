@@ -9,7 +9,6 @@ import datetime
 import secrets
 import copy
 import random
-import logging
 import optuna
 from optuna.exceptions import TrialPruned
 import argparse
@@ -17,10 +16,8 @@ import argparse
 stock_group = "group_finanTo2011"
 stock_group_short = "finanTo2011"
 
-params = treetimeParams.params
-
+import logging
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
-
 logging.basicConfig(
     filename=f'logs/output_TreeTime_{stock_group_short}_{formatted_date}.log',
     level=logging.DEBUG,
@@ -28,6 +25,9 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M'
 )
 logger = logging.getLogger(__name__)
+
+params = treetimeParams.params
+
 logger.info(f" Params: {params}")
 
 ###############
