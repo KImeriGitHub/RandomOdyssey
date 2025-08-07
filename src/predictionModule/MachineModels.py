@@ -78,7 +78,7 @@ class MachineModels:
             'metric': 'l2_root',  # NOTE: the string 'rsme' is not recognized, v 4.5.0
             'lambda_l1': self.params['LGB_lambda_l1'],
             'lambda_l2': self.params['LGB_lambda_l2'],
-            'early_stopping_rounds': num_boost_round//10,
+            'early_stopping_rounds': num_boost_round//10 ,
             'feature_fraction': self.params['LGB_feature_fraction'],
             'num_leaves': self.params['LGB_num_leaves'], 
             'max_depth': self.params['LGB_max_depth'],
@@ -93,7 +93,10 @@ class MachineModels:
         if weights is None:
             weights = np.ones_like(y_train, dtype=np.float32)
         train_data = lgb.Dataset(X_train, label = y_train, weight=weights)
-        test_data = lgb.Dataset(X_test, label = y_test, reference=train_data)
+        if y_test is None or np.any(np.isnan(y_test)):
+            test_data = None
+        else:
+            test_data = lgb.Dataset(X_test, label = y_test, reference=train_data)
 
         def print_eval_after_100(env):
             if env.iteration % 100 == 0 or env.iteration == num_boost_round:
@@ -103,21 +106,26 @@ class MachineModels:
                 ]
                 logger.info(f"Iteration {env.iteration}: " + ", ".join(results))
 
+        #lgb_params['metric'] = lgb_params['metric'] if test_data is not None else None
+        lgb_params['early_stopping_rounds'] = lgb_params['early_stopping_rounds'] if test_data is not None else None
         gbm = lgb.train(
             lgb_params,
             train_data,
-            valid_sets=[test_data],
+            valid_sets=[test_data] if test_data is not None else None,
             num_boost_round=num_boost_round,
-            callbacks=[print_eval_after_100]
+            callbacks=[print_eval_after_100] #if test_data is not None else None
         )
 
         res_dict = {
-            'best_iteration': gbm.best_iteration,
-            'best_score': gbm.best_score['valid_0']['rmse'],
             'feature_importance': gbm.feature_importance(importance_type='gain'),
         }
+        if test_data is not None:
+            res_dict.update({
+                'best_iteration': gbm.best_iteration,
+                'best_score': gbm.best_score['valid_0']['l2_root']
+            })
+
         return gbm, res_dict
-    
     
     def __run_LGB_lambdarank(self, 
         X_train: np.ndarray, 

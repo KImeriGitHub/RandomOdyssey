@@ -35,7 +35,7 @@ class FilterSamples:
             Xtree_test: np.ndarray, 
             samples_dates_train: pl.Series,
             samples_dates_test: Optional[pl.Series] = None,
-            ytree_test: np.ndarray = None,
+            ytree_test: np.ndarray | None = None,
             params: Optional[dict] = None
         ):
         self.Xtree_train = Xtree_train
@@ -46,7 +46,7 @@ class FilterSamples:
         self.samples_dates_train = samples_dates_train
 
         self.doTest = True
-        if self.ytree_test is None:
+        if self.ytree_test is None or np.any(np.isnan(self.ytree_test)):
             self.doTest = False
         if self.doTest and samples_dates_test is None:
             # If it is None we assume a single date for all test samples
