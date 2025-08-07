@@ -83,7 +83,7 @@ class FeatureFourierCoeff(IFeature):
 
             # assign into your 3-D pre-matrices in one go:
             sl = slice(None, self.fouriercutoff-1)
-            self.PricesPreMatrix_rsme   [idxs, sl, m_idx] =    rsme_p[:, :-1]
+            self.PricesPreMatrix_rsme[idxs, sl, m_idx] =       rsme_p[:, :-1]
             self.PricesPreMatrix_rsmeRatio[idxs, sl, m_idx] =  rsme_p[:, 1:] / rsme_p[:, :-1]
             self.PricesPreMatrix_ampcoeff[idxs, sl, m_idx] =   amp_p[:, 1:]
             self.PricesPreMatrix_signcoeff[idxs, sl, m_idx] =  sign_p[:, 1:]

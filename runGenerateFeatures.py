@@ -111,7 +111,7 @@ def process_period(
     )
     logging.info("Saved features to %s", features_path)
 
-def process_year(year):
+def process_year(year: int):
     label = str(year)
     for group, (feature_classes, group_type) in groups_features.items():
         assets_pl = load_assets(group)
@@ -154,7 +154,7 @@ if __name__ == "__main__":
         "--min-year", type=int, default=None, help="Start year; processes through current year"
     )
     args = parser.parse_args()
-
+    
     years = []
     if args.min_year is not None:
         years = list(range(args.min_year, dt.now().year + 1))
@@ -164,5 +164,6 @@ if __name__ == "__main__":
         years = [dt.now().year]
     
     # spawn one worker per CPU (or cap it)
+    logger.info("Starting feature generation for years: %s", years)
     with Pool(processes=n_workers) as pool:
         pool.map(process_year, years)
