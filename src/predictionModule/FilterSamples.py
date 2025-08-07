@@ -267,7 +267,7 @@ class FilterSamples:
         """
         date_counts_np = dates.value_counts(sort=False, name="count").select("count").to_numpy().squeeze()
         date_counts = torch.tensor(date_counts_np, dtype=torch.long, device=device)  # (N,)
-        n_udates = date_counts.size(0)  # number of unique dates
+        n_udates = date_counts_np.size  # number of unique dates
         N = int(date_counts.sum().item()) # total number of samples
         
         dates_offsets = torch.cat([

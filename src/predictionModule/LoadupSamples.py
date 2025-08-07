@@ -70,20 +70,34 @@ class LoadupSamples:
         )
         
         # Check for same shape
-        if self.train_Xtree.shape[1] != self.test_Xtree.shape[1]:
-            logger.error("Training and test datasets have different number of features.")
-        if self.train_ytree.shape[0] != self.train_Xtree.shape[0]:
-            logger.error("Training labels do not match the number of training samples.")
-        if is_test_env:
-            if self.test_ytree.shape[0] != self.test_Xtree.shape[0]:
-                logger.error("Test labels do not match the number of test samples.")
-        if self.train_Xtree.shape[1] != len(self.featureTreeNames):
-            logger.error("Number of features in training data does not match the number of tree feature names.")
+        if self.group_type == "Tree":
+            if self.train_Xtree.shape[1] != self.test_Xtree.shape[1]:
+                logger.error("Training and test datasets have different number of features.")
+            if self.train_ytree.shape[0] != self.train_Xtree.shape[0]:
+                logger.error("Training labels do not match the number of training samples.")
+            if is_test_env:
+                if self.test_ytree.shape[0] != self.test_Xtree.shape[0]:
+                    logger.error("Test labels do not match the number of test samples.")
+            if self.train_Xtree.shape[1] != len(self.featureTreeNames):
+                logger.error("Number of features in training data does not match the number of tree feature names.")
+
+        if self.group_type == "Time":
+            if self.train_Xtime.shape[2] != self.test_Xtime.shape[2]:
+                logger.error("Training and test datasets have different number of features.")
+            if self.train_ytime.shape[0] != self.train_Xtime.shape[0]:
+                logger.error("Training labels do not match the number of training samples.")
+            if is_test_env:
+                if self.test_ytime.shape[0] != self.test_Xtime.shape[0]:
+                    logger.error("Test labels do not match the number of test samples.")
+            if self.train_Xtime.shape[2] != len(self.featureTimeNames):
+                logger.error("Number of features in training data does not match the number of time feature names.")
         
         if len(self.meta_pl_train['date']) != self.train_Xtree.shape[0]:
             logger.error("Number of sample dates does not match the number of training samples.")
         if not self.meta_pl_train['date'].is_sorted():
             logger.error("Sample dates are not sorted. Please sort them before proceeding.")
+        if not self.meta_pl_test['date'].is_sorted():
+            logger.error("Test Sample dates are not sorted. Please sort them before proceeding.")
         if not all(isinstance(date, datetime.date) for date in self.meta_pl_train['date']):
             logger.error("Sample dates should be pandas Timestamp objects.")
         if is_test_env and not all(isinstance(date, datetime.date) for date in self.meta_pl_test['date']):
@@ -145,9 +159,9 @@ class LoadupSamples:
         modified_test_dates = self.test_dates[:]
         for idx, test_date in enumerate(modified_test_dates):
             if not testdate_in_db[idx]:
-                logger.warning(f"Test date {test_date} not found in the database. Resetting to last trading day.")
-                modified_test_dates[idx] = meta_pl.filter(pl.col("date") <= test_date).select("date").max()["date"].item()
-        self.test_dates = modified_test_dates
+                logger.warning(f"Test date {test_date} not found in the database. Omitting.")
+                modified_test_dates[idx] = meta_pl.filter(pl.col("date") <= test_date).select("date").max().item()
+        self.test_dates = sorted(set(modified_test_dates))
 
         # Add target
         meta_pl = meta_pl.sort(["date", "ticker"])
@@ -155,14 +169,17 @@ class LoadupSamples:
         meta_pl = meta_pl.sort(["date", "ticker"])
         
         # Assign Main Variables
-        mask_at_test_dates = (meta_pl["date"].is_in(self.test_dates)).fill_null(False).to_numpy()
+        mask_at_test_dates = (
+            (meta_pl["date"] >= self.min_test_date)
+            & (meta_pl["date"] <= self.max_test_date)
+        ).fill_null(False).to_numpy()
         mask_inbetween_date = (
             (meta_pl["date"] >= self.train_start_date)
-            & (meta_pl["target_date"] < self.min_test_date)
+            & (meta_pl["date"] < self.min_test_date)
         ).fill_null(False).to_numpy()
         
-        self.meta_pl_train = meta_pl.filter(mask_inbetween_date)
-        self.meta_pl_test  = meta_pl.filter(mask_at_test_dates)
+        self.meta_pl_train = meta_pl.filter(pl.Series(mask_inbetween_date))
+        self.meta_pl_test  = meta_pl.filter(pl.Series(mask_at_test_dates))
         
         if self.group_type == "Tree":
             self.featureTreeNames = names_data
@@ -231,45 +248,51 @@ class LoadupSamples:
             (self.meta_pl_test["date"] <= last_test_date)
         ).fill_null(False).to_numpy()
 
-        self.test_Xtree = np.concatenate(
-            [
-                self.train_Xtree[train_split_te_mask], 
-                self.test_Xtree[test_split_mask]
-            ], 
-            axis = 0
-        ) if self.test_Xtree is not None and self.train_Xtree is not None else None
-        self.test_Xtime = np.concatenate(
-            [
-                self.train_Xtime[train_split_te_mask], 
-                self.test_Xtime[test_split_mask]
-            ], 
-            axis = 0
-        ) if self.test_Xtime is not None and self.train_Xtime is not None else None
-        self.test_ytree = np.concatenate(
-            [
-                self.train_ytree[train_split_te_mask], 
-                self.test_ytree[test_split_mask]
-            ], 
-            axis = 0
-        ) if self.test_ytree is not None and self.train_ytree is not None else None
-        self.test_ytime = np.concatenate(
-            [
-                self.train_ytime[train_split_te_mask], 
-                self.test_ytime[test_split_mask]
-            ], 
-            axis = 0
-        ) if self.test_ytime is not None and self.train_ytime is not None else None
-        
-        self.train_Xtree = self.train_Xtree[train_split_tr_mask] if self.train_Xtree is not None else None
-        self.train_Xtime = self.train_Xtime[train_split_tr_mask] if self.train_Xtime is not None else None
-        self.train_ytree = self.train_ytree[train_split_tr_mask] if self.train_ytree is not None else None
-        self.train_ytime = self.train_ytime[train_split_tr_mask] if self.train_ytime is not None else None
+        # Tree
+        if self.group_type == "Tree":
+            self.test_Xtree = np.concatenate(
+                [
+                    self.train_Xtree[train_split_te_mask], 
+                    self.test_Xtree[test_split_mask]
+                ], 
+                axis = 0
+            )
+            self.test_ytree = np.concatenate(
+                [
+                    self.train_ytree[train_split_te_mask], 
+                    self.test_ytree[test_split_mask]
+                ], 
+                axis = 0
+            )
+
+            self.train_Xtree = self.train_Xtree[train_split_tr_mask]
+            self.train_ytree = self.train_ytree[train_split_tr_mask]
+
+        # Time
+        if self.group_type == "Time":
+            self.test_Xtime = np.concatenate(
+                [
+                    self.train_Xtime[train_split_te_mask], 
+                    self.test_Xtime[test_split_mask]
+                ], 
+                axis = 0
+            )
+            self.test_ytime = np.concatenate(
+                [
+                    self.train_ytime[train_split_te_mask], 
+                    self.test_ytime[test_split_mask]
+                ], 
+                axis = 0
+            )
+            
+            self.train_Xtime = self.train_Xtime[train_split_tr_mask]
+            self.train_ytime = self.train_ytime[train_split_tr_mask]
 
         self.meta_pl_test = pl.concat([
-            self.meta_pl_train.filter(train_split_te_mask),
-            self.meta_pl_test.filter(test_split_mask)
+            self.meta_pl_train.filter(pl.Series(train_split_te_mask)),
+            self.meta_pl_test.filter(pl.Series(test_split_mask))
         ])
-        self.meta_pl_train = self.meta_pl_train.filter(train_split_tr_mask)
+        self.meta_pl_train = self.meta_pl_train.filter(pl.Series(train_split_tr_mask))
 
         self.min_test_date = self.meta_pl_test.select(pl.min('date')).item()
         self.test_dates = self.meta_pl_test.select(pl.col('date')).to_series().unique().to_list()
