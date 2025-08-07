@@ -266,6 +266,28 @@ class TreeTimeML:
             
         return top_idces
     
+    def __get_top_tickers(self, y_test_pred: np.array, meta_pl: pl.DataFrame) -> pl.DataFrame:
+        m = self.params['TreeTime_top_n']
+        
+        meta_pred_df = meta_pl.with_columns(
+            pl.Series("prediction_ratio", y_test_pred)
+        )
+
+        meta_pred_df = (
+            meta_pred_df
+            .sort(["date", "prediction_ratio"], descending=[False, True])
+            .with_columns(
+                pl.col("prediction_ratio")
+                .rank(method="random", descending=True)
+                .over("date")
+                .alias("prediction_rank")
+            ).filter(
+                pl.col("prediction_rank") <= m
+            )
+        )
+
+        return meta_pred_df
+    
     def __df_analysis(self, y_test_pred: np.array, meta_pl: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
         m = self.params['TreeTime_top_n']
         
@@ -380,6 +402,7 @@ class TreeTimeML:
         logger.info(f"Over all mean P/L Ratio: {res_pl:.4f}")
         logger.info(f"Over all mean prediction ratio: {res_mean_pred:.4f}")
 
+        logger.disabled = False
         return (
             res_pl, 
             {
@@ -390,24 +413,52 @@ class TreeTimeML:
             }
         )
 
-    def predict(self):
+    def predict(self, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> None:
+        logger.disabled = logger_disabled
+        
         # Run common pipeline in "analyze" mode
-        data = self.pipeline()
+        data = self.pipeline(lstm_model = lstm_model, lgb_model = lgb_model)
 
-        # Additional analysis with test set
-        y_test_pred: np.array = data['y_test_pred_masked']
-
-        # Top m analysis
-        m = self.params['TreeTime_top_n']
-        top_m_indices = np.flip(np.argsort(y_test_pred)[-m:])
-        selected_df = self.meta_pl_test.with_columns(pl.Series("prediction_ratio", y_test_pred))[top_m_indices]
+        if data["lgb_model"] is not None:
+            ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)
         
-        selected_pred_values_reg = y_test_pred[top_m_indices]
-        logger.info(f"Mean pred value of top {m}: {np.mean(selected_pred_values_reg)}")
+        y_test_pred_masked: np.array = data['y_test_pred_masked']
+        mask_test: np.array = data['mask_test']
 
-        with pl.Config(ascii_tables=True):
-            logger.info(f"DataFrame:\n{selected_df}")
-        
-        return (
-            np.mean(selected_pred_values_reg)
-        )
+        df_pred = self.__get_top_tickers(y_test_pred_masked, self.meta_pl_test.filter(mask_test))
+
+        for _, test_date in enumerate(self.test_dates):
+            logger.info(f"Analyzing test date: {test_date}")
+            meta_pl_test_ondate: pl.DataFrame = (
+                df_pred
+                .filter(pl.col("date") == test_date)
+                .select(
+                    ['date', 'ticker', 'Close']
+                    + ['prediction_ratio']
+                )
+            )
+            if meta_pl_test_ondate.is_empty():
+                logger.error(f"No data available for test date {test_date}.")
+                continue
+
+            with pl.Config(ascii_tables=True):
+                pl.Config.set_tbl_rows(15)
+                pl.Config.set_tbl_cols(15)
+                logger.info(f"DataFrame:\n{meta_pl_test_ondate}")
+
+            logger.info(f"  Mean Prediction Ratio: {meta_pl_test_ondate['prediction_ratio'].mean():.4f}")
+
+        res_ = df_pred.group_by("date").agg([
+            pl.col("prediction_ratio").count().alias("n_entries"),
+            pl.col("prediction_ratio").mean().alias("mean_pred_ratio"),
+            pl.col("prediction_ratio").max().alias("max_pred_ratio"),
+        ])
+
+        res_n = res_['n_entries'].sum()
+        res_max_pred = res_['max_pred_ratio'].mean()
+        res_mean_pred = res_['mean_pred_ratio'].mean()
+
+        logger.info(f"Over all number of entries: {res_n}")
+        logger.info(f"Over all mean prediction ratio: {res_mean_pred:.4f}")
+        logger.info(f"Over all max prediction ratio: {res_max_pred:.4f}")
+        logger.disabled = False
