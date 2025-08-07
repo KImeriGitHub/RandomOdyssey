@@ -33,95 +33,95 @@ logger.info(f" Params: {params}")
 ###############
 ## ANALYZING ##
 ###############
-if __name__ == "__main__":
-    # Static config
-    global_start_date = datetime.date(2014, 1, 1)     # earliest data
-    final_eval_date   = datetime.date(2025, 7, 20)    # last date you want to consider cutoffs up to
-    test_horizon_days = 7                             # days after train cutoff for test slice
-    n_cutoffs = 2
-    num_reruns = 1
-
-    # Pre-load once
-    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
-    ls = LoadupSamples(
-        train_start_date=global_start_date,
-        test_dates=test_dates,
-        group=stock_group,
-        group_type='Tree',
-        params=params,
-    )
-    ls.load_samples()
-    
-    results = []
-
-    # Generate many training cutoff dates (month-end roll). Change freq as desired.
-    cutoffs = [final_eval_date - datetime.timedelta(days=test_horizon_days+i*8 + random.randint(0, 3)) for i in range(n_cutoffs)][::-1]
-
-    starttime_all = datetime.datetime.now()
-
-    for end_train_date in cutoffs:
-        end_test_date = end_train_date + datetime.timedelta(days=test_horizon_days)
-        lsc = copy.deepcopy(ls)  # Create a copy of the LoadupSamples instance
-        # Re-split dataset for this window
-        lsc.split_dataset(
-            start_date=global_start_date,
-            last_train_date=end_train_date,
-            last_test_date=end_test_date,
-        )
-
-        res_dict = {}
-        res_dict_list = []
-        #try:
-        for _ in range(num_reruns):
-            # Train/analyze for this cutoff
-            tt = TreeTimeML(
-                train_start_date=lsc.train_start_date,
-                test_dates=lsc.test_dates,
-                group=stock_group,
-                params=params,
-                loadup=lsc
-            )
-            starttime = datetime.datetime.now()
-            _, res_dict_loop = tt.analyze()
-            elapsed = datetime.datetime.now() - starttime
-            res_dict_list.append(res_dict_loop)
-        
-        res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list if res])
-        if res_mean_pred_list.size > 0:
-            res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
-            res_dict = res_dict_list[np.argmax(res_mean_pred_list)] if res_mean_pred_list.size > 0 else None
-
-            logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
-            logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
-
-            results.append(
-                {
-                    "end_train_date": end_train_date,
-                    "end_test_date": end_test_date,
-                    "mean_return": res_dict['result'],
-                    "n_entries": res_dict['n_entries'],
-                    "analysis_time": elapsed.total_seconds(),
-                    "max_pred": res_dict['max_pred'],
-                    "mean_pred": res_dict['mean_pred'],
-                }
-            )
-        #except Exception as e:
-        #    logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
-        #    continue
-
-    total_elapsed = datetime.datetime.now() - starttime_all
-    logger.info(f"Completed {len(results)} rolling backtests in {total_elapsed}.")
-
-    # Optional: DataFrame of all results
-    results_df = pd.DataFrame(results).sort_values("end_train_date").reset_index(drop=True)
-    logger.info(results_df)
-    
-    logger.info(f"Mean return over all cutoffs: {results_df['mean_return'].mean()}")
-    logger.info(f"Max prediction over all cutoffs: {results_df['max_pred'].mean()}")
-    logger.info(f"Mean prediction over all cutoffs: {results_df['mean_pred'].mean()}")
-    logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
-    
-    results_df.to_parquet(f"analysis_df_{formatted_date}.parquet", index=False)
+#if __name__ == "__main__":
+#    # Static config
+#    global_start_date = datetime.date(2014, 1, 1)     # earliest data
+#    final_eval_date   = datetime.date(2025, 7, 20)    # last date you want to consider cutoffs up to
+#    test_horizon_days = 7                             # days after train cutoff for test slice
+#    n_cutoffs = 2
+#    num_reruns = 1
+#
+#    # Pre-load once
+#    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
+#    ls = LoadupSamples(
+#        train_start_date=global_start_date,
+#        test_dates=test_dates,
+#        group=stock_group,
+#        group_type='Tree',
+#        params=params,
+#    )
+#    ls.load_samples()
+#    
+#    results = []
+#
+#    # Generate many training cutoff dates (month-end roll). Change freq as desired.
+#    cutoffs = [final_eval_date - datetime.timedelta(days=test_horizon_days+i*8 + random.randint(0, 3)) for i in range(n_cutoffs)][::-1]
+#
+#    starttime_all = datetime.datetime.now()
+#
+#    for end_train_date in cutoffs:
+#        end_test_date = end_train_date + datetime.timedelta(days=test_horizon_days)
+#        lsc = copy.deepcopy(ls)  # Create a copy of the LoadupSamples instance
+#        # Re-split dataset for this window
+#        lsc.split_dataset(
+#            start_date=global_start_date,
+#            last_train_date=end_train_date,
+#            last_test_date=end_test_date,
+#        )
+#
+#        res_dict = {}
+#        res_dict_list = []
+#        try:
+#            for _ in range(num_reruns):
+#                # Train/analyze for this cutoff
+#                tt = TreeTimeML(
+#                    train_start_date=lsc.train_start_date,
+#                    test_dates=lsc.test_dates,
+#                    group=stock_group,
+#                    params=params,
+#                    loadup=lsc
+#                )
+#                starttime = datetime.datetime.now()
+#                _, res_dict_loop = tt.analyze()
+#                elapsed = datetime.datetime.now() - starttime
+#                res_dict_list.append(res_dict_loop)
+#
+#            res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list if res])
+#            if res_mean_pred_list.size > 0:
+#                res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
+#                res_dict = res_dict_list[np.argmax(res_mean_pred_list)] if res_mean_pred_list.size > 0 else None
+#
+#                logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
+#                logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
+#
+#                results.append(
+#                    {
+#                        "end_train_date": end_train_date,
+#                        "end_test_date": end_test_date,
+#                        "mean_return": res_dict['result'],
+#                        "n_entries": res_dict['n_entries'],
+#                        "analysis_time": elapsed.total_seconds(),
+#                        "max_pred": res_dict['max_pred'],
+#                        "mean_pred": res_dict['mean_pred'],
+#                    }
+#                )
+#        except Exception as e:
+#            logger.error(f"Error during analysis for cutoff {end_train_date}: {e}")
+#            continue
+#
+#    total_elapsed = datetime.datetime.now() - starttime_all
+#    logger.info(f"Completed {len(results)} rolling backtests in {total_elapsed}.")
+#
+#    # Optional: DataFrame of all results
+#    results_df = pd.DataFrame(results).sort_values("end_train_date").reset_index(drop=True)
+#    logger.info(results_df)
+#    
+#    logger.info(f"Mean return over all cutoffs: {results_df['mean_return'].mean()}")
+#    logger.info(f"Max prediction over all cutoffs: {results_df['max_pred'].mean()}")
+#    logger.info(f"Mean prediction over all cutoffs: {results_df['mean_pred'].mean()}")
+#    logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
+#    
+#    results_df.to_parquet(f"analysis_df_{formatted_date}.parquet", index=False)
 
 ###########################
 ## HYPERPARAMETER TUNING ##
@@ -283,37 +283,40 @@ if __name__ == "__main__":
 ################
 ## Prediction ##
 ################
-#if __name__ == "__main__":
-#    p = argparse.ArgumentParser()
-#    p.add_argument('--year',  type=int, default=2025, help='Year (default: 2025)')
-#    p.add_argument('--month', type=int, required=True, help='Month as a number (1–12)')
-#    p.add_argument('--day',   type=int, required=True, help='Day as a number (1–31)')
-#    args = p.parse_args()
-#
-#    eval_date = datetime.date(year=args.year, month=args.month, day=args.day)
-#    
-#    start_train_date = datetime.date(year=2014, month=1, day=1)
-#    formatted_date = eval_date.strftime('%d%b%Y')
-#    
-#    lagList = np.linspace(0, 180, 50).astype(int).tolist()
-#    test_dates = (
-#        [eval_date - pd.Timedelta(days=dayLag) for dayLag in range(0, params['daysAfterPrediction'] + 1)] 
-#        + [eval_date - pd.Timedelta(days=dayLag + params['daysAfterPrediction']+1) for dayLag in lagList]
-#    )
-#    test_dates = test_dates[::-1]  # Reverse the order
-#    
-#    logger.info(f"----------Last Date: {eval_date}, First Date: {min(test_dates)}, Amount: {len(test_dates)}----------")
-#    starttime = datetime.datetime.now()
-#    treetimeML = TreeTimeML(
-#        train_start_date=start_train_date,
-#        test_dates=test_dates,
-#        group=stock_group,
-#        params=params,
-#    )
-#    treetimeML.load_and_filter_sets()
-#    res_arr = treetimeML.predict()
-#    logger.info(f"Time taken for analysis: {datetime.datetime.now() - starttime}")
-#    
-#    logger.info(f"Model actual mean return over dates: {res_arr[0]}")   
-#    logger.info(f"Model predictions mean return over dates: {res_arr[1]}")
-#    logger.info("")
+if __name__ == "__main__":
+    #p = argparse.ArgumentParser()
+    #p.add_argument('--year',  type=int, default=2025, help='Year (default: 2025)')
+    #p.add_argument('--month', type=int, required=True, help='Month as a number (1-12)')
+    #p.add_argument('--day',   type=int, required=True, help='Day as a number (1-31)')
+    #args = p.parse_args()
+
+    global_start_date = datetime.date(2014, 1, 1)     # earliest data
+    #eval_date = datetime.date(year=args.year, month=args.month, day=args.day)
+    eval_date = datetime.date(2025, 8, 1) 
+    test_horizon_days = 7                             # days after train cutoff for test slice
+
+    test_dates = [eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
+
+    ls = LoadupSamples(
+        train_start_date=global_start_date,
+        test_dates=test_dates,
+        group=stock_group,
+        group_type='Tree',
+        params=params,
+    )
+    ls.load_samples()
+
+    starttime_all = datetime.datetime.now()
+
+    tt = TreeTimeML(
+        train_start_date=ls.train_start_date,
+        test_dates=ls.test_dates,
+        group=stock_group,
+        params=params,
+        loadup=ls
+    )
+                
+    tt.predict()
+
+    total_elapsed = datetime.datetime.now() - starttime_all
+    logger.info(f"Completed in {total_elapsed}.")
