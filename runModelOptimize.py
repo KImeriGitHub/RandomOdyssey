@@ -81,12 +81,12 @@ if __name__ == "__main__":
             )
             try:
                 tt = TreeTimeML(
-                        train_start_date=lsc.train_start_date,
-                        test_dates=lsc.test_dates,
-                        group=stock_group,
-                        params=params,
-                        loadup=lsc
-                    )
+                    train_start_date=lsc.train_start_date,
+                    test_dates=lsc.test_dates,
+                    group=stock_group,
+                    params=params,
+                    loadup=lsc
+                )
                 res_loop, _ = tt.analyze()
                 scores.append(np.array(res_loop))
             except:

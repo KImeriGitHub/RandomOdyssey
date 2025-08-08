@@ -63,7 +63,7 @@ if __name__ == "__main__":
         loadup=ls
     )
                 
-    tt.predict()
+    pred_meanmean, res_dict = tt.predict()
 
     total_elapsed = datetime.datetime.now() - starttime_all
     logger.info(f"Completed in {total_elapsed}.")

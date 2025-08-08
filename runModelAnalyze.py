@@ -13,7 +13,7 @@ import optuna
 from optuna.exceptions import TrialPruned
 import argparse
 
-stock_group = "group_finanTo2011"
+stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -37,9 +37,9 @@ logger.info(f" Params: {params}")
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
 final_eval_date   = datetime.date(2025, 7, 10)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 10                                    # number of cutoffs to generate
+n_cutoffs = 5                                     # number of cutoffs to generate
 num_reruns = 2                                    # number of times to rerun analysis for each cutoff  
-days_delta = 15                                    # days delta for cutoff generation
+days_delta = 15                                   # days delta for cutoff generation
 
 if __name__ == "__main__":
     # Pre-load once
@@ -86,24 +86,24 @@ if __name__ == "__main__":
                 res_loop, res_dict_loop = tt.analyze()
                 elapsed = datetime.datetime.now() - starttime
                 res_dict_list.append(res_dict_loop)
-                    
-            res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
-            if res_mean_pred_list.size > 0:
-                res_mean_pred_list = np.array([res['mean_pred'] for res in res_dict_list])
-                res_dict = res_dict_list[np.argmax(res_mean_pred_list)] if res_mean_pred_list.size > 0 else None
+            
+            pred_meanmean_list = np.array([res['pred_meanmean'] for res in res_dict_list])
+            if pred_meanmean_list.size > 0:
+                res_dict = res_dict_list[np.argmax(pred_meanmean_list)] if pred_meanmean_list.size > 0 else None
 
-                logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['result']}")
+                logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['res_meanmean']}")
                 logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
 
                 results.append(
                     {
                         "end_train_date": end_train_date,
                         "end_test_date": end_test_date,
-                        "mean_return": res_dict['result'],
-                        "n_entries": res_dict['n_entries'],
                         "analysis_time": elapsed.total_seconds(),
-                        "max_pred": res_dict['max_pred'],
-                        "mean_pred": res_dict['mean_pred'],
+                        "res_meanmean": res_dict['res_meanmean'],
+                        "res_toplast": res_dict['res_toplast'],
+                        "n_entries": res_dict['n_entries'],
+                        "pred_toplast": res_dict['pred_toplast'],
+                        "pred_meanmean": res_dict['pred_meanmean'],
                     }
                 )
         except Exception as e:
@@ -115,10 +115,25 @@ if __name__ == "__main__":
 
     results_df = pd.DataFrame(results).sort_values("end_train_date").reset_index(drop=True)
     logger.info(results_df)
-    
-    logger.info(f"Mean return over all cutoffs: {results_df['mean_return'].mean()}")
-    logger.info(f"Max prediction over all cutoffs: {results_df['max_pred'].mean()}")
-    logger.info(f"Mean prediction over all cutoffs: {results_df['mean_pred'].mean()}")
+
+    logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
+    logger.info(f"Mean over toplast returns over all cutoffs: {results_df['res_toplast'].mean()}")
+    logger.info(f"Mean over meanmean predictions over all cutoffs: {results_df['pred_meanmean'].mean()}")
+    logger.info(f"Mean over toplast predictions over all cutoffs: {results_df['pred_toplast'].mean()}")
     logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
-    
+
+    if len(results_df) > 3:
+        logger.info(
+            "Mean over meanmean returns filtered by 0.5 quantile prediction meanmean: "
+            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanmean'].mean()}"
+        )
+        logger.info(
+            f"Mean over toplast returns filtered by 0.5 quantile prediction toplast: "
+            f"{results_df.loc[results_df['pred_toplast'] > results_df['pred_toplast'].quantile(0.5), 'res_toplast'].mean()}"
+        )
+        logger.info(
+            f"Mean over toplast returns filtered by 0.5 quantile prediction meanmean: "
+            f"{results_df.loc[results_df['pred_toplast'] > results_df['pred_toplast'].quantile(0.5), 'res_toplast'].mean()}"
+        )
+
     results_df.to_parquet(f"analysis_df_{formatted_date}.parquet", index=False)

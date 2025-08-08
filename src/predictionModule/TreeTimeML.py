@@ -198,7 +198,7 @@ class TreeTimeML:
             'mask_test': mask_test,
         }
         
-    def __establish_weights(self) -> np.array:
+    def __establish_weights(self) -> np.ndarray:
         nSamples = self.train_Xtree.shape[0]
         mask_sparsing = np.random.rand(nSamples) <= 1e4/nSamples # for speedup
         
@@ -227,7 +227,7 @@ class TreeTimeML:
         
         return tree_weights
 
-    def __establish_matching_featureindices(self, ksDist) -> np.array:
+    def __establish_matching_featureindices(self, ksDist) -> np.ndarray:
         assert ksDist.shape[0] == self.featureTreeNames.shape[0], "Mismatch in matching feature function."
         
         nFeat = self.featureTreeNames.shape[0]
@@ -266,7 +266,7 @@ class TreeTimeML:
             
         return top_idces
     
-    def __get_top_tickers(self, y_test_pred: np.array, meta_pl: pl.DataFrame) -> pl.DataFrame:
+    def __get_top_tickers(self, y_test_pred: np.ndarray, meta_pl: pl.DataFrame) -> pl.DataFrame:
         m = self.params['TreeTime_top_n']
         
         meta_pred_df = meta_pl.with_columns(
@@ -288,10 +288,10 @@ class TreeTimeML:
 
         return meta_pred_df
     
-    def __df_analysis(self, y_test_pred: np.array, meta_pl: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+    def __df_analysis(self, y_test_pred: np.ndarray, meta_pl: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
         m = self.params['TreeTime_top_n']
         
-        meta_pred_df = meta_pl.with_columns(
+        meta_pl = meta_pl.with_columns(
             pl.Series("prediction_ratio", y_test_pred)
         )
         
@@ -313,12 +313,12 @@ class TreeTimeML:
             (pl.col('result_close')/pl.col('Close')).alias("result_ratio")
         )"""
         
-        meta_pred_df = meta_pred_df.with_columns(
+        meta_pl = meta_pl.with_columns(
             (pl.col("target_ratio")).alias("result_ratio")
         )
         
-        meta_pred_df = (
-            meta_pred_df
+        meta_pl_filtered = (
+            meta_pl
             .sort(["date", "prediction_ratio"], descending=[False, True])
             .with_columns(
                 pl.col("prediction_ratio")
@@ -330,8 +330,8 @@ class TreeTimeML:
             )
         )
         
-        meta_pred_df_perdate = (
-            meta_pred_df.with_columns(
+        meta_pl_filtered_perdate = (
+            meta_pl_filtered.with_columns(
                 (pl.col("prediction_ratio") - pl.col("target_ratio")).abs().alias("error")
             ).group_by("date").agg([
                 pl.col("error").mean().alias("mean_error"),
@@ -341,9 +341,10 @@ class TreeTimeML:
             ])
         )
         
-        return meta_pred_df, meta_pred_df_perdate
+        return meta_pl_filtered, meta_pl_filtered_perdate
     
     def analyze(self, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> tuple[float, dict]:
+        logger_config = logger.disabled
         logger.disabled = logger_disabled
         
         # Run common pipeline in "analyze" mode
@@ -353,67 +354,85 @@ class TreeTimeML:
             ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)
         
         # Additional analysis with test set
-        y_test_pred_masked: np.array = data['y_test_pred_masked']
-        mask_test: np.array = data['mask_test']
+        y_test_pred_masked: np.ndarray = data['y_test_pred_masked']
+        mask_test: np.ndarray = data['mask_test']
         
-        meta_pred_df, meta_pred_df_perdate = self.__df_analysis(y_test_pred_masked, self.meta_pl_test.filter(mask_test))
+        res_df, res_df_perdate_err = (
+            self.__df_analysis(
+                y_test_pred_masked, 
+                self.meta_pl_test.filter(pl.Series(mask_test))
+            )
+        )
         
         logger.info("Analyzing test set predictions:")
         logger.info(f"  Number of test dates: {len(self.test_dates)}")
-        logger.info(f"  Ratio of test dates with choices: {meta_pred_df_perdate.shape[0] / len(self.test_dates):.4f}")
-        logger.info(f"  Mean error per date {meta_pred_df_perdate['mean_error'].mean():.4f}")
-        logger.info(f"  Mean RMSE error per date {meta_pred_df_perdate['rmse_error'].mean():.4f}")
+        logger.info(f"  Ratio of test dates with choices: {res_df_perdate_err.shape[0] / len(self.test_dates):.4f}")
+        logger.info(f"  Mean error per date {res_df_perdate_err['mean_error'].mean():.4f}")
+        logger.info(f"  Mean RMSE error per date {res_df_perdate_err['rmse_error'].mean():.4f}")
         
-        for _, test_date in enumerate(self.test_dates):
+        for test_date in self.test_dates:
             logger.info(f"Analyzing test date: {test_date}")
-            meta_pl_test_ondate: pl.DataFrame = (
-                meta_pred_df
+
+            # Filter meta dataframe on test date
+            res_df_ondate: pl.DataFrame = (
+                res_df
                 .filter(pl.col("date") == test_date)
                 .select(
                     ['date', 'ticker', 'Close']
-                    +[f"target_close_at{i}" for i in range(1, self.idxDaysAfter + 1)]
-                    +['prediction_ratio']
-                    +['result_ratio']
+                    + [f"target_close_at{i}" for i in range(1, self.idxDaysAfter + 1)]
+                    + ['prediction_ratio']
+                    + ['result_ratio']
                 )
             )
-            if meta_pl_test_ondate.is_empty():
+            if res_df_ondate.is_empty():
                 logger.error(f"No data available for test date {test_date}.")
                 continue
 
-            with pl.Config(ascii_tables=True):
-                pl.Config.set_tbl_rows(15)
-                pl.Config.set_tbl_cols(15)
-                logger.info(f"DataFrame:\n{meta_pl_test_ondate}")
+            # Print result on test date
+            with pl.Config(ascii_tables=True, tbl_rows=15, tbl_cols=15):
+                logger.info(f"DataFrame:\n{res_df_ondate}")
                 
-            logger.info(f"  P/L Ratio: {meta_pl_test_ondate['result_ratio'].mean():.4f}")
-            logger.info(f"  Mean Prediction Ratio: {meta_pl_test_ondate['prediction_ratio'].mean():.4f}")
-                
-        res_ = meta_pred_df.group_by("date").agg([
-            pl.col("result_ratio").mean().alias("mean_result_ratio"),
-            pl.col("result_ratio").count().alias("n_entries"),
-            pl.col("prediction_ratio").max().alias("max_pred_ratio"),
-            pl.col("prediction_ratio").mean().alias("mean_pred_ratio"),
-        ])
+            logger.info(f"  P/L Ratio: {res_df_ondate['result_ratio'].mean():.4f}")
+            logger.info(f"  Mean Prediction Ratio: {res_df_ondate['prediction_ratio'].mean():.4f}")
         
-        res_pl = res_['mean_result_ratio'].mean()
-        res_n = res_['n_entries'].sum()
-        res_max_pred = res_['max_pred_ratio'].mean()
-        res_mean_pred = res_['mean_pred_ratio'].mean()
-        logger.info(f"Over all mean P/L Ratio: {res_pl:.4f}")
-        logger.info(f"Over all mean prediction ratio: {res_mean_pred:.4f}")
+        res_df_perdate = res_df.group_by("date").agg([
+            pl.col("result_ratio").mean().alias("mean_res"),
+            pl.col("result_ratio").first().alias("top_res"),
+            pl.col("result_ratio").count().alias("n_entries"),
+            pl.col("prediction_ratio").max().alias("max_pred"),  # this is also .first()
+            pl.col("prediction_ratio").mean().alias("mean_pred"),
+        ])
 
-        logger.disabled = False
+        res_meanmean = res_df_perdate['mean_res'].mean()
+        res_topmean = res_df_perdate['top_res'].mean()
+        res_toplast = res_df_perdate['top_res'].last()
+        res_sum_n = res_df_perdate['n_entries'].sum()
+        pred_meanmean = res_df_perdate['mean_pred'].mean()
+        pred_toplast = res_df_perdate['max_pred'].last()
+        logger.info(f"Over all mean P/L Ratio: {res_meanmean:.4f}")
+        logger.info(f"Over all top mean P/L Ratio: {res_topmean:.4f}")
+        logger.info(f"Over all top last P/L Ratio: {res_toplast:.4f}")
+        logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
+        logger.info(f"Over all last prediction ratio: {pred_toplast:.4f}")
+        logger.info(f"Over all number of entries: {res_sum_n}")
+
+        logger.disabled = logger_config
         return (
-            res_pl, 
+            res_meanmean, 
             {
-                'result': res_pl, 
-                "n_entries": res_n, 
-                "max_pred": res_max_pred, 
-                "mean_pred": res_mean_pred
+                'res_meanmean': res_meanmean, 
+                'res_topmean': res_topmean,
+                'res_toplast': res_toplast,
+                "n_entries": res_sum_n, 
+                "pred_toplast": pred_toplast, 
+                "pred_meanmean": pred_meanmean,
+                "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio', 'target_ratio']),
+                "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred', 'top_res', 'mean_res'])
             }
         )
 
-    def predict(self, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> None:
+    def predict(self, lstm_model = None, lgb_model = None, logger_disabled: bool = False) -> tuple[float, dict]:
+        logger_config = logger.disabled
         logger.disabled = logger_disabled
         
         # Run common pipeline in "analyze" mode
@@ -422,43 +441,54 @@ class TreeTimeML:
         if data["lgb_model"] is not None:
             ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)
         
-        y_test_pred_masked: np.array = data['y_test_pred_masked']
-        mask_test: np.array = data['mask_test']
+        y_test_pred_masked: np.ndarray = data['y_test_pred_masked']
+        mask_test: np.ndarray = data['mask_test']
 
-        df_pred = self.__get_top_tickers(y_test_pred_masked, self.meta_pl_test.filter(mask_test))
+        res_df = self.__get_top_tickers(y_test_pred_masked, self.meta_pl_test.filter(mask_test))
 
-        for _, test_date in enumerate(self.test_dates):
+        if res_df.is_empty():
+            raise ValueError("No valid predictions sampled.")
+
+        # Filter meta dataframe on test date
+        for test_date in self.test_dates:
             logger.info(f"Analyzing test date: {test_date}")
-            meta_pl_test_ondate: pl.DataFrame = (
-                df_pred
+            res_df_ondate: pl.DataFrame = (
+                res_df
                 .filter(pl.col("date") == test_date)
                 .select(
                     ['date', 'ticker', 'Close']
                     + ['prediction_ratio']
                 )
             )
-            if meta_pl_test_ondate.is_empty():
+            if res_df_ondate.is_empty():
                 logger.error(f"No data available for test date {test_date}.")
                 continue
 
-            with pl.Config(ascii_tables=True):
-                pl.Config.set_tbl_rows(15)
-                pl.Config.set_tbl_cols(15)
-                logger.info(f"DataFrame:\n{meta_pl_test_ondate}")
+            # Print result on test date
+            with pl.Config(ascii_tables=True, tbl_rows=15, tbl_cols=15):
+                logger.info(f"DataFrame:\n{res_df_ondate}")
 
-            logger.info(f"  Mean Prediction Ratio: {meta_pl_test_ondate['prediction_ratio'].mean():.4f}")
+            logger.info(f"  Mean Prediction Ratio: {res_df_ondate['prediction_ratio'].mean():.4f}")
 
-        res_ = df_pred.group_by("date").agg([
+        res_df_perdate = res_df.group_by("date").agg([
             pl.col("prediction_ratio").count().alias("n_entries"),
-            pl.col("prediction_ratio").mean().alias("mean_pred_ratio"),
-            pl.col("prediction_ratio").max().alias("max_pred_ratio"),
+            pl.col("prediction_ratio").mean().alias("mean_pred"),
+            pl.col("prediction_ratio").max().alias("max_pred"),
         ])
 
-        res_n = res_['n_entries'].sum()
-        res_max_pred = res_['max_pred_ratio'].mean()
-        res_mean_pred = res_['mean_pred_ratio'].mean()
+        res_n = res_df_perdate['n_entries'].sum()
+        pred_toplast = res_df_perdate['max_pred'].last()
+        pred_meanmean = res_df_perdate['mean_pred'].mean()
 
         logger.info(f"Over all number of entries: {res_n}")
-        logger.info(f"Over all mean prediction ratio: {res_mean_pred:.4f}")
-        logger.info(f"Over all max prediction ratio: {res_max_pred:.4f}")
-        logger.disabled = False
+        logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
+        logger.info(f"Over all max prediction ratio: {pred_toplast:.4f}")
+        logger.disabled = logger_config
+
+        return pred_meanmean, {
+            "n_entries": res_n,
+            "pred_toplast": pred_toplast,
+            "pred_meanmean": pred_meanmean,
+            "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio']),
+            "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred']),
+        }
