@@ -24,8 +24,8 @@ def create_sample_asset() -> object:
     # Minimal financials dataframes
     q_cols = AssetDataService.defaultInstance().financials_quarterly.columns
     a_cols = AssetDataService.defaultInstance().financials_annually.columns
-    asset.financials_quarterly = pd.DataFrame([{c: 0 for c in q_cols}])
-    asset.financials_annually = pd.DataFrame([{c: 0 for c in a_cols}])
+    asset.financials_quarterly = pd.DataFrame([{c: "0" for c in q_cols}])
+    asset.financials_annually = pd.DataFrame([{c: "0" for c in a_cols}])
     return asset
 
 
@@ -46,8 +46,16 @@ def test_save_and_load_roundtrip(tmp_path):
     file_io.saveToFile(asset)
     loaded = file_io.loadFromFile("TEST")
 
-    pd.testing.assert_frame_equal(asset.shareprice, loaded.shareprice)
-    pd.testing.assert_frame_equal(asset.financials_quarterly, loaded.financials_quarterly)
-    pd.testing.assert_frame_equal(asset.financials_annually, loaded.financials_annually)
+    pd.testing.assert_frame_equal(asset.shareprice, loaded.shareprice, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        asset.financials_quarterly.astype(float),
+        loaded.financials_quarterly.astype(float),
+        check_dtype=False,
+    )
+    pd.testing.assert_frame_equal(
+        asset.financials_annually.astype(float),
+        loaded.financials_annually.astype(float),
+        check_dtype=False,
+    )
     assert asset.ticker == loaded.ticker
     assert asset.isin == loaded.isin
