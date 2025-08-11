@@ -13,7 +13,7 @@ import optuna
 from optuna.exceptions import TrialPruned
 import argparse
 
-stock_group = "group_debug"
+stock_group = "group_finanTo2011"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -35,11 +35,11 @@ logger.info(f" Params: {params}")
 ###############
 # Static config
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
-final_eval_date   = datetime.date(2025, 7, 10)    # last date you want to consider cutoffs up to
+final_eval_date   = datetime.date(2025, 8, 1)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 5                                     # number of cutoffs to generate
-num_reruns = 2                                    # number of times to rerun analysis for each cutoff  
-days_delta = 15                                   # days delta for cutoff generation
+n_cutoffs = 80                                     # number of cutoffs to generate
+num_reruns = 2                                     # number of times to rerun analysis for each cutoff
+days_delta = 7                                   # days delta for cutoff generation
 
 if __name__ == "__main__":
     # Pre-load once
@@ -101,9 +101,11 @@ if __name__ == "__main__":
                         "analysis_time": elapsed.total_seconds(),
                         "res_meanmean": res_dict['res_meanmean'],
                         "res_toplast": res_dict['res_toplast'],
+                        "res_meanlast": res_dict['res_meanlast'],
                         "n_entries": res_dict['n_entries'],
                         "pred_toplast": res_dict['pred_toplast'],
                         "pred_meanmean": res_dict['pred_meanmean'],
+                        "pred_meanlast": res_dict['pred_meanlast'],
                     }
                 )
         except Exception as e:
@@ -118,8 +120,10 @@ if __name__ == "__main__":
 
     logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
     logger.info(f"Mean over toplast returns over all cutoffs: {results_df['res_toplast'].mean()}")
+    logger.info(f"Mean over meanlast returns over all cutoffs: {results_df['res_meanlast'].mean()}")
     logger.info(f"Mean over meanmean predictions over all cutoffs: {results_df['pred_meanmean'].mean()}")
     logger.info(f"Mean over toplast predictions over all cutoffs: {results_df['pred_toplast'].mean()}")
+    logger.info(f"Mean over meanlast predictions over all cutoffs: {results_df['pred_meanlast'].mean()}")
     logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
 
     if len(results_df) > 3:
@@ -128,12 +132,20 @@ if __name__ == "__main__":
             f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanmean'].mean()}"
         )
         logger.info(
+            "Mean over meanlast returns filtered by 0.5 quantile prediction meanmean: "
+            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanlast'].mean()}"
+        )
+        logger.info(
+            f"Mean over meanlast returns filtered by 0.5 quantile prediction meanlast: "
+            f"{results_df.loc[results_df['pred_meanlast'] > results_df['pred_meanlast'].quantile(0.5), 'res_meanlast'].mean()}"
+        )
+        logger.info(
             f"Mean over toplast returns filtered by 0.5 quantile prediction toplast: "
             f"{results_df.loc[results_df['pred_toplast'] > results_df['pred_toplast'].quantile(0.5), 'res_toplast'].mean()}"
         )
         logger.info(
             f"Mean over toplast returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_toplast'] > results_df['pred_toplast'].quantile(0.5), 'res_toplast'].mean()}"
+            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_toplast'].mean()}"
         )
 
     results_df.to_parquet(f"analysis_df_{formatted_date}.parquet", index=False)

@@ -404,16 +404,20 @@ class TreeTimeML:
         ])
 
         res_meanmean = res_df_perdate['mean_res'].mean()
+        res_meanlast = res_df_perdate['mean_res'].last()
         res_topmean = res_df_perdate['top_res'].mean()
         res_toplast = res_df_perdate['top_res'].last()
         res_sum_n = res_df_perdate['n_entries'].sum()
         pred_meanmean = res_df_perdate['mean_pred'].mean()
+        pred_meanlast = res_df_perdate['mean_pred'].last()
         pred_toplast = res_df_perdate['max_pred'].last()
         logger.info(f"Over all mean P/L Ratio: {res_meanmean:.4f}")
         logger.info(f"Over all top mean P/L Ratio: {res_topmean:.4f}")
         logger.info(f"Over all top last P/L Ratio: {res_toplast:.4f}")
+        logger.info(f"Over all mean last P/L Ratio: {res_meanlast:.4f}")
         logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
-        logger.info(f"Over all last prediction ratio: {pred_toplast:.4f}")
+        logger.info(f"Over all top last prediction ratio: {pred_toplast:.4f}")
+        logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
         logger.info(f"Over all number of entries: {res_sum_n}")
 
         logger.disabled = logger_config
@@ -423,9 +427,11 @@ class TreeTimeML:
                 'res_meanmean': res_meanmean, 
                 'res_topmean': res_topmean,
                 'res_toplast': res_toplast,
+                'res_meanlast': res_meanlast,
                 "n_entries": res_sum_n, 
                 "pred_toplast": pred_toplast, 
                 "pred_meanmean": pred_meanmean,
+                "pred_meanlast": pred_meanlast,
                 "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio', 'target_ratio']),
                 "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred', 'top_res', 'mean_res'])
             }
@@ -479,16 +485,19 @@ class TreeTimeML:
         res_n = res_df_perdate['n_entries'].sum()
         pred_toplast = res_df_perdate['max_pred'].last()
         pred_meanmean = res_df_perdate['mean_pred'].mean()
+        pred_meanlast = res_df_perdate['mean_pred'].last()
 
         logger.info(f"Over all number of entries: {res_n}")
         logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
         logger.info(f"Over all max prediction ratio: {pred_toplast:.4f}")
+        logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
         logger.disabled = logger_config
 
         return pred_meanmean, {
             "n_entries": res_n,
             "pred_toplast": pred_toplast,
             "pred_meanmean": pred_meanmean,
+            "pred_meanlast": pred_meanlast,
             "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio']),
             "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred']),
         }
