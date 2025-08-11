@@ -12,6 +12,9 @@ secrets/*
 
 tools/*
 
+outputs/*
+!outputs/.gitignore
+
 src/stockGroups/bin/*
 !src/stockGroups/bin/__init__.py
 
