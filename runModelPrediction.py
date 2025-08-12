@@ -3,6 +3,7 @@ from src.predictionModule.LoadupSamples import LoadupSamples
 
 import treetimeParams
 import datetime
+import polars as pl
 import argparse
 
 stock_group = "group_finanTo2011"
@@ -27,7 +28,7 @@ logger.info(f" Params: {params}")
 ###############
 # Static config
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
-eval_date   = datetime.date(2025, 7, 25)    # last date you want to consider cutoffs up to
+eval_date   = datetime.date(2025, 8, 11)          # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
 n_cutoffs = 100                                    # number of cutoffs to generate
 num_reruns = 2                                    # number of times to rerun analysis for each cutoff  
@@ -64,6 +65,9 @@ if __name__ == "__main__":
     )
                 
     pred_meanmean, res_dict = tt.predict()
+
+    df_pred: pl.DataFrame = res_dict['df_pred_res']
+    df_pred.write_parquet(f'outputs/output_prediction_TreeTime_{stock_group_short}_{formatted_date}.parquet')
 
     total_elapsed = datetime.datetime.now() - starttime_all
     logger.info(f"Completed in {total_elapsed}.")
