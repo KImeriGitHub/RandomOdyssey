@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
+import polars as pl
 from collections import Counter
 from typing import Optional
 from sklearn.metrics import accuracy_score, log_loss, confusion_matrix
@@ -102,75 +103,152 @@ class ModelAnalyzer:
         top_features['Importance'] = top_features['Importance'].apply(lambda x: f"{x:.4f}")
         logger.info(f"Top {top_n} Feature Importances:")
         logger.info(top_features.to_string())
+        
+    @staticmethod
+    def log_test_result_perdate(test_df: pl.DataFrame, test_dates: list[str], last_col: str | None = None):
+        """Log test results for each date in the test_dates list.
 
+        The dataframe needs the columns ['date', 'ticker', 'Close', 'prediction_ratio', last_col].
+        Is last_col is None we assume it is for prediction.
 
-    def plot_per_class_accuracy(self, y_val: np.ndarray, y_pred: np.ndarray, test_acc: float, test_loss: float):
+        Args:
+            test_df (pl.DataFrame): The DataFrame containing test results.
+            test_dates (list[str]): The list of test dates to analyze.
         """
-        Calculate and plot per-class accuracy.
+        if last_col not in test_df.columns:
+            logger.warning(f"Last column '{last_col}' not found in test_df.")
+            last_col = None
 
-        Parameters:
-            y_val (np.ndarray): True labels for validation set.
-            y_pred (np.ndarray): Predicted labels for validation set.
-            test_acc (float): Overall test accuracy.
-            test_loss (float): Overall test log loss.
-        """
-        most_common_class = Counter(y_val).most_common(1)[0][0]
-        print(f"Most common class in validation set: {most_common_class}")
+        for test_date in test_dates:
+            logger.info(f"Analyzing test date: {test_date}")
 
-        # Calculate per-class accuracy
-        classes = np.unique(y_val)
-        per_class_accuracy = {}
-        for cls in classes:
-            idx = (y_val == cls)
-            if np.sum(idx) > 0:
-                per_class_accuracy[cls] = accuracy_score(y_val[idx], y_pred[idx])
-            else:
-                per_class_accuracy[cls] = np.nan  # Handle classes with no samples
+            # Filter meta dataframe on test date
+            select_cols = ['date', 'ticker', 'Close','prediction_ratio']
+            select_cols = select_cols + [last_col] if last_col else select_cols
+            res_df_ondate: pl.DataFrame = (
+                test_df
+                .filter(pl.col("date") == test_date)
+                .select(select_cols)
+            )
+            if res_df_ondate.is_empty():
+                logger.error(f"No data available for test date {test_date}.")
+                continue
 
-        # Plot per-class accuracy
-        plt.figure(figsize=(10, 6))
-        plt.bar(per_class_accuracy.keys(), per_class_accuracy.values(), color='skyblue')
-        plt.xlabel('Classes')
-        plt.ylabel('Accuracy')
-        plt.title('Per-Class Accuracy')
-        plt.ylim(0, 1)
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
+            # Print result on test date
+            with pl.Config(ascii_tables=True):
+                pl.Config.set_tbl_rows(20)
+                pl.Config.set_tbl_cols(20)
+                logger.info(f"DataFrame:\n{res_df_ondate}")
+                
+            if last_col is not None:
+                logger.info(f"  P/L Ratio: {res_df_ondate[last_col].mean():.4f}")
+            logger.info(f"  Mean Prediction Ratio: {res_df_ondate['prediction_ratio'].mean():.4f}")
+            
+    @staticmethod
+    def log_test_result_overall(test_df: pl.DataFrame, last_col: str | None = None):
+        agg_exprs = [
+            pl.col("prediction_ratio").max().alias("max_pred"),  # this is also .first()
+            pl.col("prediction_ratio").mean().alias("mean_pred"),
+        ]
+        if last_col is not None:
+            agg_exprs.extend([
+                pl.col(last_col).mean().alias("mean_res"),
+                pl.col(last_col).first().alias("top_res"),
+                pl.col(last_col).count().alias("n_entries")
+            ])
+        test_df_perdate = test_df.group_by("date").agg(agg_exprs)
 
-        # Print overall metrics
-        print(f'\nTest Accuracy: {test_acc:.4f}')
-        print(f'Test Log Loss: {test_loss:.4f}')
+        pred_meanmean = test_df_perdate['mean_pred'].mean()
+        pred_meanlast = test_df_perdate['mean_pred'].last()
+        pred_toplast = test_df_perdate['max_pred'].last()
+        logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
+        logger.info(f"Over all top last prediction ratio: {pred_toplast:.4f}")
+        logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
+        
+        if last_col is not None:
+            res_meanmean = test_df_perdate['mean_res'].mean()
+            res_meanlast = test_df_perdate['mean_res'].last()
+            res_topmean = test_df_perdate['top_res'].mean()
+            res_toplast = test_df_perdate['top_res'].last()
+            res_sum_n = test_df_perdate['n_entries'].sum()
+            
+            logger.info(f"Over all mean P/L Ratio: {res_meanmean:.4f}")
+            logger.info(f"Over all top mean P/L Ratio: {res_topmean:.4f}")
+            logger.info(f"Over all top last P/L Ratio: {res_toplast:.4f}")
+            logger.info(f"Over all mean last P/L Ratio: {res_meanlast:.4f}")
+            logger.info(f"Over all number of entries: {res_sum_n}")
+            
+    @staticmethod
+    def log_test_result_multiple(df_list: list[pl.DataFrame], last_col: str) -> pl.DataFrame:
+        results = []
+        for df in df_list:
+            end_train_date = df.select('date').min().item()
+            end_test_date = df.select('date').max().item()
+            df_perdate = df.group_by("date").agg([
+                pl.col(last_col).mean().alias("mean_res"),
+                pl.col(last_col).first().alias("top_res"),
+                pl.col(last_col).count().alias("n_entries"),
+                pl.col("prediction_ratio").max().alias("max_pred"),
+                pl.col("prediction_ratio").mean().alias("mean_pred"),
+            ])
+            results.append(
+                {
+                    "end_train_date": end_train_date,
+                    "end_test_date": end_test_date,
+                    "res_meanmean": df_perdate['mean_res'].mean(),
+                    "res_toplast": df_perdate['top_res'].last(),
+                    "res_meanlast": df_perdate['mean_res'].last(),
+                    "n_entries": df_perdate['n_entries'].sum(),
+                    "pred_toplast": df_perdate['max_pred'].last(),
+                    "pred_meanmean": df_perdate['mean_pred'].mean(),
+                    "pred_meanlast": df_perdate['mean_pred'].last(),
+                }
+            )
 
-    def print_model_results(pred: list, ret: list):
-        logger.info(f"Resulting returns: {ret}")
-        logger.info(f"Resulting returns mean: {np.mean([x for x in ret if x is not None])}")
-        logger.info(f"Resulting returns variance: {np.var([x for x in ret if x is not None])}")
-        logger.info("")
-        logger.info(f"Resulting predictions: {pred}")
-        logger.info(f"Resulting predictions mean: {np.mean([x for x in pred if x is not None])}")
-        logger.info(f"Resulting predictions variance: {np.var([x for x in pred if x is not None])}")
-        logger.info("")
+        results_df = pl.DataFrame(results).sort("end_train_date")
+        with pl.Config(tbl_rows=-1, tbl_cols=-1):
+            logger.info(results_df)
 
-        logger.info("Statictical Analysis res_pred to res_return")
-        # print statistic like regression for res_pred to res_return
-        # Calculate the correlation coefficient and the p-value
-        correlation, p_value = stats.pearsonr(pred, ret)
+        logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
+        logger.info(f"Mean over toplast returns over all cutoffs: {results_df['res_toplast'].mean()}")
+        logger.info(f"Mean over meanlast returns over all cutoffs: {results_df['res_meanlast'].mean()}")
+        logger.info(f"Mean over meanmean predictions over all cutoffs: {results_df['pred_meanmean'].mean()}")
+        logger.info(f"Mean over toplast predictions over all cutoffs: {results_df['pred_toplast'].mean()}")
+        logger.info(f"Mean over meanlast predictions over all cutoffs: {results_df['pred_meanlast'].mean()}")
+        logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
 
-        # Log the results
-        logger.info(f"Correlation coefficient: {correlation}")
+        if len(results_df) > 3:
+            # Quantiles
+            for q in [0.1, 0.25, 0.5, 0.75, 0.9]:
+                pred_meanmean = np.quantile(results_df['pred_meanmean'].to_numpy(), q)
+                pred_meanlast = np.quantile(results_df['pred_meanlast'].to_numpy(), q)
+                pred_toplast = np.quantile(results_df['pred_toplast'].to_numpy(), q)
+                logger.info(f"Quantile {q:.1f}:")
+                logger.info(f"  Pred meanmean: {pred_meanmean:.4f}")
+                logger.info(f"  Pred meanlast: {pred_meanlast:.4f}")
+                logger.info(f"  Pred toplast: {pred_toplast:.4f}")
 
-        # Perform a linear regression
-        slope, intercept, r_value, p_value, std_err = stats.linregress(pred, ret)
 
-        # Log the regression results
-        logger.info(f"Linear regression slope: {slope}")
-        logger.info(f"Linear regression intercept: {intercept}")
-        logger.info(f"R-squared: {r_value**2}")
-        logger.info(f"P-value: {p_value}")
-        logger.info(f"Standard error: {std_err}")
+            # Conditional Means
+            logger.info(
+                "Mean over meanmean returns filtered by 0.5 quantile prediction meanmean: "
+                f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5), 'res_meanmean').mean()}"
+            )
+            logger.info(
+                "Mean over meanlast returns filtered by 0.5 quantile prediction meanmean: "
+                f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5), 'res_meanlast').mean()}"
+            )
+            logger.info(
+                f"Mean over meanlast returns filtered by 0.5 quantile prediction meanlast: "
+                f"{results_df.filter(pl.col('pred_meanlast') > pl.col('pred_meanlast').quantile(0.5), 'res_meanlast').mean()}"
+            )
+            logger.info(
+                f"Mean over toplast returns filtered by 0.5 quantile prediction toplast: "
+                f"{results_df.filter(pl.col('pred_toplast') > pl.col('pred_toplast').quantile(0.5), 'res_toplast').mean()}"
+            )
+            logger.info(
+                f"Mean over toplast returns filtered by 0.5 quantile prediction meanmean: "
+                f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5), 'res_toplast').mean()}"
+            )
 
-        # Variance of the residuals
-        residuals = np.array(ret) - (slope * np.array(pred) + intercept)
-        residuals_variance = np.var(residuals)
-        logger.info(f"Variance of the residuals: {residuals_variance}") 
+        return results_df

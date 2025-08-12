@@ -1,4 +1,5 @@
 from src.predictionModule.LoadupSamples import LoadupSamples
+from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 import treetimeParams
 
 import pandas as pd
@@ -91,74 +92,21 @@ if __name__ == "__main__":
         logger.info(f"Analyzing table {i+1}/{len(tables_joined)}")
         logger.info(f"Date: {meta_pred['date'].item(i)}, Time: {meta_pred['time'].item(i)}")
 
-        jTable_perdate = jTable.group_by("date").agg([
-            pl.col("target_ratio").mean().alias("mean_res"),
-            pl.col("target_ratio").first().alias("top_res"),
-            pl.col("target_ratio").count().alias("n_entries"),
-            pl.col("prediction_ratio").max().alias("max_pred"),
-            pl.col("prediction_ratio").mean().alias("mean_pred"),
-        ])
-
-        res_meanmean = jTable_perdate['mean_res'].mean()
-        res_meanlast = jTable_perdate['mean_res'].last()
-        res_topmean = jTable_perdate['top_res'].mean()
-        res_toplast = jTable_perdate['top_res'].last()
-        res_sum_n = jTable_perdate['n_entries'].sum()
-        pred_meanmean = jTable_perdate['mean_pred'].mean()
-        pred_meanlast = jTable_perdate['mean_pred'].last()
-        pred_toplast = jTable_perdate['max_pred'].last()
-        logger.info(f"  Overall mean P/L Ratio: {res_meanmean:.4f}")
-        logger.info(f"  Overall top mean P/L Ratio: {res_topmean:.4f}")
-        logger.info(f"  Overall top last P/L Ratio: {res_toplast:.4f}")
-        logger.info(f"  Overall mean last P/L Ratio: {res_meanlast:.4f}")
-        logger.info(f"  Overall mean prediction ratio: {pred_meanmean:.4f}")
-        logger.info(f"  Overall top last prediction ratio: {pred_toplast:.4f}")
-        logger.info(f"  Overall last mean prediction ratio: {pred_meanlast:.4f}")
-        logger.info(f"  Overall number of entries: {res_sum_n}")
+        ModelAnalyzer.log_test_result_overall(jTable, last_col="target_ratio")
 
         results.append(
             {
                 "end_train_date": jTable.select('date').min().item(),
                 "end_test_date": jTable.select('date').max().item(),
-                "res_meanmean": res_meanmean,
-                "res_toplast": res_toplast,
-                "res_meanlast": res_meanlast,
-                "n_entries": res_sum_n,
-                "pred_toplast": pred_toplast,
-                "pred_meanmean": pred_meanmean,
-                "pred_meanlast": pred_meanlast,
+                "table": jTable
             }
         )
+        
+    if len(results) > 0:
+        ModelAnalyzer.log_test_result_multiple(
+            [res["table"] for res in results],
+            last_col="target_ratio"
+        )
 
-    results_df = pd.DataFrame(results).sort_values("end_train_date").reset_index(drop=True)
-    logger.info(f"\n {results_df.to_string(index=False)}")
-
-    logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
-    logger.info(f"Mean over toplast returns over all cutoffs: {results_df['res_toplast'].mean()}")
-    logger.info(f"Mean over meanlast returns over all cutoffs: {results_df['res_meanlast'].mean()}")
-    logger.info(f"Mean over meanmean predictions over all cutoffs: {results_df['pred_meanmean'].mean()}")
-    logger.info(f"Mean over toplast predictions over all cutoffs: {results_df['pred_toplast'].mean()}")
-    logger.info(f"Mean over meanlast predictions over all cutoffs: {results_df['pred_meanlast'].mean()}")
-    logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
-
-    if len(results_df) > 3:
-        logger.info(
-            "Mean over meanmean returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanmean'].mean()}"
-        )
-        logger.info(
-            "Mean over meanlast returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanlast'].mean()}"
-        )
-        logger.info(
-            f"Mean over meanlast returns filtered by 0.5 quantile prediction meanlast: "
-            f"{results_df.loc[results_df['pred_meanlast'] > results_df['pred_meanlast'].quantile(0.5), 'res_meanlast'].mean()}"
-        )
-        logger.info(
-            f"Mean over toplast returns filtered by 0.5 quantile prediction toplast: "
-            f"{results_df.loc[results_df['pred_toplast'] > results_df['pred_toplast'].quantile(0.5), 'res_toplast'].mean()}"
-        )
-        logger.info(
-            f"Mean over toplast returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_toplast'].mean()}"
-        )
+    if len(results) == 0:
+        logger.warning("No valid results found for analysis.")

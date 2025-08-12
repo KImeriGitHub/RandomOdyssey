@@ -1,3 +1,4 @@
+from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.predictionModule.TreeTimeML import TreeTimeML
 from src.predictionModule.LoadupSamples import LoadupSamples
 import treetimeParams
@@ -13,7 +14,7 @@ import optuna
 from optuna.exceptions import TrialPruned
 import argparse
 
-stock_group = "group_finanTo2011"
+stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -35,10 +36,10 @@ logger.info(f" Params: {params}")
 ###############
 # Static config
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
-final_eval_date   = datetime.date(2025, 8, 1)    # last date you want to consider cutoffs up to
+final_eval_date   = datetime.date(2025, 8, 4)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 80                                     # number of cutoffs to generate
-num_reruns = 2                                     # number of times to rerun analysis for each cutoff
+n_cutoffs = 220                                     # number of cutoffs to generate
+num_reruns = 1                                     # number of times to rerun analysis for each cutoff
 days_delta = 7                                   # days delta for cutoff generation
 
 if __name__ == "__main__":
@@ -70,7 +71,7 @@ if __name__ == "__main__":
             last_test_date=end_test_date,
         )
 
-        res_dict = {}
+        pred_float_list = []
         res_dict_list = []
         try:
             for _ in range(num_reruns):
@@ -85,13 +86,15 @@ if __name__ == "__main__":
                 starttime = datetime.datetime.now()
                 res_loop, res_dict_loop = tt.analyze()
                 elapsed = datetime.datetime.now() - starttime
-                res_dict_list.append(res_dict_loop)
-            
-            pred_meanmean_list = np.array([res['pred_meanmean'] for res in res_dict_list])
-            if pred_meanmean_list.size > 0:
-                res_dict = res_dict_list[np.argmax(pred_meanmean_list)] if pred_meanmean_list.size > 0 else None
 
-                logger.info(f"[{end_train_date}] Model actual mean return over dates: {res_dict['res_meanmean']}")
+                pred_float_list.append(res_loop) if res_loop is not None else None
+                res_dict_list.append(res_dict_loop) if res_dict_loop is not None else None
+            
+            pred_float_list = np.array(pred_float_list)
+            if pred_float_list.size > 0:
+                res_dict = res_dict_list[np.argmax(pred_float_list)] if pred_float_list.size > 0 else None
+
+                logger.info(f"[{end_train_date}] Model actual mean return over dates: {np.max(pred_float_list)}")
                 logger.info(f"[{end_train_date}] Time taken for analysis: {elapsed}")
 
                 results.append(
@@ -99,13 +102,7 @@ if __name__ == "__main__":
                         "end_train_date": end_train_date,
                         "end_test_date": end_test_date,
                         "analysis_time": elapsed.total_seconds(),
-                        "res_meanmean": res_dict['res_meanmean'],
-                        "res_toplast": res_dict['res_toplast'],
-                        "res_meanlast": res_dict['res_meanlast'],
-                        "n_entries": res_dict['n_entries'],
-                        "pred_toplast": res_dict['pred_toplast'],
-                        "pred_meanmean": res_dict['pred_meanmean'],
-                        "pred_meanlast": res_dict['pred_meanlast'],
+                        "res_df": res_dict["df_pred_res"]
                     }
                 )
         except Exception as e:
@@ -115,37 +112,8 @@ if __name__ == "__main__":
     total_elapsed = datetime.datetime.now() - starttime_all
     logger.info(f"Completed {len(results)} rolling backtests in {total_elapsed}.")
 
-    results_df = pd.DataFrame(results).sort_values("end_train_date").reset_index(drop=True)
-    logger.info(results_df)
+    res_list = [res["res_df"] for res in results]
 
-    logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
-    logger.info(f"Mean over toplast returns over all cutoffs: {results_df['res_toplast'].mean()}")
-    logger.info(f"Mean over meanlast returns over all cutoffs: {results_df['res_meanlast'].mean()}")
-    logger.info(f"Mean over meanmean predictions over all cutoffs: {results_df['pred_meanmean'].mean()}")
-    logger.info(f"Mean over toplast predictions over all cutoffs: {results_df['pred_toplast'].mean()}")
-    logger.info(f"Mean over meanlast predictions over all cutoffs: {results_df['pred_meanlast'].mean()}")
-    logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
+    results_df:pl.DataFrame = ModelAnalyzer.log_test_result_multiple(res_list, last_col="target_ratio")
 
-    if len(results_df) > 3:
-        logger.info(
-            "Mean over meanmean returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanmean'].mean()}"
-        )
-        logger.info(
-            "Mean over meanlast returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_meanlast'].mean()}"
-        )
-        logger.info(
-            f"Mean over meanlast returns filtered by 0.5 quantile prediction meanlast: "
-            f"{results_df.loc[results_df['pred_meanlast'] > results_df['pred_meanlast'].quantile(0.5), 'res_meanlast'].mean()}"
-        )
-        logger.info(
-            f"Mean over toplast returns filtered by 0.5 quantile prediction toplast: "
-            f"{results_df.loc[results_df['pred_toplast'] > results_df['pred_toplast'].quantile(0.5), 'res_toplast'].mean()}"
-        )
-        logger.info(
-            f"Mean over toplast returns filtered by 0.5 quantile prediction meanmean: "
-            f"{results_df.loc[results_df['pred_meanmean'] > results_df['pred_meanmean'].quantile(0.5), 'res_toplast'].mean()}"
-        )
-
-    results_df.to_parquet(f"analysis_df_{formatted_date}.parquet", index=False)
+    results_df.write_parquet(f"output_analysis_df_{formatted_date}.parquet")

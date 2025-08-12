@@ -369,69 +369,23 @@ class TreeTimeML:
         logger.info(f"  Ratio of test dates with choices: {res_df_perdate_err.shape[0] / len(self.test_dates):.4f}")
         logger.info(f"  Mean error per date {res_df_perdate_err['mean_error'].mean():.4f}")
         logger.info(f"  Mean RMSE error per date {res_df_perdate_err['rmse_error'].mean():.4f}")
-        
-        for test_date in self.test_dates:
-            logger.info(f"Analyzing test date: {test_date}")
 
-            # Filter meta dataframe on test date
-            res_df_ondate: pl.DataFrame = (
-                res_df
-                .filter(pl.col("date") == test_date)
-                .select(
-                    ['date', 'ticker', 'Close']
-                    + [f"target_close_at{i}" for i in range(1, self.idxDaysAfter + 1)]
-                    + ['prediction_ratio']
-                    + ['result_ratio']
-                )
-            )
-            if res_df_ondate.is_empty():
-                logger.error(f"No data available for test date {test_date}.")
-                continue
+        ModelAnalyzer.log_test_result_perdate(res_df, self.test_dates, last_col = "target_ratio")
 
-            # Print result on test date
-            with pl.Config(ascii_tables=True, tbl_rows=15, tbl_cols=15):
-                logger.info(f"DataFrame:\n{res_df_ondate}")
-                
-            logger.info(f"  P/L Ratio: {res_df_ondate['result_ratio'].mean():.4f}")
-            logger.info(f"  Mean Prediction Ratio: {res_df_ondate['prediction_ratio'].mean():.4f}")
-        
         res_df_perdate = res_df.group_by("date").agg([
-            pl.col("result_ratio").mean().alias("mean_res"),
-            pl.col("result_ratio").first().alias("top_res"),
-            pl.col("result_ratio").count().alias("n_entries"),
+            pl.col("target_ratio").mean().alias("mean_res"),
+            pl.col("target_ratio").first().alias("top_res"),
+            pl.col("target_ratio").count().alias("n_entries"),
             pl.col("prediction_ratio").max().alias("max_pred"),  # this is also .first()
             pl.col("prediction_ratio").mean().alias("mean_pred"),
         ])
 
-        res_meanmean = res_df_perdate['mean_res'].mean()
-        res_meanlast = res_df_perdate['mean_res'].last()
-        res_topmean = res_df_perdate['top_res'].mean()
-        res_toplast = res_df_perdate['top_res'].last()
-        res_sum_n = res_df_perdate['n_entries'].sum()
-        pred_meanmean = res_df_perdate['mean_pred'].mean()
-        pred_meanlast = res_df_perdate['mean_pred'].last()
-        pred_toplast = res_df_perdate['max_pred'].last()
-        logger.info(f"Over all mean P/L Ratio: {res_meanmean:.4f}")
-        logger.info(f"Over all top mean P/L Ratio: {res_topmean:.4f}")
-        logger.info(f"Over all top last P/L Ratio: {res_toplast:.4f}")
-        logger.info(f"Over all mean last P/L Ratio: {res_meanlast:.4f}")
-        logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
-        logger.info(f"Over all top last prediction ratio: {pred_toplast:.4f}")
-        logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
-        logger.info(f"Over all number of entries: {res_sum_n}")
+        ModelAnalyzer.log_test_result_overall(res_df, last_col = "target_ratio")
 
         logger.disabled = logger_config
         return (
-            res_meanmean, 
+            res_df_perdate['mean_pred'].mean(), 
             {
-                'res_meanmean': res_meanmean, 
-                'res_topmean': res_topmean,
-                'res_toplast': res_toplast,
-                'res_meanlast': res_meanlast,
-                "n_entries": res_sum_n, 
-                "pred_toplast": pred_toplast, 
-                "pred_meanmean": pred_meanmean,
-                "pred_meanlast": pred_meanlast,
                 "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio', 'target_ratio']),
                 "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred', 'top_res', 'mean_res'])
             }
@@ -455,26 +409,7 @@ class TreeTimeML:
         if res_df.is_empty():
             raise ValueError("No valid predictions sampled.")
 
-        # Filter meta dataframe on test date
-        for test_date in self.test_dates:
-            logger.info(f"Analyzing test date: {test_date}")
-            res_df_ondate: pl.DataFrame = (
-                res_df
-                .filter(pl.col("date") == test_date)
-                .select(
-                    ['date', 'ticker', 'Close']
-                    + ['prediction_ratio']
-                )
-            )
-            if res_df_ondate.is_empty():
-                logger.error(f"No data available for test date {test_date}.")
-                continue
-
-            # Print result on test date
-            with pl.Config(ascii_tables=True, tbl_rows=15, tbl_cols=15):
-                logger.info(f"DataFrame:\n{res_df_ondate}")
-
-            logger.info(f"  Mean Prediction Ratio: {res_df_ondate['prediction_ratio'].mean():.4f}")
+        ModelAnalyzer.log_test_result_perdate(res_df, self.test_dates, last_col = None)
 
         res_df_perdate = res_df.group_by("date").agg([
             pl.col("prediction_ratio").count().alias("n_entries"),
@@ -482,22 +417,11 @@ class TreeTimeML:
             pl.col("prediction_ratio").max().alias("max_pred"),
         ])
 
-        res_n = res_df_perdate['n_entries'].sum()
-        pred_toplast = res_df_perdate['max_pred'].last()
-        pred_meanmean = res_df_perdate['mean_pred'].mean()
-        pred_meanlast = res_df_perdate['mean_pred'].last()
+        ModelAnalyzer.log_test_result_overall(res_df, last_col = None)
 
-        logger.info(f"Over all number of entries: {res_n}")
-        logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
-        logger.info(f"Over all max prediction ratio: {pred_toplast:.4f}")
-        logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
         logger.disabled = logger_config
 
-        return pred_meanmean, {
-            "n_entries": res_n,
-            "pred_toplast": pred_toplast,
-            "pred_meanmean": pred_meanmean,
-            "pred_meanlast": pred_meanlast,
+        return res_df_perdate['mean_pred'].mean(), {
             "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio']),
             "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred']),
         }
