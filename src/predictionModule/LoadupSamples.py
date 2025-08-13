@@ -80,6 +80,8 @@ class LoadupSamples:
                     logger.error("Test labels do not match the number of test samples.")
             if self.train_Xtree.shape[1] != len(self.featureTreeNames):
                 logger.error("Number of features in training data does not match the number of tree feature names.")
+            if len(self.meta_pl_train['date']) != self.train_Xtree.shape[0]:
+                logger.error("Number of sample dates does not match the number of training samples.")
 
         if self.group_type == "Time":
             if self.train_Xtime.shape[2] != self.test_Xtime.shape[2]:
@@ -91,9 +93,9 @@ class LoadupSamples:
                     logger.error("Test labels do not match the number of test samples.")
             if self.train_Xtime.shape[2] != len(self.featureTimeNames):
                 logger.error("Number of features in training data does not match the number of time feature names.")
+            if len(self.meta_pl_train['date']) != self.train_Xtime.shape[0]:
+                logger.error("Number of sample dates does not match the number of training samples.")
         
-        if len(self.meta_pl_train['date']) != self.train_Xtree.shape[0]:
-            logger.error("Number of sample dates does not match the number of training samples.")
         if not self.meta_pl_train['date'].is_sorted():
             logger.error("Sample dates are not sorted. Please sort them before proceeding.")
         if not self.meta_pl_test['date'].is_sorted():
