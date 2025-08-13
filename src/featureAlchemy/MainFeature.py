@@ -155,8 +155,14 @@ class MainFeature():
             featureNames.extend(names)
             arr_list.append(stack)
 
+        # Concatenate List
         arr = np.concatenate(arr_list, axis=-1)  # (nD, nA, ..., nF)
-        metaarr = metaarr[mask]   # this reshapes to (nD*nA) but with valid inputs
+
+        # Update mask
+        nan_in_features = np.any(np.isnan(arr), axis=tuple(range(2, arr.ndim)))  # -> shape (nD, nA)
+        mask &= ~nan_in_features
+
+        metaarr = metaarr[mask]   # this reshapes to (nD*nA, ..., nF) but with valid inputs
         arr = arr[mask]     # this reshapes to (nD*nA, ..., nF) where nD*nA is not correct its with valid inputs
         
         return metaarr, arr, featureNames
