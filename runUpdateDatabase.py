@@ -17,6 +17,7 @@ from src.stockGroupsService.GroupSnP500FinanTo2011 import GroupSnP500FinanTo2011
 from src.stockGroupsService.GroupDebug import GroupDebug
 from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
 from src.stockGroupsService.GroupFinanTo2016 import GroupFinanTo2016
+from src.stockGroupsService.GroupRegOHLCVOver5Years import GroupOHLCVOver5Years
 
 formatted_date = datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
@@ -37,6 +38,7 @@ groupClasses = [
     GroupDebug(),
     GroupFinanTo2011(),
     GroupFinanTo2016(),
+    GroupOHLCVOver5Years()
 ]
 
 def get_apiKey() -> str:
@@ -58,26 +60,46 @@ def get_apiKey() -> str:
 
 def get_stock_list() -> list[str]:
     # Read and load the stock list from the YAML file
-    tickersDict = YamlTickerInOut("src/tickerSelection").loadFromFile("stockTickers")
-    stockList: list = tickersDict[0]['stocks'] #NYSE
-    stockList.extend(tickersDict[1]['stocks']) #NASDAQ
-    stockList.extend(tickersDict[2]['stocks']) #NYSE MKT
-    if operator != "alphaVantage": #Alpha Vantage has no Swiss Data
-        for ticker in tickersDict[3]['stocks']:
-            if isinstance(ticker, str) and ticker.lower()[0:1] == 'ch':
-                stockList.append(ticker)
+    tickers = YamlTickerInOut("src/tickerSelection").loadFromFile("stockTickers")
+
+    # Build a lookup by stockExchange name (case-insensitive)
+    sections = {
+        str(entry.get("stockExchange", "")).strip().upper(): entry.get("stocks", [])
+        for entry in tickers
+        if isinstance(entry, dict)
+    }
+
+    stockList: list[str] = []
+    stockList += sections.get("NYSE", [])
+    stockList += sections.get("NASDAQ", [])
+    # NYSE MKT may also appear as NYSEMKT or AMEX; take the first non-empty
+    stockList += (sections.get("NYSE MKT") or sections.get("NYSEMKT") or sections.get("AMEX") or [])
+    stockList += (sections.get("NYSE ARCA") or sections.get("ARCA") or [])
+    stockList += (sections.get("BATS") or [])
+
+    # Handle Swiss tickers unless using Alpha Vantage
+    if operator != "alphaVantage":  # Alpha Vantage has no Swiss Data
+        swiss = (sections.get("SIX") or sections.get("SWISS") or [])
+        for ticker in swiss:
+            if not isinstance(ticker, str):
                 continue
-            if isinstance(ticker, str) and ticker.lower()[0:1] == 'us':
-                continue # discard
-            if isinstance(ticker, str) and ticker.lower().endswith('.sw'):
-                stockList.append(ticker)
-                continue # discard
-            stockList.append(ticker + '.SW')
+
+            t = ticker.strip()
+            tl = t.lower()
+            if tl.startswith("ch"):
+                stockList.append(t)
+            elif tl.startswith("us"):
+                continue  # discard
+            elif tl.endswith(".sw"):
+                stockList.append(t)
+            else:
+                stockList.append(t + ".SW")
         
     if not stockList:
         raise ValueError("No stocks found in the YAML file.")
         
-    return [str(ticker) for ticker in stockList]  # Make sure its a list of strings
+    # Make sure its a list of strings
+    return [str(ticker) for ticker in stockList]
 
 if __name__ == "__main__":
     operator = "alphaVantage"  #"yfinance" or "alphaVantage"

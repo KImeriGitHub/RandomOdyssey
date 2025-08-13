@@ -5,16 +5,22 @@
   stocks:
   - A
   - AAP
+  - AAT
   - AB
+  - ABBV
   - ABEV
   - ABG
   - ABM
   - ABR
   - ABT
+  - AC
   - ACCO
   - ACM
   - ACN
   - ACR
+  - ACR-P-C
+  - ACRE
+  - AD
   - ADC
   - ADM
   - AEE
@@ -24,6 +30,7 @@
   - AER
   - AES
   - AFG
+  - AFGE
   - AFL
   - AG
   - AGCO
@@ -31,8 +38,11 @@
   - AGM
   - AGM-A
   - AGO
+  - AGRO
   - AGX
+  - AHH
   - AHT
+  - AHT-P-D
   - AIG
   - AIN
   - AIR
@@ -43,60 +53,99 @@
   - AKO-A
   - AKO-B
   - AKR
+  - AL
   - ALB
   - ALE
+  - ALEX
   - ALG
   - ALK
   - ALL
+  - ALL-P-B
+  - ALLE
+  - ALLY
+  - ALSN
   - ALV
   - ALX
+  - AM
+  - AMBC
+  - AMBR
+  - AMC
   - AME
   - AMG
+  - AMH
   - AMN
   - AMP
+  - AMPY
+  - AMRC
+  - AMRX
   - AMT
   - AMX
   - AN
+  - ANET
   - ANF
   - AON
   - AORT
   - AOS
   - AP
+  - APAM
   - APD
   - APH
+  - APLE
+  - APO
+  - APTV
+  - AQN
+  - AR
+  - ARCO
+  - ARCX
   - ARE
+  - ARES
   - ARGO
+  - ARI
   - ARL
+  - ARMK
+  - AROC
   - ARR
   - ARW
   - ASB
+  - ASC
   - ASGN
   - ASH
+  - ASPN
   - ASR
   - ASX
+  - ATEN
   - ATGE
+  - ATHM
   - ATI
   - ATO
   - ATR
   - AU
   - AUB
   - AVA
+  - AVAL
   - AVB
   - AVD
+  - AVNS
   - AVNT
   - AVY
   - AWI
+  - AWK
   - AWR
   - AXL
   - AXP
   - AXR
   - AXS
+  - AXTA
   - AYI
   - AZO
   - AZZ
+  - B
   - BA
+  - BABA
   - BAC
   - BAC-P-E
+  - BAC-P-L
+  - BAH
   - BAK
   - BALL
   - BANC
@@ -105,11 +154,13 @@
   - BB
   - BBAR
   - BBD
+  - BBDO
   - BBVA
   - BBW
   - BBWI
   - BBY
   - BC
+  - BCC
   - BCE
   - BCH
   - BCO
@@ -121,46 +172,70 @@
   - BEP
   - BF-A
   - BF-B
+  - BFAM
   - BFH
   - BFS
   - BG
   - BGS
+  - BGSF
   - BH
   - BHC
   - BHE
   - BHLB
   - BHP
+  - BHR
   - BIO
   - BIO-B
+  - BIP
   - BK
   - BKD
   - BKE
   - BKH
+  - BKU
+  - BLD
   - BLDR
   - BLK
+  - BLOX
   - BLX
   - BMA
   - BMI
+  - BML-P-G
+  - BML-P-H
+  - BML-P-J
+  - BML-P-L
   - BMO
   - BMY
   - BN
+  - BNED
   - BNS
   - BOH
+  - BOOT
+  - BOX
   - BP
-  - BPT
   - BR
   - BRC
   - BRFS
   - BRK-A
   - BRK-B
   - BRO
+  - BRSL
   - BRT
+  - BRX
   - BSAC
+  - BSBR
+  - BSM
   - BSX
+  - BTCM
   - BTE
   - BTI
+  - BUD
+  - BUR
+  - BURL
   - BVN
+  - BW
   - BWA
+  - BWLP
+  - BWXT
   - BX
   - BXC
   - BXMT
@@ -168,57 +243,85 @@
   - BYD
   - BZH
   - C
+  - C-P-K
+  - C-P-N
+  - CABO
   - CACI
   - CADE
   - CAE
   - CAG
   - CAH
   - CAL
+  - CALX
+  - CAPL
   - CAT
   - CATO
   - CB
+  - CBO
   - CBRE
   - CBT
   - CBU
+  - CBX
   - CBZ
+  - CC
   - CCI
   - CCJ
   - CCK
   - CCL
+  - CCM
   - CCO
   - CCRD
+  - CCS
   - CCU
   - CCZ
   - CDE
   - CDP
+  - CDR-P-B
   - CE
   - CF
+  - CFG
   - CFR
+  - CHCT
   - CHD
   - CHE
+  - CHGG
   - CHH
+  - CHMI
   - CHT
   - CI
   - CIA
   - CIB
   - CIEN
   - CIG
+  - CIG-C
   - CIM
+  - CIO
+  - CIVI
   - CL
   - CLB
+  - CLDT
   - CLF
   - CLH
   - CLS
+  - CLW
   - CLX
   - CM
   - CMA
+  - CMBT
   - CMC
+  - CMCM
   - CMG
   - CMI
   - CMP
+  - CMRE
+  - CMRE-P-B
+  - CMRE-P-C
+  - CMRE-P-D
   - CMS
+  - CMS-P-B
   - CNA
   - CNC
+  - CNH
   - CNI
   - CNK
   - CNMD
@@ -232,11 +335,16 @@
   - COHR
   - COP
   - COR
+  - COTY
   - CP
   - CPA
+  - CPAC
+  - CPAY
   - CPB
   - CPF
   - CPK
+  - CPRI
+  - CPS
   - CPT
   - CRD-A
   - CRD-B
@@ -249,21 +357,28 @@
   - CRT
   - CSL
   - CSR
+  - CSTM
   - CSV
   - CTA-P-A
   - CTA-P-B
   - CTO
   - CTRA
+  - CTRE
   - CTS
   - CUBE
+  - CUBI
   - CUK
   - CULP
   - CUZ
+  - CVE
+  - CVEO
   - CVI
   - CVS
   - CVU
   - CVX
   - CW
+  - CWEN
+  - CWEN-A
   - CWT
   - CX
   - CXT
@@ -273,9 +388,11 @@
   - D
   - DAC
   - DAL
+  - DAN
   - DAR
   - DB
   - DBI
+  - DBRG
   - DCI
   - DCO
   - DD
@@ -284,10 +401,11 @@
   - DDS
   - DDT
   - DE
+  - DEA
   - DECK
   - DEI
   - DEO
-  - DFS
+  - DG
   - DGX
   - DHI
   - DHR
@@ -297,16 +415,22 @@
   - DINO
   - DIS
   - DK
+  - DKL
   - DKS
   - DLB
+  - DLNG
+  - DLNG-P-A
   - DLR
   - DLX
+  - DNOW
   - DOC
   - DOV
+  - DQ
   - DRD
   - DRH
   - DRI
   - DSX
+  - DSX-P-B
   - DTE
   - DUK
   - DVA
@@ -314,15 +438,22 @@
   - DX
   - DY
   - E
+  - EARN
   - EAT
   - EBF
+  - EBR
+  - EBR-B
   - EBS
+  - EC
   - ECL
   - ED
   - EDN
   - EDU
+  - EFC
   - EFX
+  - EFXT
   - EG
+  - EGLE
   - EGO
   - EGP
   - EGY
@@ -337,41 +468,62 @@
   - EMN
   - EMR
   - ENB
+  - ENFY
+  - ENJ
+  - ENOV
   - ENR
   - ENS
-  - ENZ
+  - ENVA
   - EOG
+  - EP-P-C
   - EPAC
+  - EPAM
   - EPC
   - EPD
   - EPR
-  - EQC
+  - EPR-P-C
+  - EPR-P-E
+  - EQBK
   - EQR
   - EQS
   - EQT
   - ERJ
   - ES
   - ESE
+  - ESI
+  - ESNT
+  - ESRT
   - ESS
+  - ET
   - ETD
   - ETN
   - ETR
   - EVC
+  - EVH
   - EVR
+  - EVTC
   - EW
   - EXK
   - EXP
   - EXR
   - F
+  - FAF
+  - FBIN
   - FBP
   - FC
   - FCF
   - FCN
+  - FCPT
   - FCX
   - FDP
   - FDS
   - FDX
   - FE
+  - FENG
+  - FERG
+  - FET
+  - FF
+  - FFWM
   - FHI
   - FHN
   - FI
@@ -386,13 +538,16 @@
   - FMC
   - FMS
   - FMX
+  - FN
   - FNB
   - FNF
   - FNV
   - FOR
+  - FPI
   - FR
   - FRO
   - FRT
+  - FSK
   - FSM
   - FSS
   - FTI
@@ -400,14 +555,19 @@
   - FUL
   - FUN
   - G
+  - GAB-P-G
+  - GAB-P-H
   - GAM-P-B
   - GAP
   - GATX
   - GBCI
   - GBLI
   - GBX
+  - GCI
   - GCO
   - GD
+  - GDDY
+  - GDOT
   - GE
   - GEF
   - GEF-B
@@ -431,129 +591,184 @@
   - GJR
   - GJS
   - GJT
+  - GKOS
   - GL
+  - GLOB
   - GLP
   - GLW
+  - GM
   - GME
+  - GMED
+  - GNE
+  - GNK
+  - GNL
+  - GNRC
   - GNW
-  - GOLD
-  - GOLLQ
   - GPC
   - GPI
   - GPK
   - GPN
+  - GPRK
   - GRBK
   - GRC
   - GRMN
+  - GRP-U
   - GS
   - GS-P-A
+  - GS-P-C
+  - GS-P-D
+  - GSBD
   - GSK
+  - GSL
+  - GSL-P-B
   - GTLS
   - GTN
   - GTN-A
   - GTY
   - GVA
+  - GWRE
   - GWW
+  - H
   - HAE
   - HAL
+  - HASI
   - HBI
+  - HBM
+  - HCA
+  - HCI
   - HD
   - HDB
   - HE
   - HEI
   - HES
+  - HHH
+  - HI
   - HIG
+  - HII
   - HIW
   - HL
+  - HL-P-B
   - HLF
+  - HLI
   - HLIO
+  - HLT
   - HLX
   - HMC
   - HMN
+  - HMR
   - HMY
   - HNI
   - HOG
   - HOMB
+  - HOUS
   - HOV
   - HP
+  - HPE
+  - HPP
   - HPQ
   - HR
   - HRB
   - HRI
   - HRL
+  - HRTG
   - HSBC
   - HSY
   - HT
+  - HT-P-C
+  - HTB
   - HTGC
   - HTH
+  - HUBB
+  - HUBS
   - HUM
   - HUN
   - HVT
   - HVT-A
   - HWM
   - HXL
+  - HY
   - HZO
   - IAG
   - IBM
   - IBN
+  - IBP
   - ICE
+  - ICL
   - IDA
   - IDT
   - IEX
   - IFF
-  - IGT
   - IHG
   - IIIN
   - IMAX
   - INFY
   - ING
   - INGR
+  - INN
+  - INVN
   - INVX
   - IP
   - IPG
+  - IPI
+  - IQV
   - IRM
   - IRS
+  - IRT
   - ISG
   - IT
   - ITGR
   - ITT
   - ITUB
   - ITW
+  - IVR
+  - IVT
   - IVZ
   - IX
   - J
   - JBK
   - JBL
+  - JBTM
   - JCI
   - JEF
   - JHG
   - JHX
+  - JKS
   - JLL
   - JNJ
   - JNPR
   - JOE
   - JPM
-  - JWN
+  - JPM-P-D
   - K
   - KAI
+  - KAR
   - KB
   - KBH
   - KBR
+  - KEN
   - KEP
   - KEX
   - KEY
+  - KEYS
   - KFS
   - KFY
+  - KG
   - KGC
   - KIM
+  - KKR
   - KMB
+  - KMI
   - KMPR
   - KMT
   - KMX
+  - KN
+  - KNOP
   - KNX
   - KO
+  - KODK
   - KOF
   - KOP
+  - KOS
   - KR
   - KRC
   - KRG
@@ -566,20 +781,28 @@
   - KWR
   - L
   - LAD
+  - LADR
   - LAZ
+  - LC
   - LCII
   - LDOS
+  - LEA
   - LEG
   - LEN
   - LEN-B
+  - LFT
   - LH
   - LHX
   - LII
+  - LITB
   - LLY
   - LMT
   - LNC
+  - LND
   - LNN
+  - LOB
   - LOW
+  - LPG
   - LPL
   - LPX
   - LRN
@@ -588,8 +811,11 @@
   - LUMN
   - LUV
   - LVS
+  - LXFR
   - LXP
+  - LXP-P-C
   - LXU
+  - LYB
   - LYG
   - LYV
   - LZB
@@ -600,10 +826,12 @@
   - MAGN
   - MAIN
   - MAN
+  - MANU
   - MAS
   - MATV
   - MATX
   - MBI
+  - MC
   - MCD
   - MCK
   - MCO
@@ -614,14 +842,22 @@
   - MDU
   - MED
   - MEI
+  - MER-P-K
   - MET
+  - MET-P-A
   - MFA
+  - MFA-P-B
   - MFC
   - MFG
+  - MG
   - MGA
   - MGM
   - MHK
+  - MHNC
   - MHO
+  - MITT
+  - MITT-P-A
+  - MITT-P-B
   - MKC
   - MKC-V
   - MKL
@@ -630,6 +866,7 @@
   - MLP
   - MLR
   - MMC
+  - MMI
   - MMM
   - MMS
   - MO
@@ -640,41 +877,58 @@
   - MOH
   - MOS
   - MOV
+  - MPC
+  - MPLX
   - MPW
   - MPX
+  - MRC
   - MRK
   - MS
+  - MS-P-A
+  - MS-P-E
+  - MS-P-F
+  - MS-P-I
   - MSA
   - MSB
   - MSCI
+  - MSGS
   - MSI
   - MSM
   - MT
   - MTB
   - MTD
+  - MTDR
   - MTG
   - MTH
   - MTN
   - MTR
   - MTRN
+  - MTUS
   - MTW
   - MTX
   - MTZ
   - MUFG
   - MUR
+  - MUSA
   - MUX
   - MVO
   - MWA
+  - MX
   - MYE
   - NAT
+  - NBHC
   - NBR
   - NC
+  - NCLH
   - NEE
+  - NEE-P-Q
   - NEM
   - NEU
   - NFG
   - NGG
+  - NGL
   - NGS
+  - NGVC
   - NHI
   - NI
   - NJR
@@ -686,16 +940,19 @@
   - NNI
   - NNN
   - NOA
+  - NOAH
   - NOC
   - NOG
   - NOK
   - NOV
+  - NOW
   - NPK
   - NPKI
   - NPO
   - NRG
   - NRP
   - NRT
+  - NSA
   - NSC
   - NSP
   - NTZ
@@ -709,13 +966,16 @@
   - NWG
   - NWN
   - NX
+  - NXRT
   - NYCB-P-U
   - NYT
   - O
   - OC
   - ODC
+  - OEC
   - OFG
   - OGE
+  - OGS
   - OHI
   - OI
   - OII
@@ -724,15 +984,20 @@
   - OLN
   - OLP
   - OMC
+  - OMF
   - OMI
   - ONIT
   - ONTO
+  - OOMA
   - OPY
   - ORA
+  - ORC
   - ORCL
   - ORI
   - ORN
+  - OSG
   - OSK
+  - OUT
   - OVV
   - OXM
   - OXY
@@ -740,19 +1005,32 @@
   - PAC
   - PAG
   - PAR
+  - PARR
+  - PAYC
   - PB
+  - PBA
+  - PBF
   - PBH
   - PBI
+  - PBI-P-B
   - PBR
   - PBR-A
   - PBT
   - PCG
+  - PCS
+  - PDM
   - PDS
+  - PEB
   - PEG
+  - PEN
   - PFE
+  - PFGC
+  - PFLT
   - PFS
+  - PFSI
   - PG
   - PGR
+  - PGRE
   - PH
   - PHG
   - PHI
@@ -760,34 +1038,52 @@
   - PHX
   - PII
   - PIPR
+  - PJT
   - PKE
   - PKG
   - PKX
   - PLD
+  - PLNT
+  - PLOW
+  - PM
+  - PMT
   - PNC
   - PNNT
   - PNR
   - PNW
   - POR
+  - POST
   - PPG
   - PPL
   - PRA
   - PRG
   - PRGO
+  - PRH
+  - PRI
+  - PRIM
+  - PRKS
+  - PRLB
   - PRO
   - PRSU
   - PRU
   - PSA
   - PSO
+  - PSTG
+  - PSX
   - PUK
   - PVH
+  - PVL
   - PWR
   - PYT
   - QGEN
+  - QSR
+  - QTWO
   - QUAD
   - R
+  - RACE
   - RBA
   - RBC
+  - RC
   - RCI
   - RCL
   - RDN
@@ -795,22 +1091,31 @@
   - RELX
   - RES
   - REX
+  - REXR
   - RF
+  - RGA
   - RGR
+  - RH
   - RHI
   - RHP
   - RIG
   - RIO
+  - RITM
   - RJF
   - RL
   - RLI
+  - RLJ
+  - RM
+  - RMAX
   - RMD
+  - RNG
   - RNR
   - RNST
   - ROG
   - ROK
   - ROL
   - RPM
+  - RPT
   - RRC
   - RRX
   - RS
@@ -820,36 +1125,53 @@
   - RVTY
   - RWT
   - RY
+  - RYAM
+  - RYI
   - RYN
   - SA
   - SAH
+  - SAIC
   - SAM
   - SAN
+  - SAND
   - SAP
   - SAR
+  - SB
+  - SB-P-C
+  - SB-P-D
   - SBH
   - SBR
   - SBS
+  - SBSW
   - SCCO
+  - SCE-P-G
+  - SCE-P-J
   - SCHW
   - SCI
   - SCL
+  - SCM
   - SCS
   - SCU
   - SEE
+  - SEM
+  - SEMG
   - SF
+  - SFBS
   - SFL
+  - SGI
   - SGU
+  - SHAK
   - SHEL
   - SHG
   - SHO
+  - SHOP
   - SHW
   - SID
   - SIG
   - SITC
+  - SIX
   - SJM
   - SJT
-  - SJW
   - SKM
   - SKT
   - SKX
@@ -869,41 +1191,56 @@
   - SNV
   - SNX
   - SO
+  - SOL
   - SON
   - SONY
+  - SPB
   - SPG
   - SPG-P-J
   - SPGI
   - SPH
+  - SPNT
   - SPR
   - SPXC
   - SQM
+  - SQNS
   - SR
   - SRE
+  - SRG
   - SRI
   - SRL
   - SSD
   - SSL
+  - SSTK
+  - ST
+  - STAG
   - STC
   - STE
+  - STLA
   - STM
   - STN
+  - STNG
   - STT
   - STT-P-G
+  - STWD
   - STZ
   - STZ-B
   - SU
   - SUI
-  - SUP
+  - SUN
   - SUZ
   - SWK
   - SWX
+  - SXC
   - SXI
   - SXT
+  - SYF
   - SYK
   - SYY
   - T
   - TAC
+  - TAK
+  - TAL
   - TAP
   - TAP-A
   - TBI
@@ -911,6 +1248,7 @@
   - TD
   - TDC
   - TDG
+  - TDOC
   - TDS
   - TDW
   - TDY
@@ -922,42 +1260,56 @@
   - TEVA
   - TEX
   - TFC
+  - TFII
   - TFX
   - TG
   - TGI
+  - TGLS
   - TGNA
   - TGS
   - TGT
   - THC
   - THG
   - THO
+  - THR
   - THS
+  - TIER
   - TISI
   - TJX
   - TK
   - TKC
   - TKR
   - TLK
+  - TLYS
   - TM
+  - TMHC
   - TMO
   - TNC
+  - TNET
   - TNK
   - TNL
   - TOL
   - TPC
+  - TPH
   - TPL
   - TPR
-  - TPX
+  - TPVG
   - TR
   - TRC
   - TREX
-  - TRI
+  - TRGP
   - TRN
+  - TRNO
+  - TROX
   - TRP
+  - TRU
   - TRV
   - TS
+  - TSE
+  - TSLX
   - TSM
   - TSN
+  - TSQ
   - TT
   - TTC
   - TTE
@@ -967,18 +1319,24 @@
   - TVC
   - TVE
   - TWI
+  - TWO
   - TX
   - TXNM
   - TXT
+  - TY-P
   - TYL
   - UAA
+  - UAN
+  - UBS
   - UDR
+  - UE
   - UFI
   - UGI
   - UGP
   - UHAL
   - UHS
   - UHT
+  - UI
   - UIS
   - UL
   - UMC
@@ -990,60 +1348,82 @@
   - UNP
   - UPS
   - URI
+  - USAC
   - USB
-  - USM
+  - USB-P-A
+  - USB-P-H
   - USNA
   - USPH
   - UTI
   - UTL
   - UVE
   - UVV
+  - V
+  - VAC
   - VAL
   - VALE
+  - VATE
+  - VEEV
+  - VET
   - VFC
   - VHC
   - VHI
+  - VIPS
   - VIV
   - VLO
+  - VLRS
   - VMC
   - VMI
   - VMW
+  - VNCE
   - VNO
+  - VNO-P-L
+  - VOC
+  - VOYA
+  - VPG
   - VRE
-  - VRN
   - VSH
+  - VTLE
+  - VTOL
   - VTR
+  - VVX
   - VYX
   - VZ
+  - W
   - WAB
   - WAL
   - WAT
   - WBS
   - WCC
   - WCN
+  - WD
   - WDS
   - WEC
   - WELL
+  - WES
   - WEX
   - WF
   - WFC
+  - WFC-P-L
   - WFC-P-Y
   - WFG
   - WGO
   - WHG
   - WHR
   - WIT
+  - WK
   - WKC
   - WLK
+  - WLKP
   - WLY
   - WLYB
   - WM
   - WMB
   - WMK
+  - WMS
   - WMT
   - WNC
   - WNS
-  - WOLF
   - WOR
   - WPC
   - WPP
@@ -1051,6 +1431,7 @@
   - WSM
   - WSO
   - WSO-B
+  - WSR
   - WST
   - WT
   - WTI
@@ -1060,22 +1441,36 @@
   - WU
   - WWW
   - WY
-  - X
+  - XHR
+  - XIFR
   - XIN
   - XOM
   - XPO
+  - XPRO
+  - XYL
+  - XYZ
+  - YELP
   - YPF
+  - YRD
   - YUM
   - ZBH
+  - ZTS
+  - ZWS
 - stockExchange: NASDAQ
   stocks:
+  - AACG
   - AAL
   - AAME
+  - AAOI
   - AAON
   - AAPL
   - ABCB
   - ABEO
+  - ABTS
+  - ABUS
+  - ABVC
   - ACAD
+  - ACB
   - ACGL
   - ACHC
   - ACHV
@@ -1084,27 +1479,43 @@
   - ACLS
   - ACNB
   - ACNT
+  - ACRS
+  - ACST
   - ACTG
+  - ADAP
   - ADBE
+  - ADD
   - ADEA
   - ADI
+  - ADMA
   - ADP
   - ADSK
   - ADTN
+  - ADUS
   - AEHL
   - AEHR
   - AEIS
   - AEMD
   - AEP
   - AERT
+  - AEYE
+  - AFMD
   - AGEN
+  - AGFS
+  - AGIO
+  - AGNC
+  - AGTC
   - AGYS
   - AHG
-  - AIFU
+  - AIFF
+  - AIMD
   - AIOT
   - AIRT
   - AKAM
+  - AKBA
+  - AKTX
   - ALCO
+  - ALDX
   - ALGN
   - ALGT
   - ALKS
@@ -1112,38 +1523,51 @@
   - ALNT
   - ALNY
   - ALOT
+  - ALRM
   - ALRS
   - ALT
   - ALTO
   - ALTS
   - AMAT
+  - AMBA
+  - AMCX
   - AMD
   - AMED
   - AMGN
   - AMKR
   - AMPG
+  - AMPH
+  - AMRK
   - AMRN
   - AMSC
   - AMSF
+  - AMTX
   - AMWD
   - AMZN
   - ANDE
+  - ANGI
   - ANGO
   - ANIK
   - ANIP
   - ANIX
   - ANSS
   - ANTE
+  - ANY
+  - AOSL
   - APA
-  - APCX
   - APDN
   - APEI
+  - APLD
   - APOG
+  - APPF
   - APPS
   - APWC
+  - AQMS
   - ARAY
   - ARCB
   - ARCC
+  - ARCT
+  - ARDX
   - ARKR
   - ARLP
   - AROW
@@ -1151,49 +1575,63 @@
   - ARTNA
   - ARTW
   - ARWR
+  - ASMB
   - ASML
+  - ASND
+  - ASPS
   - ASRT
   - ASRV
   - ASTC
   - ASTE
+  - ASTH
   - ASTI
   - ASUR
   - ASYS
   - ATEC
+  - ATEX
   - ATHE
   - ATLC
   - ATLO
   - ATNI
+  - ATOS
+  - ATRA
   - ATRC
   - ATRO
-  - ATSG
+  - ATXS
+  - ATYR
   - AUBN
   - AUDC
+  - AUPH
   - AVAV
   - AVDL
+  - AVGO
   - AVNW
   - AVT
+  - AVTX
   - AVXL
-  - AWH
   - AWRE
-  - AXDX
   - AXGN
   - AXON
+  - AXSM
   - AXTI
   - AZN
-  - AZPN
   - AZTA
   - BANF
   - BANFP
   - BANR
+  - BANX
   - BBGI
   - BBSI
+  - BCAL
   - BCBP
+  - BCDA
   - BCLI
   - BCML
   - BCPC
   - BCRX
-  - BECN
+  - BCTX
+  - BDRX
+  - BEEM
   - BELFA
   - BELFB
   - BFC
@@ -1203,30 +1641,45 @@
   - BHRB
   - BIDU
   - BIIB
+  - BINI
+  - BIVI
   - BJRI
   - BKNG
   - BKYI
+  - BLBD
   - BLDP
   - BLFS
   - BLIN
   - BLKB
+  - BLMN
+  - BLRX
   - BMRA
   - BMRC
   - BMRN
+  - BNC
+  - BNTC
   - BOKF
   - BOOM
   - BOSC
   - BOTJ
+  - BPMC
   - BPOP
+  - BPOPM
+  - BRFH
   - BRID
   - BRKL
   - BRKR
+  - BRTX
   - BSET
   - BSRR
+  - BTCS
   - BUSE
   - BWEN
+  - BWFG
   - BYFC
   - BYON
+  - BYRN
+  - BZUN
   - CAAS
   - CAC
   - CACC
@@ -1234,7 +1687,10 @@
   - CALM
   - CAMT
   - CAPR
+  - CAPS
   - CAR
+  - CARE
+  - CARM
   - CARV
   - CASH
   - CASI
@@ -1244,42 +1700,64 @@
   - CBAN
   - CBAT
   - CBFV
+  - CBIO
   - CBRL
   - CBSH
   - CCBG
   - CCEP
+  - CCLD
   - CCNE
   - CCOI
   - CCRN
+  - CDNA
   - CDNS
+  - CDTX
+  - CDW
+  - CDXS
   - CDZI
   - CECO
+  - CELZ
+  - CENN
   - CENT
   - CENTA
   - CENX
   - CERS
+  - CETX
+  - CETY
   - CEVA
   - CFBK
   - CFFI
   - CFFN
+  - CFMS
+  - CG
+  - CGC
   - CGEN
   - CGNX
   - CHCI
   - CHCO
   - CHDN
+  - CHEF
+  - CHEK
   - CHKP
   - CHMG
   - CHNR
+  - CHRS
   - CHRW
+  - CHSCL
+  - CHSCM
+  - CHSCN
+  - CHSCO
   - CHSCP
+  - CHTR
   - CIGI
   - CINF
   - CIVB
   - CLAR
   - CLDX
   - CLFD
+  - CLIR
+  - CLLS
   - CLMB
-  - CLMT
   - CLNE
   - CLRB
   - CLRO
@@ -1288,35 +1766,48 @@
   - CMCSA
   - CMCT
   - CME
-  - CMLS
   - CMPR
+  - CMRX
   - CMTL
+  - CNET
+  - CNFR
   - CNOB
   - CNTY
   - CNVS
   - CNXN
+  - COCP
   - CODA
   - COFS
   - COHU
   - COKE
   - COLB
+  - COLL
   - COLM
+  - COMM
   - COO
+  - COOP
   - CORT
+  - COSM
   - COST
+  - CPHC
+  - CPIX
   - CPLP
   - CPRT
   - CPRX
   - CPSH
   - CPSS
   - CRAI
+  - CRBP
   - CRDF
   - CREG
   - CRESY
+  - CREX
   - CRIS
+  - CRMD
   - CRMT
   - CRNT
   - CROX
+  - CRTO
   - CRUS
   - CRVL
   - CRWS
@@ -1327,15 +1818,18 @@
   - CSGS
   - CSIQ
   - CSPI
+  - CSRE
+  - CSTE
+  - CSW
   - CSWC
   - CSX
   - CTAS
   - CTBI
-  - CTHR
   - CTLP
+  - CTMX
   - CTRN
   - CTSH
-  - CUTR
+  - CTSO
   - CVBF
   - CVCO
   - CVGI
@@ -1346,14 +1840,20 @@
   - CWBC
   - CWCO
   - CWST
+  - CYBR
   - CYCC
   - CYCCP
+  - CYRX
   - CYTK
   - CZFS
   - CZNC
+  - CZR
   - CZWI
   - DAIO
   - DAKT
+  - DALN
+  - DARE
+  - DBVT
   - DCOM
   - DCTH
   - DENN
@@ -1362,21 +1862,29 @@
   - DGII
   - DGLY
   - DHC
+  - DHCNI
   - DHIL
   - DIOD
   - DJCO
   - DLHC
+  - DLTH
   - DLTR
+  - DMAC
   - DMLP
   - DMRC
   - DOMH
+  - DOOO
   - DORM
   - DOX
   - DPZ
+  - DRIO
   - DRRX
   - DSGR
   - DSGX
+  - DSKE
   - DSWL
+  - DTST
+  - DUOT
   - DVAX
   - DWSN
   - DXCM
@@ -1389,29 +1897,42 @@
   - EBTC
   - ECPG
   - EDAP
+  - EDSA
   - EDUC
   - EEFT
+  - EFOI
   - EFSC
   - EGAN
   - EGBN
   - EGHT
   - EHTH
+  - EKSO
+  - ELDN
   - ELSE
   - ELTK
-  - EMKR
   - EML
-  - ENG
+  - ENLV
+  - ENPH
   - ENSG
+  - ENTA
   - ENTG
+  - ENVB
+  - EPIX
   - EQIX
   - ERIC
   - ERIE
+  - ERII
   - ERNA
   - ESCA
   - ESEA
   - ESGR
   - ESLT
-  - ESSA
+  - ESOA
+  - ESPR
+  - ETSY
+  - EVGN
+  - EVO
+  - EVOK
   - EWBC
   - EXAS
   - EXC
@@ -1419,15 +1940,18 @@
   - EXLS
   - EXPD
   - EXPE
+  - EXPI
   - EXPO
   - EXTR
   - EYPT
   - EZPW
+  - FANG
   - FARM
   - FARO
   - FAST
+  - FATE
+  - FBIO
   - FBIZ
-  - FBMS
   - FBNC
   - FCAP
   - FCBC
@@ -1436,29 +1960,39 @@
   - FCFS
   - FCNCA
   - FDBC
+  - FDUS
   - FEIM
   - FELE
+  - FENC
   - FFBC
   - FFIC
   - FFIN
   - FFIV
   - FFNW
   - FGBI
+  - FGEN
+  - FGNX
+  - FIBK
   - FISI
   - FITB
+  - FITBI
+  - FIVE
+  - FIVN
   - FIZZ
   - FKWL
   - FLEX
-  - FLIC
   - FLL
   - FLNT
   - FLUX
   - FLWS
+  - FLXN
   - FLXS
   - FMAO
   - FMBH
   - FMNB
+  - FNGR
   - FNLC
+  - FNWB
   - FNWD
   - FOLD
   - FONR
@@ -1467,20 +2001,31 @@
   - FORR
   - FORTY
   - FOSL
+  - FOXF
+  - FPAY
   - FRAF
   - FRBA
   - FRME
   - FRPH
+  - FRPT
   - FRST
+  - FSBW
+  - FSFG
   - FSLR
   - FSTR
+  - FSV
+  - FTAI
   - FTEK
   - FTFT
   - FTLF
+  - FTNT
   - FULT
   - FUNC
   - FUND
   - FUSB
+  - FVCB
+  - FWONA
+  - FWONK
   - FWRD
   - FXNC
   - GABC
@@ -1488,33 +2033,53 @@
   - GAIN
   - GALT
   - GASS
+  - GBDC
   - GCBC
+  - GCTK
+  - GDC
+  - GDEN
   - GEN
-  - GENE
   - GEOS
   - GERN
+  - GEVO
   - GGAL
   - GIFI
+  - GIFT
   - GIGM
   - GIII
   - GILD
   - GILT
   - GLAD
+  - GLBS
   - GLBZ
   - GLDD
+  - GLMD
   - GLNG
+  - GLPG
+  - GLPI
   - GLRE
+  - GMAB
+  - GMGI
   - GNSS
   - GNTX
   - GOGL
+  - GOGO
   - GOOD
+  - GOOG
   - GOOGL
+  - GOVX
+  - GP
   - GPRE
+  - GPRO
+  - GRFS
+  - GRNQ
   - GROW
+  - GRPN
   - GRVY
   - GSAT
   - GSBC
   - GSIT
+  - GSM
   - GT
   - GTIM
   - GURE
@@ -1525,12 +2090,12 @@
   - HALO
   - HAS
   - HBAN
+  - HBCP
   - HBIO
   - HBNC
   - HCKT
   - HCSG
   - HDSN
-  - HEES
   - HELE
   - HFBL
   - HFWA
@@ -1539,6 +2104,7 @@
   - HIHO
   - HIMX
   - HLIT
+  - HMST
   - HNNA
   - HNRG
   - HOFT
@@ -1547,16 +2113,22 @@
   - HOPE
   - HOVNP
   - HQI
+  - HQY
   - HROW
   - HRTX
+  - HRZN
+  - HSDT
   - HSIC
   - HSII
   - HSON
   - HST
   - HSTM
   - HTBK
+  - HTHT
   - HTLD
+  - HTO
   - HUBG
+  - HURA
   - HURC
   - HURN
   - HWBK
@@ -1567,10 +2139,12 @@
   - IBCP
   - IBKR
   - IBOC
-  - ICAD
+  - IBRX
   - ICCC
+  - ICCM
   - ICFI
   - ICLR
+  - ICMB
   - ICUI
   - IDCC
   - IDN
@@ -1580,104 +2154,159 @@
   - III
   - ILMN
   - IMKTA
+  - IMMP
   - IMMR
   - IMNN
   - IMOS
+  - IMUX
   - INBK
+  - INCR
   - INCY
   - INDB
-  - INFN
+  - INDP
+  - INDV
+  - INGN
   - INM
   - INO
   - INOD
+  - INPX
   - INSG
   - INSM
   - INTC
   - INTG
   - INTU
+  - INTZ
   - INVA
   - INVE
   - IONS
   - IOSP
+  - IOVA
   - IPAR
+  - IPDN
   - IPGP
+  - IPWR
   - IRBT
   - IRD
+  - IRDM
   - IRIX
+  - IRMD
+  - IROQ
+  - IRWD
   - ISRG
   - ISSC
+  - ISTR
   - ITI
   - ITIC
   - ITRI
   - ITRN
-  - IVAC
+  - IVDA
+  - IVF
+  - IZEA
   - JACK
+  - JAGX
   - JAKK
   - JAZZ
   - JBHT
   - JBLU
   - JBSS
   - JCTC
+  - JD
   - JJSF
   - JKHY
+  - JMSB
   - JOUT
+  - JOYY
+  - JRVR
   - JSM
   - JVA
+  - JXG
+  - JYNT
   - KALU
+  - KALV
   - KAVL
+  - KDNY
+  - KDP
+  - KE
   - KELYA
   - KELYB
   - KEQU
   - KFFB
   - KFRC
+  - KGEI
+  - KHC
   - KINS
   - KIRK
   - KLAC
   - KLIC
+  - KMDA
   - KNDI
   - KOPN
   - KOSS
+  - KPRX
+  - KPTI
   - KRMD
+  - KRNT
   - KRNY
   - KTCC
   - KTOS
+  - KURA
   - KVHI
   - LAB
   - LAKE
   - LAMR
-  - LANC
+  - LAND
   - LARK
+  - LBRDA
+  - LBRDK
   - LBTYA
   - LBTYB
   - LBTYK
   - LCNB
   - LCUT
   - LDWY
+  - LE
   - LECO
+  - LEDS
   - LEE
   - LFCR
   - LFMD
   - LFUS
   - LFVN
+  - LFWD
+  - LGIH
   - LGND
   - LGO
-  - LGTY
+  - LILA
+  - LILAK
   - LINC
+  - LIND
+  - LINK
+  - LIQT
+  - LITE
   - LIVE
+  - LIVN
+  - LIXT
   - LKFN
   - LKQ
   - LMAT
+  - LMFA
   - LMNR
   - LNT
+  - LNTH
   - LNW
   - LOAN
+  - LOCO
   - LOGI
+  - LOPE
+  - LPCN
+  - LPLA
   - LPSN
   - LPTH
   - LQDT
   - LRCX
+  - LRFC
+  - LRMR
   - LSAK
-  - LSBK
   - LSCC
   - LSTA
   - LSTR
@@ -1688,8 +2317,11 @@
   - LWLG
   - LXRX
   - LYTS
+  - MACK
+  - MAMA
   - MANH
   - MAR
+  - MARA
   - MARPS
   - MASI
   - MAT
@@ -1697,27 +2329,37 @@
   - MAYS
   - MBCN
   - MBOT
+  - MBUU
   - MBWM
+  - MCFT
   - MCHP
   - MCHX
+  - MCRB
   - MCRI
   - MDGL
   - MDLZ
+  - MDWD
   - MDXG
   - MEIP
   - MELI
   - MEOH
   - MERC
+  - MESO
+  - META
+  - MFH
   - MFIC
   - MFIN
   - MGEE
   - MGI
   - MGIC
+  - MGNI
+  - MGNX
   - MGPI
   - MGRC
   - MGYR
   - MIDD
   - MIND
+  - MINM
   - MITK
   - MKSI
   - MKTX
@@ -1726,6 +2368,7 @@
   - MLKN
   - MMLP
   - MMSI
+  - MMYT
   - MNDO
   - MNKD
   - MNOV
@@ -1733,46 +2376,74 @@
   - MNST
   - MODD
   - MODV
+  - MOFG
+  - MOMO
   - MORN
   - MPAA
   - MPB
   - MPWR
+  - MRCC
   - MRCY
+  - MRIN
+  - MRKR
   - MRTN
   - MRVL
   - MSEX
   - MSFT
   - MSTR
+  - MTCH
   - MTEX
+  - MTLS
   - MTRX
+  - MTSI
   - MU
+  - MVBF
   - MVIS
+  - MVRK
+  - MXL
   - MYGN
+  - MYRG
+  - MZTI
+  - NAGE
   - NAII
   - NATH
   - NATL
+  - NATR
+  - NAVI
+  - NBIS
   - NBIX
   - NBN
   - NBTB
   - NCMI
   - NCTY
   - NDAQ
+  - NDLS
   - NDSN
   - NECB
+  - NEGG
   - NEO
   - NEOG
   - NEON
+  - NEPH
+  - NERV
   - NEWT
+  - NEXT
   - NFBK
   - NFLX
+  - NGNE
   - NHTC
   - NICE
+  - NIXX
   - NKSH
   - NKTR
+  - NMFC
+  - NMIH
   - NNBR
   - NOTV
+  - NRC
   - NRIM
   - NSIT
+  - NSPR
   - NSSC
   - NSYS
   - NTAP
@@ -1780,34 +2451,51 @@
   - NTES
   - NTGR
   - NTIC
+  - NTRA
+  - NTRP
   - NTRS
   - NTWK
-  - NURO
+  - NUTX
+  - NUWE
   - NVAX
+  - NVCR
   - NVDA
   - NVEC
+  - NVEE
+  - NVFY
   - NVMI
   - NWBI
   - NWE
   - NWFL
   - NWL
   - NWPX
+  - NWS
+  - NWSA
+  - NXPI
+  - NXPL
   - NXST
   - NYMT
   - OBLG
   - OBT
   - OCC
   - OCFC
+  - OCGN
+  - OCSL
+  - OCUL
   - ODFL
   - ODP
   - OESX
   - OFIX
   - OFLX
+  - OFS
+  - OGI
   - OLB
   - OLED
+  - OLLI
   - OMAB
   - OMCC
   - OMCL
+  - OMER
   - OMEX
   - 'ON'
   - ONB
@@ -1815,9 +2503,12 @@
   - OPBK
   - OPCH
   - OPHC
+  - OPI
   - OPK
   - OPOF
   - OPRX
+  - OPT
+  - OPXS
   - ORKA
   - ORLY
   - ORMP
@@ -1827,25 +2518,40 @@
   - OSPN
   - OSUR
   - OTEX
+  - OTRK
   - OTTR
   - OVBC
   - OVLY
+  - OXBR
+  - OXBRW
+  - OXLCN
   - OZK
   - PAA
+  - PACB
+  - PAGP
+  - PAHC
   - PALI
   - PAMT
+  - PANL
+  - PANW
   - PARA
   - PARAA
   - PATK
   - PAYS
   - PAYX
   - PBHC
+  - PBPB
+  - PBYI
+  - PCAP
   - PCAR
+  - PCB
   - PCH
+  - PCRX
+  - PCTY
   - PCYO
-  - PDCO
   - PDEX
   - PDFS
+  - PDSB
   - PEBK
   - PEBO
   - PEGA
@@ -1855,13 +2561,19 @@
   - PESI
   - PETS
   - PFBC
-  - PFC
   - PFG
   - PFIS
+  - PFXNL
   - PGC
+  - PGEN
+  - PHIO
+  - PHLT
+  - PINC
+  - PIRS
   - PKBK
   - PKOH
   - PLAB
+  - PLAY
   - PLBC
   - PLCE
   - PLPC
@@ -1869,7 +2581,9 @@
   - PLUR
   - PLUS
   - PLXS
+  - PMCB
   - PMN
+  - PMTS
   - PNBK
   - PNFP
   - PNRG
@@ -1879,77 +2593,115 @@
   - POWI
   - POWL
   - PPBI
+  - PPBT
   - PPC
+  - PPSI
   - PRAA
   - PRDO
   - PRGS
   - PROV
   - PRPH
   - PRPO
+  - PRQR
   - PRSO
+  - PRTA
   - PRTS
   - PSEC
+  - PSHG
+  - PSIX
   - PSMT
   - PSTV
   - PTC
+  - PTCT
   - PTEN
   - PTMN
-  - PWOD
+  - PULM
+  - PVBC
   - PWRD
   - PXLW
+  - PXS
+  - PYPL
   - PZZA
   - QCOM
   - QCRH
   - QDEL
+  - QLGN
+  - QLYS
   - QMCO
-  - QRTEA
-  - QRTEB
+  - QNST
+  - QRHC
+  - QRVO
   - QUIK
+  - QURE
+  - QVCGA
+  - QXO
   - RAIL
   - RAND
+  - RARE
   - RAVE
   - RBCAA
+  - RCKT
   - RCKY
   - RCMT
+  - RCON
   - RDCM
+  - RDGT
+  - RDHL
   - RDI
   - RDIB
   - RDNT
-  - RDUS
   - RDWR
   - REFR
   - REG
   - REGN
   - RELL
+  - RENB
   - RFIL
   - RGCO
   - RGEN
   - RGLD
+  - RGLS
+  - RGNX
   - RGP
   - RICK
   - RIGL
+  - RILY
   - RIOT
+  - RKDA
+  - RLMD
   - RMBS
   - RMCF
+  - RMNI
+  - RMR
   - RMTI
   - RNTX
   - RNWK
   - ROCK
   - ROP
   - ROST
+  - RPD
   - RRGB
+  - RSSS
+  - RUBI
+  - RUN
   - RUSHA
   - RUSHB
+  - RVNC
   - RVSB
   - RYAAY
+  - RZLT
+  - SABR
   - SAFT
   - SAIA
+  - SAMG
   - SANM
-  - SASR
+  - SASI
+  - SATS
   - SAVA
   - SBAC
   - SBCF
   - SBFG
+  - SBFM
   - SBGI
   - SBLK
   - SBRA
@@ -1957,21 +2709,29 @@
   - SBUX
   - SCHL
   - SCKT
+  - SCNI
+  - SCNX
   - SCOR
   - SCSC
   - SCVL
   - SCWO
+  - SCYX
+  - SEDG
   - SEED
   - SEIC
+  - SELF
   - SENEA
   - SENEB
+  - SFBC
+  - SFM
   - SFNC
   - SFST
   - SGA
   - SGC
-  - SGMA
+  - SGLY
   - SGMO
   - SGRP
+  - SGRY
   - SHBI
   - SHEN
   - SHIP
@@ -1983,26 +2743,38 @@
   - SIGI
   - SILC
   - SIMO
+  - SINT
   - SIRI
+  - SKYE
   - SKYW
   - SLAB
   - SLM
   - SLMBP
   - SLNG
+  - SLNH
+  - SLNO
   - SLP
+  - SLRC
+  - SLRX
+  - SLSN
   - SMBC
   - SMBK
   - SMCI
+  - SMLR
+  - SMMT
   - SMSI
   - SMTC
+  - SMTI
   - SNBR
   - SNCR
   - SNEX
   - SNFCA
+  - SNGX
   - SNOA
   - SNPS
   - SNT
   - SNY
+  - SOBR
   - SOHO
   - SOHU
   - SONN
@@ -2011,19 +2783,25 @@
   - SPOK
   - SPPI
   - SPRO
+  - SPSC
   - SPTN
+  - SPWH
+  - SRAX
   - SRCE
   - SRDX
   - SRPT
   - SSB
   - SSBI
   - SSKN
+  - SSNC
   - SSP
   - SSRM
+  - SSSS
   - SSYS
   - STAA
   - STBA
   - STKL
+  - STKS
   - STLD
   - STRA
   - STRL
@@ -2033,58 +2811,93 @@
   - STRT
   - STX
   - SUNE
+  - SUNS
+  - SUPN
   - SURG
   - SVA
   - SVC
   - SVRA
   - SWBI
+  - SWKH
   - SWKS
   - SYBT
+  - SYBX
   - SYNA
   - SYPR
   - TACT
   - TAIT
+  - TANH
+  - TANNI
+  - TANNL
+  - TANNZ
   - TAOP
+  - TARA
   - TATT
   - TAYD
   - TBBK
+  - TBCH
+  - TBPH
   - TBRG
   - TCBI
   - TCBK
   - TCOM
+  - TCPC
   - TCRT
   - TCX
+  - TEAM
   - TECH
   - TENX
   - TER
+  - TFIN
   - TFSL
+  - TGTX
+  - TH
   - THFF
   - THRM
+  - TIGO
   - TILE
+  - TIPT
   - TITN
   - TLF
+  - TLPH
   - TMUS
+  - TNDM
+  - TNFA
+  - TNXP
   - TOPS
+  - TOUR
   - TOWN
+  - TPCS
+  - TPST
   - TRAK
   - TRAW
+  - TREE
+  - TRI
   - TRIB
+  - TRIP
   - TRMB
   - TRMK
   - TRNS
+  - TROO
   - TROW
   - TRS
   - TRST
   - 'TRUE'
+  - TRUP
   - TSBK
   - TSCO
   - TSEM
+  - TSLA
+  - TSSI
   - TTEC
   - TTEK
   - TTGT
   - TTMI
   - TTNP
+  - TTSH
   - TTWO
+  - TVRD
+  - TVTX
   - TWIN
   - TXMD
   - TXN
@@ -2106,10 +2919,12 @@
   - UMBF
   - UNAMQ
   - UNB
+  - UNIT
   - UNTY
   - UONE
   - UONEK
   - UPBD
+  - UPLD
   - URBN
   - USAU
   - USEG
@@ -2121,39 +2936,74 @@
   - UVSP
   - VABK
   - VALU
-  - VBFC
+  - VANI
+  - VBTX
+  - VC
   - VCEL
+  - VCYT
   - VECO
   - VEON
+  - VERB
+  - VERO
   - VERU
+  - VFF
+  - VIA
+  - VIAV
   - VICR
   - VIRC
+  - VIRT
+  - VIVS
+  - VKTX
   - VLGEA
   - VLY
+  - VLYPP
   - VNDA
+  - VNET
+  - VNOM
   - VOD
-  - VOXX
+  - VRA
+  - VRDN
+  - VRME
+  - VRNS
   - VRNT
+  - VRSK
   - VRSN
+  - VRTS
   - VRTX
+  - VSA
   - VSAT
   - VSEC
+  - VSTM
+  - VTVT
+  - VUZI
+  - VYGR
   - WABC
   - WAFD
   - WASH
+  - WATT
+  - WB
   - WBA
   - WBD
+  - WDAY
   - WDC
   - WDFC
   - WEN
   - WERN
   - WEYS
+  - WFCF
+  - WHF
+  - WHLR
+  - WHLRP
   - WILC
   - WINA
+  - WING
+  - WIX
+  - WKHS
   - WKSP
   - WLDN
   - WLFC
   - WNEB
+  - WPRT
   - WRLD
   - WSBC
   - WSBF
@@ -2161,36 +3011,60 @@
   - WTBA
   - WTFC
   - WULF
+  - WVE
   - WVVI
   - WW
   - WWD
   - WYNN
+  - XBIO
+  - XBIT
   - XEL
   - XELB
+  - XENE
+  - XNCR
+  - XNET
   - XOMA
   - XPEL
   - XRAY
   - XRX
   - XTLB
+  - XXII
+  - XYLO
   - YHGJ
   - YORW
+  - Z
   - ZBRA
   - ZD
   - ZEUS
+  - ZG
   - ZION
+  - ZIONP
+  - ZJZZT
   - ZUMZ
+  - ZVRA
   - ZXZZT
+  - ZYNE
+  - ZYXI
+- stockExchange: NYSE ARCA
+  stocks:
+  - ABI
+  - ESBA
+  - FISK
+  - IGZ
+  - OGCP
+  - ZZZ
 - stockExchange: NYSE MKT
   stocks:
   - ACCS
   - ACU
-  - AIM
   - AIRI
   - AMS
   - APT
   - AREN
   - ARMN
+  - ARMP
   - ASM
+  - ATNM
   - AULT
   - AWX
   - BDL
@@ -2199,7 +3073,10 @@
   - BKTI
   - BRBS
   - BRN
+  - BTG
+  - CANF
   - CATX
+  - CCEL
   - CCF
   - CIX
   - CKX
@@ -2207,6 +3084,7 @@
   - COHN
   - CPHI
   - CQP
+  - CTGO
   - CVM
   - CVR
   - DIT
@@ -2214,24 +3092,34 @@
   - DSS
   - ELA
   - ELLO
+  - ELMD
   - EMX
+  - EP
   - EPM
   - ESP
-  - EVBN
+  - EU
   - EVI
   - FRD
   - FSI
   - FSP
+  - FURY
+  - GAU
   - GBR
   - GENC
+  - GGN-P-B
+  - GLDG
+  - GLU-P-A
   - GORO
   - GTE
   - HUSA
+  - IBIO
   - ID
+  - IDR
   - IGC
   - IHT
   - IMO
   - INFU
+  - INLX
   - INTT
   - INUV
   - IOR
@@ -2245,8 +3133,10 @@
   - LODE
   - MAG
   - MGLD
+  - MHH
   - MLSS
   - MSN
+  - MTNB
   - MXC
   - NAK
   - NBY
@@ -2255,14 +3145,24 @@
   - NGD
   - NHC
   - NNVC
+  - NTIP
   - OGEN
   - OPTT
+  - PCG-P-A
+  - PCG-P-B
+  - PCG-P-C
+  - PCG-P-D
+  - PCG-P-E
+  - PCG-P-G
+  - PCG-P-H
+  - PCG-P-I
   - PED
+  - PLAG
   - PLG
   - PLX
   - PRK
-  - PTN
   - PW
+  - PW-P-A
   - PZG
   - REI
   - REPX
@@ -2278,268 +3178,279 @@
   - TGB
   - THM
   - TMP
+  - TMQ
+  - TOON
   - TOVX
   - TRT
   - TRX
   - UAMY
   - UEC
+  - URG
   - UUU
   - UUUU
   - VGZ
+  - VNRX
   - VOLT
   - WRN
   - WYY
   - XPL
+  - XTNT
+- stockExchange: BATS
+  stocks:
+  - CBOE
+  - ZBZX
+  - ZTEST
+  - ZTST
 - stockExchange: SIX
   stocks:
-    - MMM
-    - ABBN
-    - ABT
-    - ACLN
-    - ADXN
-    - ADEN
-    - ADVN
-    - AEVS
-    - AIRE
-    - ALC
-    - ALLN
-    - ALPN
-    - ALSN
-    - AFP
-    - AMS
-    - AAM
-    - APGN
-    - ARBN
-    - ARON
-    - ARYN
-    - ASCN
-    - ASWN
-    - AUTN
-    - AVOL
-    - BANB
-    - BALN
-    - BCGE
-    - BCJ
-    - BCVN
-    - BARN
-    - BLKB
-    - CH0011432447
-    - BSKP
-    - BION
-    - BEAN
-    - BELL
-    - BBN
-    - TIBN
-    - BEKN
-    - BKW
-    - BOSN
-    - BUCN
-    - BCHN
-    - BRKN
-    - BVZN
-    - BYS
-    - CALN
-    - GAV
-    - CPEN
-    - CAT
-    - CMBN
-    - LISN
-    - LISP
-    - CIE
-    - CICN
-    - CLN
-    - CLTN
-    - COTN
-    - GOB
-    - CFR
-    - CFT
-    - COPN
-    - CPHN
-    - CLXN
-    - CURN
-    - DAE
-    - DKSH
-    - DOCM
-    - DOKA
-    - DESN
-    - ESUN
-    - EEII
-    - EFGN
-    - LLY
-    - ELMN
-    - EMMN
-    - EMSN
-    - RUS
-    - EPH
-    - EPIC
-    - EVE
-    - US30712D1072
-    - FTON
-    - FHZN
-    - FORN
-    - FREN
-    - GALD
-    - GALE
-    - GAM
-    - GE
-    - GEBN
-    - GEM
-    - GF
-    - GIVN
-    - GLKBN
-    - US38349T1060
-    - GRKP
-    - GMI
-    - GURN
-    - US41044C1053
-    - HBMN
-    - HELN
-    - HIAG
-    - HLEE
-    - HOCN
-    - HOLN
-    - HUBN
-    - HBLN
-    - IDIA
-    - IMPN
-    - INA
-    - IFCN
-    - INRN
-    - ISN
-    - IREN
-    - VBSN
-    - US47737H1115
-    - US47973H2058
-    - BAER
-    - JFN
-    - KARN
-    - US4872351030
-    - KLIN
-    - KOMN
-    - KUD
-    - KNIN
-    - US50126R1041
-    - KURN
-    - LLQ
-    - LAND
-    - LMN
-    - LECN
-    - LEHN
-    - LEON
-    - US52678P2056
-    - LLBN
-    - LOGN
-    - LONN
-    - LUKN
-    - MCHN
-    - MOVE
-    - MED
-    - MEDX
-    - MTG
-    - METN
-    - MBTN
-    - MIKN
-    - MOZN
-    - MOBN
-    - MOLN
-    - AERO
-    - NEAG
-    - NBEN
-    - NESN
-    - NWRN
-    - NIBEB
-    - US65447N1037
-    - NOVN
-    - NREN
-    - OERL
-    - ODHN
-    - OFN
-    - ORON
-    - PGHN
-    - PEAN
-    - PEP
-    - PEDU
-    - PMI
-    - PMN
-    - PKTM
-    - PLAN
-    - PPGN
-    - PEHN
-    - PSPN
-    - RSGN
-    - RLF
-    - RIEN
-    - ROG
-    - RO
-    - REHN
-    - SDZ
-    - SANN
-    - SCHP
-    - SCHN
-    - STRN
-    - SWTQ
-    - SNBN
-    - SCR
-    - SENS
-    - SFPN
-    - SFSN
-    - SGSN
-    - US82322J1079
-    - SHLTN
-    - SFZN
-    - SIGN
-    - SIKA
-    - SKAN
-    - CADN
-    - SWON
-    - SOON
-    - SPEX
-    - SGKN
-    - SRAIL
-    - STGN
-    - STMN
-    - SUN
-    - US86804J2042
-    - US98956C1018
-    - SLHN
-    - SPSN
-    - SREN
-    - STLN
-    - SCMN
-    - SQN
-    - TECN
-    - TEMN
-    - UHRN
-    - UHR
-    - TKBP
-    - TXGN
-    - UBXN
-    - UBSG
-    - VZUG
-    - VLRT
-    - VATN
-    - VARN
-    - VACN
-    - VAHN
-    - VETN
-    - VILN
-    - VONN
-    - VPBN
-    - VZN
-    - WKBN
-    - WARN
-    - US96908C1128
-    - WIHN
-    - XLS
-    - US98490B1061
-    - YTME
-    - YPSN
-    - ZEHN
-    - ZHT
-    - US98955Q1013
-    - ZBH
-    - ZUBN
-    - ZUGN
-    - ZUGER
-    - ZURN
-    - ZWM
+  - MMM
+  - ABBN
+  - ABT
+  - ACLN
+  - ADXN
+  - ADEN
+  - ADVN
+  - AEVS
+  - AIRE
+  - ALC
+  - ALLN
+  - ALPN
+  - ALSN
+  - AFP
+  - AMS
+  - AAM
+  - APGN
+  - ARBN
+  - ARON
+  - ARYN
+  - ASCN
+  - ASWN
+  - AUTN
+  - AVOL
+  - BANB
+  - BALN
+  - BCGE
+  - BCJ
+  - BCVN
+  - BARN
+  - BLKB
+  - CH0011432447
+  - BSKP
+  - BION
+  - BEAN
+  - BELL
+  - BBN
+  - TIBN
+  - BEKN
+  - BKW
+  - BOSN
+  - BUCN
+  - BCHN
+  - BRKN
+  - BVZN
+  - BYS
+  - CALN
+  - GAV
+  - CPEN
+  - CAT
+  - CMBN
+  - LISN
+  - LISP
+  - CIE
+  - CICN
+  - CLN
+  - CLTN
+  - COTN
+  - GOB
+  - CFR
+  - CFT
+  - COPN
+  - CPHN
+  - CLXN
+  - CURN
+  - DAE
+  - DKSH
+  - DOCM
+  - DOKA
+  - DESN
+  - ESUN
+  - EEII
+  - EFGN
+  - LLY
+  - ELMN
+  - EMMN
+  - EMSN
+  - RUS
+  - EPH
+  - EPIC
+  - EVE
+  - US30712D1072
+  - FTON
+  - FHZN
+  - FORN
+  - FREN
+  - GALD
+  - GALE
+  - GAM
+  - GE
+  - GEBN
+  - GEM
+  - GF
+  - GIVN
+  - GLKBN
+  - US38349T1060
+  - GRKP
+  - GMI
+  - GURN
+  - US41044C1053
+  - HBMN
+  - HELN
+  - HIAG
+  - HLEE
+  - HOCN
+  - HOLN
+  - HUBN
+  - HBLN
+  - IDIA
+  - IMPN
+  - INA
+  - IFCN
+  - INRN
+  - ISN
+  - IREN
+  - VBSN
+  - US47737H1115
+  - US47973H2058
+  - BAER
+  - JFN
+  - KARN
+  - US4872351030
+  - KLIN
+  - KOMN
+  - KUD
+  - KNIN
+  - US50126R1041
+  - KURN
+  - LLQ
+  - LAND
+  - LMN
+  - LECN
+  - LEHN
+  - LEON
+  - US52678P2056
+  - LLBN
+  - LOGN
+  - LONN
+  - LUKN
+  - MCHN
+  - MOVE
+  - MED
+  - MEDX
+  - MTG
+  - METN
+  - MBTN
+  - MIKN
+  - MOZN
+  - MOBN
+  - MOLN
+  - AERO
+  - NEAG
+  - NBEN
+  - NESN
+  - NWRN
+  - NIBEB
+  - US65447N1037
+  - NOVN
+  - NREN
+  - OERL
+  - ODHN
+  - OFN
+  - ORON
+  - PGHN
+  - PEAN
+  - PEP
+  - PEDU
+  - PMI
+  - PMN
+  - PKTM
+  - PLAN
+  - PPGN
+  - PEHN
+  - PSPN
+  - RSGN
+  - RLF
+  - RIEN
+  - ROG
+  - RO
+  - REHN
+  - SDZ
+  - SANN
+  - SCHP
+  - SCHN
+  - STRN
+  - SWTQ
+  - SNBN
+  - SCR
+  - SENS
+  - SFPN
+  - SFSN
+  - SGSN
+  - US82322J1079
+  - SHLTN
+  - SFZN
+  - SIGN
+  - SIKA
+  - SKAN
+  - CADN
+  - SWON
+  - SOON
+  - SPEX
+  - SGKN
+  - SRAIL
+  - STGN
+  - STMN
+  - SUN
+  - US86804J2042
+  - US98956C1018
+  - SLHN
+  - SPSN
+  - SREN
+  - STLN
+  - SCMN
+  - SQN
+  - TECN
+  - TEMN
+  - UHRN
+  - UHR
+  - TKBP
+  - TXGN
+  - UBXN
+  - UBSG
+  - VZUG
+  - VLRT
+  - VATN
+  - VARN
+  - VACN
+  - VAHN
+  - VETN
+  - VILN
+  - VONN
+  - VPBN
+  - VZN
+  - WKBN
+  - WARN
+  - US96908C1128
+  - WIHN
+  - XLS
+  - US98490B1061
+  - YTME
+  - YPSN
+  - ZEHN
+  - ZHT
+  - US98955Q1013
+  - ZBH
+  - ZUBN
+  - ZUGN
+  - ZUGER
+  - ZURN
+  - ZWM
