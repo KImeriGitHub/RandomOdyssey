@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from datetime import datetime
 
 from src.common.AssetData import AssetData
@@ -92,4 +93,48 @@ class Checks:
         if len(df) < required:
             return False
     
+        return True
+    
+    @staticmethod
+    def is_regular_ohlcv(asset:AssetData) -> bool:
+        sp: pd.DataFrame = asset.shareprice.copy()
+        if sp.empty:
+            return False
+        
+        sp['Date'] = pd.to_datetime(sp['Date'])
+        start: pd.Timestamp = sp['Date'].min()
+        end: pd.Timestamp = sp['Date'].max()
+
+        df = sp[sp['Date'] >= start]
+        if df.empty:
+            return False
+        
+        # Check whether there are 250 entries every year
+        years_adj = (end - start).days / 365.0
+        required = int(250 * years_adj)
+        if len(df) < required:
+            return False
+
+        # Check that OHLC does not repeat over 3 times
+        cols = ["Open","High","Low","Close"]
+        v = df[cols].to_numpy(dtype=np.float64)
+        if np.isnan(v[1:-1]).any():
+            return False
+        def is_close(a, b, rtol=1e-10, atol=0, equal_nan=False):
+            return np.all(np.isclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan), axis=1)
+        any_consec_dub = (
+            np.any(
+                is_close(v[:-3], v[3:]) 
+                & is_close(v[1:-2], v[2:-1]) 
+                & is_close(v[2:-1], v[1:-2])
+            )
+        )
+        if any_consec_dub:
+            return False
+
+        # Volume non-zero except possibly the last two rows
+        last_idx = df.index[-1]
+        if ((df["Volume"] == 0) & (df.index != last_idx) & (df.index != last_idx - 1)).any():
+            return False
+
         return True
