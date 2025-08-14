@@ -8,8 +8,6 @@ import polars as pl
 from pathlib import Path
 import re
 import datetime
-import copy
-import random
 
 stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
@@ -53,7 +51,7 @@ def read_parquet_files() -> tuple[list[pl.DataFrame], pl.DataFrame]:
     return tables, meta_df
 
 if __name__ == "__main__":
-    tables, meta_pred = read_parquet_files()
+    tables, list_info = read_parquet_files()
     
     global_start_date = datetime.date(2024, 1, 1)
     test_dates = sorted({
@@ -89,18 +87,20 @@ if __name__ == "__main__":
         if jTable is None or jTable.select('target_ratio').to_series().has_nulls():
             continue
 
+        if list_info["group"].item(i) != stock_group:
+            logger.warning("Group mismatch. Skipping")
+            continue
+
         logger.info(f"Analyzing table {i+1}/{len(tables_joined)}")
-        logger.info(f"Date: {meta_pred['date'].item(i)}, Time: {meta_pred['time'].item(i)}")
+        logger.info(f"Date: {list_info['date'].item(i)}, Time: {list_info['time'].item(i)}")
 
         ModelAnalyzer.log_test_result_overall(jTable, last_col="target_ratio")
 
-        results.append(
-            {
-                "end_train_date": jTable.select('date').min().item(),
-                "end_test_date": jTable.select('date').max().item(),
-                "table": jTable
-            }
-        )
+        results.append({
+            "end_train_date": jTable.select('date').min().item(),
+            "end_test_date": jTable.select('date').max().item(),
+            "table": jTable
+        })
         
     if len(results) > 0:
         ModelAnalyzer.log_test_result_multiple(
