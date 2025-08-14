@@ -135,9 +135,7 @@ class ModelAnalyzer:
                 continue
 
             # Print result on test date
-            with pl.Config(ascii_tables=True):
-                pl.Config.set_tbl_rows(20)
-                pl.Config.set_tbl_cols(20)
+            with pl.Config(ascii_tables=True, tbl_rows=20, tbl_cols=20):
                 logger.info(f"DataFrame:\n{res_df_ondate}")
                 
             if last_col is not None:
@@ -206,7 +204,7 @@ class ModelAnalyzer:
             )
 
         results_df = pl.DataFrame(results).sort("end_train_date")
-        with pl.Config(tbl_rows=-1, tbl_cols=-1):
+        with pl.Config(ascii_tables=True, tbl_rows=-1, tbl_cols=-1):
             logger.info(results_df)
 
         logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
@@ -230,25 +228,17 @@ class ModelAnalyzer:
 
 
             # Conditional Means
-            logger.info(
-                "Mean over meanmean returns filtered by 0.5 quantile prediction meanmean: "
-                f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5), 'res_meanmean').mean()}"
-            )
-            logger.info(
-                "Mean over meanlast returns filtered by 0.5 quantile prediction meanmean: "
-                f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5), 'res_meanlast').mean()}"
-            )
-            logger.info(
-                f"Mean over meanlast returns filtered by 0.5 quantile prediction meanlast: "
-                f"{results_df.filter(pl.col('pred_meanlast') > pl.col('pred_meanlast').quantile(0.5), 'res_meanlast').mean()}"
-            )
-            logger.info(
-                f"Mean over toplast returns filtered by 0.5 quantile prediction toplast: "
-                f"{results_df.filter(pl.col('pred_toplast') > pl.col('pred_toplast').quantile(0.5), 'res_toplast').mean()}"
-            )
-            logger.info(
-                f"Mean over toplast returns filtered by 0.5 quantile prediction meanmean: "
-                f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5), 'res_toplast').mean()}"
-            )
-
+            with pl.Config(ascii_tables=True, tbl_rows=-1, tbl_cols=-1):
+                logger.info(
+                    "Mean over results filtered by 0.5 quantile prediction meanmean: "
+                    f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5)).mean()}"
+                )
+                logger.info(
+                    f"Mean over results filtered by 0.5 quantile prediction meanlast: "
+                    f"{results_df.filter(pl.col('pred_meanlast') > pl.col('pred_meanlast').quantile(0.5)).mean()}"
+                )
+                logger.info(
+                    f"Mean over results filtered by 0.5 quantile prediction toplast: "
+                    f"{results_df.filter(pl.col('pred_toplast') > pl.col('pred_toplast').quantile(0.5)).mean()}"
+                )
         return results_df
