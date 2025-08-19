@@ -4,7 +4,8 @@ import pandas as pd
 import polars as pl
 import datetime
 import re
-from typing import Optional
+import copy
+from typing import Optional, Tuple
 from sklearn.preprocessing import StandardScaler
 
 import pandas_market_calendars as mcal
@@ -27,20 +28,21 @@ class LoadupSamples:
     def __init__(self, 
             train_start_date: datetime.date,
             test_dates: list[datetime.date],
-            group: str,
-            group_type: str = 'Tree',
+            treegroup: str | None = None,
+            timegroup: str | None = None,
             params: dict = None,
         ):
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
-        self.group = group
-        self.group_type = group_type
         self.train_start_date = train_start_date
         self.test_dates = test_dates
-        
+        self.treegroup = treegroup
+        self.timegroup = timegroup
+
+        if treegroup is None and timegroup is None:
+            raise ValueError("Either treegroup or timegroup must be specified.")
+
         self.min_test_date = min(self.test_dates)
         self.max_test_date = max(self.test_dates)
-        
-        # Assign parameters to instance variables
         
         self.daysAfter = self.params.get('daysAfterPrediction', None)
         self.idxAfter = self.params.get('idxAfterPrediction', None)
@@ -70,7 +72,7 @@ class LoadupSamples:
         )
         
         # Check for same shape
-        if self.group_type == "Tree":
+        if self.treegroup is not None:
             if self.train_Xtree.shape[1] != self.test_Xtree.shape[1]:
                 logger.error("Training and test datasets have different number of features.")
             if self.train_ytree.shape[0] != self.train_Xtree.shape[0]:
@@ -83,7 +85,7 @@ class LoadupSamples:
             if len(self.meta_pl_train['date']) != self.train_Xtree.shape[0]:
                 logger.error("Number of sample dates does not match the number of training samples.")
 
-        if self.group_type == "Time":
+        if self.timegroup is not None:
             if self.train_Xtime.shape[2] != self.test_Xtime.shape[2]:
                 logger.error("Training and test datasets have different number of features.")
             if self.train_ytime.shape[0] != self.train_Xtime.shape[0]:
@@ -108,62 +110,97 @@ class LoadupSamples:
     def load_samples(self, main_path: str = "src/featureAlchemy/bin/") -> Optional[pl.DataFrame]:
         years = np.arange(self.train_start_date.year, self.max_test_date.year + 1)
         
-        meta_all_pl_list = []
-        names_data: list = []
-        all_X_list = []
-        
-        prefix = f"{self.group_type}Features"
-        
+        names_treedata: list = []
+        names_timedata: list = []
+        meta_alltree_pl_list = []
+        meta_alltime_pl_list = []
+        alltree_X_list = []
+        alltime_X_list = []
+
+        prefix_tree = f"TreeFeatures"
+        prefix_time = f"TimeFeatures"
+
         # check whether files are there otherwise make error
         for year in years:
             label = str(year)
-            if not os.path.isfile(main_path + f"{prefix}_{label}_{self.group}.npz"):
-                raise FileNotFoundError(f"Feature sets not found.")
-            
-        # Load data
-        testdate_in_db = np.zeros(len(self.test_dates), dtype=bool)
-        for year in years:
-            label = str(year)
-            
-            path_npz = main_path + f"{prefix}_{label}_{self.group}.npz"
-            
-            data = np.load(path_npz, allow_pickle=True)
-            
-            meta_data  = data['meta_feat']
-            feats_data = data['featuresArr']
-            names_data = data['featuresNames']
-            
-            for idx, test_date in enumerate(self.test_dates):
-                if test_date in meta_data["date"]:
-                    testdate_in_db[idx] = True
-            
-            # shorten to timesteps
-            if self.group_type == "time" and feats_data.shape[1] > self.timesteps:
-                feats_data = feats_data[:,-self.timesteps:,:]
+            if self.treegroup is not None and not os.path.isfile(main_path + f"{prefix_tree}_{label}_{self.treegroup}.npz"):
+                raise FileNotFoundError(f"{prefix_tree} sets not found.")
+            if self.timegroup is not None and not os.path.isfile(main_path + f"{prefix_time}_{label}_{self.timegroup}.npz"):
+                raise FileNotFoundError(f"{prefix_time} sets not found.")
 
-            # meta polars
-            meta_pl_all_loop: pl.DataFrame = pl.DataFrame({
-                "date":     meta_data["date"],
-                "ticker":   meta_data["ticker"],
-                "Close":    meta_data["Close"],
-                "AdjClose": meta_data["AdjClose"],
-                "Open":     meta_data["Open"],
-            })
+        # Load data
+        for year in years:
+            for cat in ["Tree", "Time"]:
+                if cat == "Tree" and self.treegroup is None:
+                    continue
+                if cat == "Time" and self.timegroup is None:
+                    continue
+
+                label = str(year)
+
+                if cat == "Tree":
+                    path_npz = main_path + f"{cat}Features_{label}_{self.treegroup}.npz"
+                if cat == "Time":
+                    path_npz = main_path + f"{cat}Features_{label}_{self.timegroup}.npz"
+
+                data = np.load(path_npz, allow_pickle=True)
+
+                meta_data  = data['meta_feat']
+                feats_data = data['featuresArr']
+                names_data = data['featuresNames']
             
-            meta_all_pl_list.append(meta_pl_all_loop)
-            all_X_list.append(feats_data)
+                # shorten to timesteps
+                if cat == "Time" and feats_data.shape[1] > self.timesteps:
+                    feats_data = feats_data[:,-self.timesteps:,:]
+
+                # meta polars
+                meta_pl_loop: pl.DataFrame = pl.DataFrame({
+                    "date":     meta_data["date"],
+                    "ticker":   meta_data["ticker"],
+                    "Close":    meta_data["Close"],
+                    "AdjClose": meta_data["AdjClose"],
+                    "Open":     meta_data["Open"],
+                })
+
+                if cat == "Tree":
+                    names_treedata = names_data
+                    meta_alltree_pl_list.append(meta_pl_loop)
+                    alltree_X_list.append(feats_data)
+                if cat == "Time":
+                    names_timedata = names_data
+                    meta_alltime_pl_list.append(meta_pl_loop)
+                    alltime_X_list.append(feats_data)
 
         # Post processing
-        meta_pl: pl.DataFrame = pl.concat(meta_all_pl_list)
-        all_X_pre = np.concatenate(all_X_list, axis=0)
-                
+        if self.treegroup is not None:
+            metatree_pl: pl.DataFrame = pl.concat(meta_alltree_pl_list)
+            alltree_X_pre: np.ndarray = np.concatenate(alltree_X_list, axis=0)
+        if self.timegroup is not None:
+            metatime_pl: pl.DataFrame = pl.concat(meta_alltime_pl_list)
+            alltime_X_pre: np.ndarray = np.concatenate(alltime_X_list, axis=0)
+
+        if self.treegroup is not None and self.timegroup is not None:
+            meta_pl, all_Xtree_pre, all_Xtime_pre = self.__combine_tree_and_time(
+                metatree_pl, metatime_pl, alltree_X_pre, alltime_X_pre
+            )
+        if self.treegroup is None and self.timegroup is not None:
+            meta_pl = metatime_pl
+            all_Xtree_pre = None
+            all_Xtime_pre = alltime_X_pre
+        if self.treegroup is not None and self.timegroup is None:
+            meta_pl = metatree_pl
+            all_Xtree_pre = alltree_X_pre
+            all_Xtime_pre = None
+
         # Check if test dates are trading dates and modify if necessary
-        modified_test_dates = self.test_dates[:]
+        modified_test_dates = copy.deepcopy(self.test_dates)
         for idx, test_date in enumerate(modified_test_dates):
-            if not testdate_in_db[idx]:
+            if not meta_pl["date"].is_in(pl.Series([test_date])).any():
                 logger.warning(f"Test date {test_date} not found in the database. Omitting.")
                 modified_test_dates[idx] = meta_pl.filter(pl.col("date") <= test_date).select("date").max().item()
         self.test_dates = sorted(set(modified_test_dates))
+        self.min_test_date = self.test_dates[0]
+        self.max_test_date = self.test_dates[-1]
 
         # Add target
         meta_pl = meta_pl.sort(["date", "ticker"])
@@ -183,15 +220,15 @@ class LoadupSamples:
         self.meta_pl_train = meta_pl.filter(pl.Series(mask_inbetween_date))
         self.meta_pl_test  = meta_pl.filter(pl.Series(mask_at_test_dates))
         
-        if self.group_type == "Tree":
-            self.featureTreeNames = names_data
-            self.train_Xtree = all_X_pre[mask_inbetween_date]
-            self.test_Xtree = all_X_pre[mask_at_test_dates]
+        if self.treegroup is not None:
+            self.featureTreeNames = names_treedata
+            self.train_Xtree = all_Xtree_pre[mask_inbetween_date]
+            self.test_Xtree = all_Xtree_pre[mask_at_test_dates]
             
-        if self.group_type == "Time":
-            self.featureTimeNames = names_data
-            self.train_Xtime = all_X_pre[mask_inbetween_date]
-            self.test_Xtime = all_X_pre[mask_at_test_dates]
+        if self.timegroup is not None:
+            self.featureTimeNames = names_timedata
+            self.train_Xtime = all_Xtime_pre[mask_inbetween_date]
+            self.test_Xtime = all_Xtime_pre[mask_at_test_dates]
         
         # Assign target
         tar_all = meta_pl["target_ratio"].to_numpy().flatten()
@@ -199,11 +236,11 @@ class LoadupSamples:
         rat_inbetween = tar_all[mask_inbetween_date]
         rat_at_test_date = tar_all[mask_at_test_dates]
         
-        if self.group_type == "Tree":
+        if self.treegroup is not None:
             self.train_ytree = np.clip(rat_inbetween, 1e-2, 1e2)
             self.test_ytree = np.clip(rat_at_test_date, 1e-2, 1e2)
         
-        if self.group_type == "Time":
+        if self.timegroup is not None:
             inc_factor = self.params["LoadupSamples_time_inc_factor"]
             self.train_ytime = np.tanh((rat_inbetween - 1.0) * inc_factor) / 2.0 + 0.5
             self.test_ytime = np.tanh((rat_at_test_date - 1.0) * inc_factor) / 2.0 + 0.5
@@ -212,17 +249,47 @@ class LoadupSamples:
         self.__remove_nan_samples_train()
         
         # Scaling Tree
-        if self.group_type == "Tree" and self.params["LoadupSamples_tree_scaling_standard"]:
+        if self.treegroup is not None and self.params["LoadupSamples_tree_scaling_standard"]:
             self.__scale_tree_standard()
         
         # Scaling Time
-        if self.group_type == "Time" and self.params["LoadupSamples_time_scaling_stretch"]:
+        if self.timegroup is not None and self.params["LoadupSamples_time_scaling_stretch"]:
             self.train_Xtime = self.__scale_time_stretch(self.train_Xtime)
             self.test_Xtime = self.__scale_time_stretch(self.test_Xtime)
             
         # Final checks
         self.dataset_tests()
+
+    def __combine_tree_and_time(self, 
+            meta_tree: pl.DataFrame, 
+            meta_time: pl.DataFrame, 
+            all_tree_X: np.ndarray, 
+            all_time_X: np.ndarray
+        ) -> Tuple[pl.DataFrame, np.ndarray, np.ndarray]:
+        metatree_idx = meta_tree.with_row_index("idx_tree")
+        metatime_idx = meta_time.with_row_index("idx_time")
+        meta_pl = metatree_idx.join(metatime_idx, on=["date", "ticker"], how="inner", suffix="_time")
+        idx_tree = meta_pl["idx_tree"].to_numpy()
+        idx_time = meta_pl["idx_time"].to_numpy()
+
+        alltree_X = all_tree_X[idx_tree]
+        alltime_X = all_time_X[idx_time]
+
+        # Assert resulting np length
+        assert len(idx_tree) == len(idx_time), "Tree and Time indices must match in length."
+
+        # Assert Close, AdjClose etc match in combined dataframe
+        cols = ["Close", "AdjClose", "Open"]
+        left = meta_pl.select(cols)
+        right = meta_pl.select([f"{c}_time" for c in cols]).rename(
+            {f"{c}_time": c for c in cols}
+        )
+        assert left.equals(right, null_equal=True), "Mismatch between cols and their *_time counterparts."
         
+        meta_pl = meta_pl.drop(["idx_tree", "idx_time", "AdjClose_time","Close_time","Open_time"])
+
+        return meta_pl, alltree_X, alltime_X
+
     def split_dataset(self, 
         start_date: datetime.date, 
         last_train_date: datetime.date, 
@@ -251,7 +318,7 @@ class LoadupSamples:
         ).fill_null(False).to_numpy()
 
         # Tree
-        if self.group_type == "Tree":
+        if self.treegroup is not None:
             self.test_Xtree = np.concatenate(
                 [
                     self.train_Xtree[train_split_te_mask], 
@@ -271,7 +338,7 @@ class LoadupSamples:
             self.train_ytree = self.train_ytree[train_split_tr_mask]
 
         # Time
-        if self.group_type == "Time":
+        if self.timegroup is not None:
             self.test_Xtime = np.concatenate(
                 [
                     self.train_Xtime[train_split_te_mask], 
@@ -300,13 +367,12 @@ class LoadupSamples:
         self.test_dates = self.meta_pl_test.select(pl.col('date')).to_series().unique().to_list()
         
         self.dataset_tests()
-        
+
         
     def __add_target(self, meta_pl: pl.DataFrame):
         idx_after = self.__determine_idx_after(meta_pl)
         
         meta_pl = meta_pl.sort(["date", "ticker"])
-        meta_pl = meta_pl.with_row_count(name="row_idx")
 
         date_expr = pl.col("date").shift(-idx_after).over("ticker").alias("target_date")
 
@@ -321,9 +387,9 @@ class LoadupSamples:
         # get mean over all future close prices after idx_after days
         mean_expr = (
             pl.col("AdjClose")
-            .shift(-(idx_after+(idx_after//2)))
-            .rolling_mean(window_size=idx_after)
-            .over("ticker")         #TODO: two expr after over seems to lead to wrong results. Make two separate expressions.
+            .shift(-idx_after)
+            .rolling_mean(window_size=max(idx_after//2,1))
+            .over("ticker")
             .alias("target_mean_close")
         )
 
@@ -332,7 +398,7 @@ class LoadupSamples:
             pl.col("AdjClose")
             .shift(-idx_after)
             .rolling_max(window_size=idx_after)
-            .over("ticker")         #TODO: two expr after over seems to lead to wrong results. Make two separate expressions.
+            .over("ticker")
             .alias("target_max_close")
         )
         
@@ -419,53 +485,57 @@ class LoadupSamples:
         return sched.shape[0]
     
     def __remove_nan_samples_train(self) -> None:
-        # Every sample with nan in target are removed
-        if self.group_type == "Tree":
-            # Remove nan in y
-            mask_nan_inbetween_tree = np.isnan(self.train_ytree) 
-            if mask_nan_inbetween_tree.sum() > 0:
-                logger.warning(f"NaN values found in training tree features. {mask_nan_inbetween_tree.sum()} Samples removed.")
-            self.train_Xtree = self.train_Xtree[~mask_nan_inbetween_tree]
-            self.train_ytree = self.train_ytree[~mask_nan_inbetween_tree]
-            self.meta_pl_train = self.meta_pl_train.filter(~mask_nan_inbetween_tree)
-            
-            # Remove nan and inf in X
-            mask_nan_inbetween_tree = np.isnan(self.train_Xtree).any(axis=1)
-            mask_inf_inbetween_tree = np.isinf(self.train_Xtree).any(axis=1)
-            mask_isbig_inbetween_tree = (np.abs(self.train_Xtree) > 1e10).any(axis=1)
-            mask_combined_inbetween_tree = mask_nan_inbetween_tree | mask_inf_inbetween_tree | mask_isbig_inbetween_tree
-            if mask_combined_inbetween_tree.sum() > 0:
-                logger.warning(f"Inf values found in training tree features. {mask_combined_inbetween_tree.sum()} Samples removed.")
-            self.train_Xtree = self.train_Xtree[~mask_combined_inbetween_tree]
-            self.train_ytree = self.train_ytree[~mask_combined_inbetween_tree]
-            self.meta_pl_train = self.meta_pl_train.filter(~mask_combined_inbetween_tree)
-            
-            #same for test
-            mask_nan_inbetween_tree = np.isnan(self.test_Xtree).any(axis=1)
-            mask_inf_inbetween_tree = np.isinf(self.test_Xtree).any(axis=1)
-            mask_isbig_inbetween_tree = (np.abs(self.test_Xtree) > 1e10).any(axis=1)
-            mask_combined_inbetween_tree = mask_nan_inbetween_tree | mask_inf_inbetween_tree | mask_isbig_inbetween_tree
-            if mask_combined_inbetween_tree.sum() > 0:
-                logger.warning(f"Inf values found in testing tree features. {mask_combined_inbetween_tree.sum()} Samples removed.")
-            self.test_Xtree = self.test_Xtree[~mask_combined_inbetween_tree]
-            self.test_ytree = self.test_ytree[~mask_combined_inbetween_tree]
-            self.meta_pl_test = self.meta_pl_test.filter(~mask_combined_inbetween_tree)
+        threshold_biggness = 1e10
 
-        if self.group_type == "Time":
-            mask_nan_inbetween_time = np.isnan(self.train_ytime)
-            if mask_nan_inbetween_time.sum() > 0:
-                logger.warning(f"NaN values found in training time features. {mask_nan_inbetween_time.sum()} Samples removed.")
-            self.train_Xtime = self.train_Xtime[~mask_nan_inbetween_time]
-            self.train_ytime = self.train_ytime[~mask_nan_inbetween_time]
-            self.meta_pl_train = self.meta_pl_train.filter(~mask_nan_inbetween_time)
-            
-            # same for test
-            mask_nan_inbetween_time = np.isnan(self.test_ytime)
-            if mask_nan_inbetween_time.sum() > 0:
-                logger.warning(f"NaN values found in testing time features. {mask_nan_inbetween_time.sum()} Samples removed.")
-            self.test_Xtime = self.test_Xtime[~mask_nan_inbetween_time]
-            self.test_ytime = self.test_ytime[~mask_nan_inbetween_time]
-            self.meta_pl_test = self.meta_pl_test.filter(~mask_nan_inbetween_time)
+        # TRAINING
+        mask_train = np.ones(self.meta_pl_train.height, dtype=bool)
+        if self.treegroup is not None:
+            X = self.train_Xtree
+            y = self.train_ytree
+            bad_train_X = (~np.isfinite(X) | (np.abs(X) > threshold_biggness)).any(axis=1)
+            bad_train_y = ~np.isfinite(y) | (np.abs(y) > threshold_biggness)
+            if bad_train_y.sum():
+                logger.info(f"Non-finite/too-large values in train y tree: {bad_train_y.sum()} samples.")
+            if bad_train_X.sum():
+                logger.info(f"Non-finite/too-large values in train X tree: {bad_train_X.sum()} samples.")
+            mask_train &= ~(bad_train_X | bad_train_y)
+
+        if self.timegroup is not None:
+            bad_ytime = ~np.isfinite(self.train_ytime)
+            if bad_ytime.sum() > 0:
+                logger.info(f"Non-finite/too-large values in train y time: {bad_ytime.sum()} samples.")
+            mask_train &= ~bad_ytime
+
+        # Removing train samples
+        if (~mask_train).sum():
+            logger.info(f"Removing {(~mask_train).sum()} samples from training data.")
+        if self.treegroup is not None:
+            self.train_Xtree = self.train_Xtree[mask_train]
+            self.train_ytree = self.train_ytree[mask_train]
+        if self.timegroup is not None:
+            self.train_Xtime = self.train_Xtime[mask_train]
+            self.train_ytime = self.train_ytime[mask_train]
+        self.meta_pl_train = self.meta_pl_train.filter(pl.Series(mask_train))
+
+        # TESTING
+        mask_test = np.ones(self.meta_pl_test.height, dtype=bool)
+        if self.treegroup is not None:
+            X = self.test_Xtree
+            bad_test_X = (~np.isfinite(X) | (np.abs(X) > threshold_biggness)).any(axis=1)
+            if bad_test_X.sum():
+                logger.info(f"Non-finite/too-large values in test X tree: {bad_test_X.sum()} samples.")
+            mask_test &= ~(bad_test_X)
+
+        # Removing test samples
+        if (~mask_test).sum():
+            logger.info(f"Removing {(~mask_test).sum()} samples from testing data.")
+        if self.treegroup is not None:
+            self.test_Xtree = self.test_Xtree[mask_test]
+            self.test_ytree = self.test_ytree[mask_test]
+        if self.timegroup is not None:
+            self.test_Xtime = self.test_Xtime[mask_test]
+            self.test_ytime = self.test_ytime[mask_test]
+        self.meta_pl_test = self.meta_pl_test.filter(pl.Series(mask_test))
 
     def __scale_tree_standard(self) -> None:
         scaler = StandardScaler()
