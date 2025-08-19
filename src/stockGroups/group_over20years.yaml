@@ -20,6 +20,7 @@
 - ACNT
 - ACTG
 - ACU
+- AD
 - ADBE
 - ADC
 - ADEA
@@ -96,7 +97,6 @@
 - ANIK
 - ANIP
 - ANIX
-- ANSS
 - AON
 - AORT
 - AOS
@@ -167,6 +167,7 @@
 - AZO
 - AZTA
 - AZZ
+- B
 - BA
 - BAC
 - BAK
@@ -252,6 +253,7 @@
 - BRKR
 - BRN
 - BRO
+- BRSL
 - BRT
 - BSAC
 - BSET
@@ -307,11 +309,6 @@
 - CCNE
 - CCOI
 - CCRD
-- CCRN
-- CCU
-- CDE
-- CDNS
-- CDP
 - CDZI
 - CECO
 - CENT
@@ -429,7 +426,6 @@
 - CSX
 - CTAS
 - CTBI
-- CTHR
 - CTLP
 - CTO
 - CTRA
@@ -476,10 +472,6 @@
 - DE
 - DECK
 - DENN
-- DEO
-- DGICA
-- DGICB
-- DGII
 - DGX
 - DHC
 - DHI
@@ -562,7 +554,6 @@
 - EPD
 - EPM
 - EPR
-- EQC
 - EQIX
 - EQR
 - EQS
@@ -594,7 +585,6 @@
 - EZPW
 - F
 - FARM
-- FARO
 - FAST
 - FBNC
 - FBP
@@ -721,8 +711,6 @@
 - GME
 - GNSS
 - GNTX
-- GOGL
-- GOOD
 - GPC
 - GPI
 - GPK
@@ -757,7 +745,6 @@
 - HE
 - HEI
 - HELE
-- HES
 - HFWA
 - HHS
 - HIFS
@@ -796,6 +783,7 @@
 - HSY
 - HTBK
 - HTLD
+- HTO
 - HUBG
 - HUM
 - HURC
@@ -815,7 +803,6 @@
 - IBM
 - IBN
 - IBOC
-- ICAD
 - ICCC
 - ICLR
 - ICUI
@@ -912,7 +899,6 @@
 - KGC
 - KIM
 - KINS
-- KIRK
 - KLAC
 - KLIC
 - KMB
@@ -1110,6 +1096,7 @@
 - MXC
 - MYE
 - MYGN
+- MZTI
 - NAII
 - NAK
 - NAT
@@ -1334,7 +1321,6 @@
 - PUK
 - PVH
 - PW
-- PWOD
 - PWR
 - PXLW
 - PZZA
@@ -1450,7 +1436,7 @@
 - SFST
 - SGA
 - SGC
-- SGMA
+- SGI
 - SGMO
 - SGRP
 - SGU
@@ -1590,7 +1576,6 @@
 - TFX
 - TG
 - TGB
-- TGI
 - TGNA
 - TGS
 - TGT
@@ -1699,7 +1684,6 @@
 - USEG
 - USIO
 - USLM
-- USM
 - USNA
 - USPH
 - UTHR
