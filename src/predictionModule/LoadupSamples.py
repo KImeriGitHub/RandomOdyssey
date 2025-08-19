@@ -321,7 +321,7 @@ class LoadupSamples:
         # get mean over all future close prices after idx_after days
         mean_expr = (
             pl.col("AdjClose")
-            .shift(-(idx_after-(idx_after//2)))
+            .shift(-(idx_after+(idx_after//2)))
             .rolling_mean(window_size=idx_after)
             .over("ticker")         #TODO: two expr after over seems to lead to wrong results. Make two separate expressions.
             .alias("target_mean_close")
@@ -330,7 +330,7 @@ class LoadupSamples:
         # get max over all future close prices after idx_after days
         max_expr = (
             pl.col("AdjClose")
-            .shift(-1)
+            .shift(-idx_after)
             .rolling_max(window_size=idx_after)
             .over("ticker")         #TODO: two expr after over seems to lead to wrong results. Make two separate expressions.
             .alias("target_max_close")
@@ -439,6 +439,17 @@ class LoadupSamples:
             self.train_Xtree = self.train_Xtree[~mask_combined_inbetween_tree]
             self.train_ytree = self.train_ytree[~mask_combined_inbetween_tree]
             self.meta_pl_train = self.meta_pl_train.filter(~mask_combined_inbetween_tree)
+            
+            #same for test
+            mask_nan_inbetween_tree = np.isnan(self.test_Xtree).any(axis=1)
+            mask_inf_inbetween_tree = np.isinf(self.test_Xtree).any(axis=1)
+            mask_isbig_inbetween_tree = (np.abs(self.test_Xtree) > 1e10).any(axis=1)
+            mask_combined_inbetween_tree = mask_nan_inbetween_tree | mask_inf_inbetween_tree | mask_isbig_inbetween_tree
+            if mask_combined_inbetween_tree.sum() > 0:
+                logger.warning(f"Inf values found in testing tree features. {mask_combined_inbetween_tree.sum()} Samples removed.")
+            self.test_Xtree = self.test_Xtree[~mask_combined_inbetween_tree]
+            self.test_ytree = self.test_ytree[~mask_combined_inbetween_tree]
+            self.meta_pl_test = self.meta_pl_test.filter(~mask_combined_inbetween_tree)
 
         if self.group_type == "Time":
             mask_nan_inbetween_time = np.isnan(self.train_ytime)
@@ -447,7 +458,15 @@ class LoadupSamples:
             self.train_Xtime = self.train_Xtime[~mask_nan_inbetween_time]
             self.train_ytime = self.train_ytime[~mask_nan_inbetween_time]
             self.meta_pl_train = self.meta_pl_train.filter(~mask_nan_inbetween_time)
-        
+            
+            # same for test
+            mask_nan_inbetween_time = np.isnan(self.test_ytime)
+            if mask_nan_inbetween_time.sum() > 0:
+                logger.warning(f"NaN values found in testing time features. {mask_nan_inbetween_time.sum()} Samples removed.")
+            self.test_Xtime = self.test_Xtime[~mask_nan_inbetween_time]
+            self.test_ytime = self.test_ytime[~mask_nan_inbetween_time]
+            self.meta_pl_test = self.meta_pl_test.filter(~mask_nan_inbetween_time)
+
     def __scale_tree_standard(self) -> None:
         scaler = StandardScaler()
         scaler.fit(self.train_Xtree)
