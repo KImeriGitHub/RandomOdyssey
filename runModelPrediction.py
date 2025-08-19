@@ -28,11 +28,8 @@ logger.info(f" Params: {params}")
 ###############
 # Static config
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
-eval_date   = datetime.date(2025, 8, 11)          # last date you want to consider cutoffs up to
+eval_date   = datetime.datetime.now().date()          # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 100                                    # number of cutoffs to generate
-num_reruns = 2                                    # number of times to rerun analysis for each cutoff  
-days_delta = 15                                    # days delta for cutoff generation
 
 if __name__ == "__main__":
     #p = argparse.ArgumentParser()

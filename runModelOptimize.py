@@ -36,11 +36,12 @@ logger.info(f" Params: {params}")
 if __name__ == "__main__":
     # Static config
     optuna_study_name = f"TreeTime_{stock_group_short}_{formatted_date}"
-    optuna_duration = 60 * 60 * 8  # 2 hours
+    optuna_duration = 60 * 60 * 10  # 2 hours
     global_start_date = datetime.date(2014, 1, 1)     # earliest data
     final_eval_date   = datetime.date(2025, 7, 15)    # last date you want to consider cutoffs up to
     test_horizon_days = 7                            # days after train cutoff for test slice
-    n_cutoffs = 8
+    n_cutoffs = 15
+    days_delta = 180  # days delta for cutoff generation
 
     # Pre-load once
     test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
@@ -56,18 +57,14 @@ if __name__ == "__main__":
     results = []
 
     # Generate many training cutoff dates (month-end roll). Change freq as desired.
-    cutoffs = [final_eval_date - datetime.timedelta(days=test_horizon_days+i*90+random.randint(-3, 3)) for i in range(n_cutoffs)][::-1]
+    cutoffs = [final_eval_date - datetime.timedelta(days=test_horizon_days+i*days_delta + random.randint(0, 60)) for i in range(n_cutoffs)][::-1]
 
     def objective(trial: optuna.Trial):
         # copy base params
         p = params.copy()
         # LightGBM
-        p['LGB_max_depth'] = trial.suggest_int('LGB_max_depth', 2, 9)
-        p['LGB_max_bin'] = trial.suggest_int('LGB_max_bin', 20, 1023)
-        p['TreeTime_MatchFeatures_run'] = trial.suggest_categorical('TreeTime_MatchFeatures_run', [True, False])
+        p['FilterSamples_lincomb_q_up'] = trial.suggest_float('FilterSamples_lincomb_q_up', 0.95, 0.99)
         p['FilterSamples_lincomb_itermax'] = trial.suggest_int('FilterSamples_lincomb_itermax', 1, 3)
-        p['TreeTime_MatchFeatures_truncation'] = trial.suggest_int('TreeTime_MatchFeatures_truncation', 1, 5)
-        p['FilterSamples_lincomb_epochs'] = trial.suggest_int('FilterSamples_lincomb_epochs', 50, 1000, step=50)
 
         scores = []
         for end_train_date in cutoffs:

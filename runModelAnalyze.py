@@ -7,14 +7,10 @@ import pandas as pd
 import numpy as np
 import polars as pl
 import datetime
-import secrets
 import copy
 import random
-import optuna
-from optuna.exceptions import TrialPruned
-import argparse
 
-stock_group = "group_debug"
+stock_group = "group_finanTo2011"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -36,9 +32,9 @@ logger.info(f" Params: {params}")
 ###############
 # Static config
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
-final_eval_date   = datetime.date(2025, 8, 4)    # last date you want to consider cutoffs up to
+final_eval_date   = datetime.date(2025, 8, 7)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 220                                     # number of cutoffs to generate
+n_cutoffs = 100                                     # number of cutoffs to generate
 num_reruns = 1                                     # number of times to rerun analysis for each cutoff
 days_delta = 7                                   # days delta for cutoff generation
 
