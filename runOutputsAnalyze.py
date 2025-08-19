@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import datetime
 
-stock_group = "group_debug"
+stock_group = "group_finanTo2011"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -50,6 +50,8 @@ def read_parquet_files() -> tuple[list[pl.DataFrame], pl.DataFrame]:
 
     return tables, meta_df
 
+params = treetimeParams.params
+
 if __name__ == "__main__":
     tables, list_info = read_parquet_files()
     
@@ -64,7 +66,7 @@ if __name__ == "__main__":
         test_dates=test_dates,
         group=stock_group,
         group_type='Tree',
-        params=None,
+        params=params,
     )
     ls.load_samples()
 
@@ -87,7 +89,7 @@ if __name__ == "__main__":
         if jTable is None or jTable.select('target_ratio').to_series().has_nulls():
             continue
 
-        if list_info["group"].item(i) != stock_group:
+        if list_info["group"].item(i) != stock_group_short:
             logger.warning("Group mismatch. Skipping")
             continue
 
