@@ -1,3 +1,4 @@
+import re
 import numpy as np
 import polars as pl
 import datetime
@@ -25,7 +26,9 @@ class FilterSamples:
         "FilterSamples_lincomb_featureratio": 0.5,
         "FilterSamples_lincomb_itermax": 6,
         "FilterSamples_lincomb_show_progress": True,
-        "FilterSamples_lincomb_init_toprand": 1
+        "FilterSamples_lincomb_init_toprand": 1,
+
+        "FilterSamples_cat_over20": False
     }
     
     def __init__(self, 
@@ -36,6 +39,7 @@ class FilterSamples:
             samples_dates_train: pl.Series,
             samples_dates_test: pl.Series | None = None,
             ytree_test: np.ndarray | None = None,
+            closeprices: np.ndarray | None = None,
             params: dict | None = None
         ):
         self.Xtree_train = Xtree_train
@@ -44,6 +48,7 @@ class FilterSamples:
         self.ytree_test = ytree_test
         self.treenames = treenames
         self.samples_dates_train = samples_dates_train
+        self.closeprices = closeprices
 
         self.doTest = True
         if self.ytree_test is None or np.any(np.isnan(self.ytree_test)):
@@ -59,8 +64,6 @@ class FilterSamples:
             self.samples_dates_test = samples_dates_test
             
         self.params = {**self.default_params, **(params or {})}
-        
-        self.days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
         
         self.__simple_tests()
                 
@@ -79,7 +82,9 @@ class FilterSamples:
             logger.error("Sample dates should be pandas Timestamp objects.")
         if self.doTest and not all(isinstance(date, datetime.date) for date in self.samples_dates_test):
             logger.error("Sample dates for test set should be pandas Timestamp objects.")
-    
+        if self.closeprices is not None and self.closeprices.shape[0] != self.Xtree_train.shape[0]:
+            logger.error("Close prices do not match the training samples.")
+
     def separate_treefeatures(self) -> list[bool]:
         """
         Separate features and target variable.
@@ -88,32 +93,26 @@ class FilterSamples:
             (True if not any(sub in s for sub in self.treeblacklist_keywords) else False) 
                 for s in self.treenames
         ])
-        
-    def establish_weights(self,
-            sam_tr: np.ndarray,
-            sam_te: np.ndarray,
-            f_idx: int = None
-    ) -> np.ndarray:
-        """
-        Establish matching weights for training and test samples.
-        """
-        if f_idx is None:
-            ksDistance = DistributionTools.ksDistance(
-                sam_tr=sam_tr,
-                sam_te=sam_te,
-            )
-            argsort = np.argsort(ksDistance)
-            f_idx = argsort[-1]
-        
-        weights = DistributionTools.establishMatchingWeight(
-            sam_tr = sam_tr[:, f_idx],
-            sam_te = sam_te[:, f_idx],
-            n_bin = 10,
-            minbd = 0.8
-        )
-        return weights
     
-    def run(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def categorical_masks(self) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Create masks for categorical features in the training and test sets.
+        """
+        mask_train = np.ones(self.Xtree_train.shape[1], dtype=bool)
+        mask_test = np.ones(self.Xtree_test.shape[1], dtype=bool)
+
+        # Apply filter according to something like "FilterSamples_cat_over17.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_over(\d+(?:\.\d+)?)', k)
+            if v and m:
+                mask_train &= self.closeprices > float(m.group(1))
+                break  # drop this if you want to apply multiple thresholds
+
+        return mask_train, mask_test
+
+    def lincomb_masks(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+
+        # Starting Analysis
         score_true_train = self.evaluate_mask(np.ones(self.Xtree_train.shape[0], dtype=bool),
             dates=self.samples_dates_train, 
             y=self.ytree_train
@@ -126,9 +125,9 @@ class FilterSamples:
             )
             logger.info(f"FilterSamples: (test) mean of y values {score_true_test}.")        
         
-        ## Lin comb mask
+        # Lin comb mask
         logger.debug(f"FilterSamples: Starting Lincomb")
-        lincomb_mask_train, lincomb_mask_test = self.mask_lincomb_featurereduce(
+        lincomb_mask_train, lincomb_mask_test = self.__mask_lincomb_featurereduce(
             A_lincomb = self.Xtree_train,
             y_lincomb = self.ytree_train,
             Atest_lincomb = self.Xtree_test,
@@ -137,6 +136,7 @@ class FilterSamples:
             ytest_lincomb = self.ytree_test if self.doTest else None
         )
         
+        # Ending Analysis
         score_train = self.evaluate_mask(
             mask=lincomb_mask_train, 
             dates=self.samples_dates_train, 
@@ -154,7 +154,7 @@ class FilterSamples:
         
         return lincomb_mask_train, lincomb_mask_test, score_train, score_test if self.doTest else None
         
-    def mask_lincomb_featurereduce(self, 
+    def __mask_lincomb_featurereduce(self, 
             A_lincomb: np.ndarray, 
             y_lincomb: np.ndarray,
             Atest_lincomb: np.ndarray, 
@@ -170,20 +170,15 @@ class FilterSamples:
         # Reducing to recent days training data
         unique_dates = dates_train.unique().sort()
         last_Date: datetime.date = unique_dates[-1]
-        days_to_train_end_mod = self.days_to_train_end if self.days_to_train_end > 0 else len(unique_dates) - 1
+        days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
+        days_to_train_end_mod = days_to_train_end if days_to_train_end > 0 else len(unique_dates) - 1
         first_day = last_Date - datetime.timedelta(days = days_to_train_end_mod)
         mask_dates_reduced = (
             (self.samples_dates_train >= first_day) 
             & (self.samples_dates_train <= last_Date)
         ).fill_null(False).to_numpy()
-        
-        # weights UNDER CONSTRUCTION
-        #weights = self.establish_weights(
-        #    sam_tr=A_lincomb[:, lincomb_fmask],
-        #    sam_te=Atest_lincomb[:, lincomb_fmask]
-        #)
-        #weight_mask = weights > 0.5
-        
+
+        # Main Loop
         for i in range(itermax):
             logger.debug(f"  FilterSamples: Lincomb Iteration {i}/{itermax} running.")
             dates_recent = dates_train.filter(pl.Series(mask_dates_reduced))
