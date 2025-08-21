@@ -29,13 +29,15 @@ class TreeTimeML:
             self, 
             train_start_date: datetime.date,
             test_dates: list[datetime.date],
-            group: str,
+            treegroup: str,
+            timegroup: str,
             params: dict = None,
             loadup: LoadupSamples = None
         ):
         
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
-        self.group = group
+        self.treegroup = treegroup
+        self.timegroup = timegroup
         self.train_start_date = train_start_date
         self.test_dates = test_dates
         
@@ -47,7 +49,8 @@ class TreeTimeML:
             ls = LoadupSamples(
                 train_start_date=self.train_start_date,
                 test_dates=self.test_dates,
-                group=self.group,
+                treegroup=self.treegroup,
+                timegroup=self.timegroup,
                 params=self.params,
             )
         else:
@@ -73,13 +76,15 @@ class TreeTimeML:
         self.test_Xtime = ls.test_Xtime
         self.test_ytree = ls.test_ytree
         self.test_ytime = ls.test_ytime
+
+        self.mask_train = np.ones(self.train_Xtree.shape[0], dtype=bool)
+        self.mask_test = np.ones(self.test_Xtree.shape[0], dtype=bool)
         
-    
     def pipeline(self, lstm_model = None, lgb_model = None) -> dict:
         """
         Common pipeline steps shared by both analyze() and predict().
         Returns a dictionary of all relevant masked data, trained model, and predictions.
-        """        
+        """
         # Filter samples
         samples_dates_train = self.meta_pl_train.select(pl.col("date")).to_series()
         samples_dates_test = self.meta_pl_test.select(pl.col("date")).to_series()
@@ -93,62 +98,21 @@ class TreeTimeML:
             ytree_test = self.test_ytree,
             params = self.params
         )
-    
-        mask_train, mask_test, s_tr, s_te = fs.run()
+
+        # Filter categorical
+        mask_train, mask_test = fs.categorical_masks()
+        self.mask_train &= mask_train
+        self.mask_test &= mask_test
+
+        # run LSTM to add time prediction to tabular data
+        logger.info("Running LSTM to add time prediction to tree data...")
+        if self.params['TreeTime_run_lstm']:
+            self.__run_time_to_tree_addition(lstm_model)
+
+        # Filter through lincomb strategy
+        mask_train, mask_test = fs.lincomb_masks()
         
         mm = MachineModels(self.params)
-
-        # LSTM model
-        if self.params['TreeTime_run_lstm']:
-            logger.info(f"Number of time features: {len(self.featureTimeNames)}")
-            inc_factor = self.params["LoadupSamples_time_inc_factor"]
-            if lstm_model is None:
-                startTime  = datetime.datetime.now()
-                required_features = [
-                    "MathFeature_TradedPrice",
-                    "FeatureTA_High",
-                    "FeatureTA_Low",
-                    "FeatureTA_volume_obv",
-                    "FeatureTA_volume_vpt"
-                ]
-
-                # Validate feature presence and retrieve indices
-                missing_features = [f for f in required_features if f not in self.featureTimeNames]
-                if missing_features:
-                    raise ValueError(f"Missing required features in featureTimeNames: {missing_features}")
-
-                idxs_features = [np.where(self.featureTimeNames == feature)[0][0] for feature in required_features]
-                lstm_model, lstm_res = mm.run_LSTM_torch(
-                    X_train=self.train_Xtime[:, :, idxs_features],
-                    y_train=self.train_ytime,
-                    X_test=self.test_Xtime[:, :, idxs_features],
-                    y_test=self.test_ytime
-                )
-                logger.info(f"LSTM RSME: {lstm_res['val_rmse'] * 2.0 / inc_factor:.4f}")
-                logger.info(f"LSTM completed in {datetime.datetime.now() - startTime}.")
-
-            # LSTM Predictions
-            startTime  = datetime.datetime.now()
-            y_train_pred = mm.predict_LSTM_torch(
-                lstm_model, self.train_Xtime[:, :, idxs_features], batch_size = self.params['LSTM_batch_size'], device='cpu')
-            y_test_pred = mm.predict_LSTM_torch(
-                lstm_model, self.test_Xtime[:, :, idxs_features], batch_size = self.params['LSTM_batch_size'], device='cpu')
-
-            rsme = np.sqrt(np.mean((y_train_pred - self.train_ytime) ** 2))
-            logger.info(f"  Train (lstm_pred-ytime)  -> RSME: {rsme:.4f}")
-            
-            y_train_pred = (y_train_pred - 0.5) / inc_factor * 2.0 + 1.0
-            y_test_pred  = (y_test_pred - 0.5) / inc_factor * 2.0 + 1.0
-            rsme = np.sqrt(np.mean((y_train_pred - self.train_ytree) ** 2))
-            logger.info(f"  Train (arctanh-ytree)    -> RSME: {rsme:.4f}")
-            logger.info(f"LSTM Prediction completed in {datetime.datetime.now() - startTime}.")
-            
-            ## Add LSTM predictions to the tree test set
-            train_std = np.std(y_train_pred)
-            test_std = 1.0 if np.std(y_test_pred) < 1e-6 else np.std(y_test_pred)
-            self.train_Xtree = np.hstack((self.train_Xtree, ((y_train_pred-1.0)/train_std).reshape(-1, 1)))
-            self.test_Xtree = np.hstack((self.test_Xtree, ((y_test_pred-1.0)/test_std).reshape(-1, 1)))
-            self.featureTreeNames = np.hstack((self.featureTreeNames, ["LSTM_Prediction"]))
         
         ## Establish weights for Tree
         startTime  = datetime.datetime.now()
@@ -199,6 +163,38 @@ class TreeTimeML:
             'mask_train': mask_train,
             'mask_test': mask_test,
         }
+    
+    def __run_time_to_tree_addition(self, lstm_model) -> None:
+        """
+        Runs LSTM to generate feature(s) to add to the tree data.
+        """
+        mm = MachineModels(self.params)
+
+        starttime = datetime.datetime.now()
+        lstm_model, res_dict = mm.run_LSTM_torch(
+            self.train_Xtime[self.mask_train], 
+            self.train_ytime[self.mask_train], 
+            self.test_Xtime[self.mask_test] if self.test_Xtime is not None else None, 
+            self.test_ytime[self.mask_test] if self.test_ytime is not None else None, 
+            device="cuda"
+        )
+        preds_train = mm.predict_LSTM_torch(lstm_model, self.train_Xtime, batch_size=self.params["LSTM_batch_size"], device="cuda")
+        preds_test = mm.predict_LSTM_torch(lstm_model, self.test_Xtime, batch_size=self.params["LSTM_batch_size"], device="cuda")
+        endtime = datetime.datetime.now()
+
+        logger.info(f"  LSTM RSME: {res_dict['val_rmse']*2/self.params['LoadupSamples_time_inc_factor']:.4f}")
+        logger.info(f"  LSTM completed in {endtime - starttime}.")
+        for q in [0.95, 0.98, 0.99]:
+            q_pred = np.quantile(preds_train[self.mask_train], q)
+            logger.info(f"  LSTM quantile {q:.2f} of train predictions: {q_pred:.4f}")
+            logger.info(f"  Result of quantile {q:.2f} of train set: {self.train_ytree[self.mask_train][preds_train >= q_pred]:.4f}")
+
+        ## Add LSTM predictions to the tree test set
+        train_std = np.std(preds_train[self.mask_train])
+        test_std = 1.0 if np.std(preds_test[self.mask_test]) < 1e-6 else np.std(preds_test[self.mask_test])
+        self.train_Xtree = np.hstack((self.train_Xtree, ((preds_train-1.0)/train_std).reshape(-1, 1)))
+        self.test_Xtree = np.hstack((self.test_Xtree, ((preds_test-1.0)/test_std).reshape(-1, 1)))
+        self.featureTreeNames = np.hstack((self.featureTreeNames, ["LSTM_Prediction"]))
     
     def __get_top_tickers(self, y_test_pred: np.ndarray, meta_pl: pl.DataFrame) -> pl.DataFrame:
         m = self.params['TreeTime_top_n']

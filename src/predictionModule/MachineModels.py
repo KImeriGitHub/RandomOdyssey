@@ -439,8 +439,8 @@ class MachineModels:
     def run_LSTM_torch(self, 
             X_train: np.ndarray, 
             y_train: np.ndarray,
-            X_test: np.ndarray = None,
-            y_test: np.ndarray = None, 
+            X_test: np.ndarray | None = None,
+            y_test: np.ndarray | None = None, 
             device='cpu'
         ) -> tuple[torch.nn.Module, dict]:
         # Hyperparameters
@@ -460,17 +460,35 @@ class MachineModels:
         noise_std = self.params.get('LSTM_input_gaussian_noise', 0.0)
         use_conv1d = self.params.get('LSTM_conv1d', False)
         conv_kernel = self.params.get('LSTM_conv1d_kernel_size', 3)
+        val_split = float(self.params.get('LSTM_val_split', 0.0))  # 0.0 = no split
 
-        train_ds = TensorDataset(
+        # Datasets / loaders
+        full_train_ds = TensorDataset(
             torch.tensor(X_train, dtype=torch.float32),
             torch.tensor(y_train, dtype=torch.float32)
         )
-        val_ds = TensorDataset(
-            torch.tensor(X_test, dtype=torch.float32),
-            torch.tensor(y_test, dtype=torch.float32)
-        )
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(val_ds, batch_size=batch_size)
+
+        has_external_val = (X_test is not None) and (y_test is not None)
+        train_ds = full_train_ds
+        val_loader = None
+
+        if has_external_val:
+            val_ds = TensorDataset(
+                torch.tensor(X_test, dtype=torch.float32),
+                torch.tensor(y_test, dtype=torch.float32)
+            )
+            train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+            val_loader = DataLoader(val_ds, batch_size=batch_size)
+        elif val_split > 0.0 and len(full_train_ds) > 1:
+            n_total = len(full_train_ds)
+            n_val = max(1, int(round(n_total * val_split)))
+            n_train = max(1, n_total - n_val)
+            train_subset, val_subset = torch.utils.data.random_split(full_train_ds, [n_train, n_val])
+            train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=False)
+            val_loader = DataLoader(val_subset, batch_size=batch_size)
+        else:
+            train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+            val_loader = None  # no validation
 
         # Model
         model = LSTM_Torch(
@@ -511,18 +529,14 @@ class MachineModels:
         else:
             q = int(loss_name.split('_')[1]) / 10.0
             criterion = quantile_loss(q)
-        optimizer = optim.Adam(
-            model.parameters(), lr=learning_rate, weight_decay=l2
-        )
+
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=l2)
         if optimizer_name == 'rmsprop':
-            optimizer = optim.RMSprop(
-                model.parameters(), lr=learning_rate, weight_decay=l2
-            )
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, factor=0.5, patience=2
-        )
+            optimizer = optim.RMSprop(model.parameters(), lr=learning_rate, weight_decay=l2)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2)
 
         best_rmse, wait = float('inf'), 0
+        best_state = {k: v.clone() for k, v in model.state_dict().items()}
         start_time = time.time()
 
         for epoch in trange(epochs, desc='Epochs'):
@@ -533,17 +547,13 @@ class MachineModels:
             for X_batch, y_batch in tqdm(train_loader, desc='Training', leave=False):
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 optimizer.zero_grad()
-
                 preds = model(X_batch).squeeze()
-                # compute loss (with optional L1)
                 loss = criterion(preds, y_batch)
                 if l1 > 0:
                     loss = loss + l1 * sum(p.abs().sum() for p in model.parameters())
                 loss.backward()
                 optimizer.step()
 
-                # accumulate squared error for RMSE
-                # note: detach so it doesn't track grads
                 se = ((preds.detach() - y_batch) ** 2).sum().item()
                 sum_sq_error += se
                 total_samples += y_batch.numel()
@@ -551,37 +561,43 @@ class MachineModels:
                 if time.time() - start_time > 3600:
                     break
 
-            train_rmse = (sum_sq_error / total_samples) ** 0.5
+            train_rmse = (sum_sq_error / max(1, total_samples)) ** 0.5
 
-            # validation as before
-            model.eval()
-            val_rmses = []
-            with torch.no_grad():
-                for X_batch, y_batch in tqdm(val_loader, desc='Validation', leave=False):
-                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                    preds = model(X_batch).squeeze()
-                    mse = nn.MSELoss()(preds, y_batch)
-                    val_rmses.append(torch.sqrt(mse).item())
-            val_rmse = sum(val_rmses) / len(val_rmses)
+            # Validation (optional)
+            if val_loader is not None:
+                model.eval()
+                val_rmses = []
+                with torch.no_grad():
+                    for X_batch, y_batch in tqdm(val_loader, desc='Validation', leave=False):
+                        X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                        preds = model(X_batch).squeeze()
+                        mse = nn.MSELoss()(preds, y_batch)
+                        val_rmses.append(torch.sqrt(mse).item())
+                val_rmse = sum(val_rmses) / max(1, len(val_rmses))
+            else:
+                val_rmse = train_rmse  # fall back to train metric
 
-            logger.info(f"Epoch {epoch+1}/{epochs} — "
-                f"Train RMSE: {train_rmse:.4f} — "
-                f"Validation RMSE: {val_rmse:.4f}")
+            logger.info(f"Epoch {epoch+1}/{epochs} — Train RMSE: {train_rmse:.4f} — "
+                        f"{'Validation' if val_loader is not None else 'Proxy'} RMSE: {val_rmse:.4f}")
 
             scheduler.step(val_rmse)
-            
+
             if val_rmse < best_rmse:
                 best_rmse, wait = val_rmse, 0
-                best_state = model.state_dict()
+                best_state = {k: v.clone() for k, v in model.state_dict().items()}
             else:
                 wait += 1
                 if wait >= 3:
                     break
+
             if time.time() - start_time > 3600:
                 break
 
         model.load_state_dict(best_state)
-        return model, {'val_rmse': best_rmse, 'history': None}
+        return model, {
+            'val_rmse': best_rmse,
+            'used_validation': val_loader is not None
+        }
     
     def predict_LSTM_torch(self,
             model: torch.nn.Module,
