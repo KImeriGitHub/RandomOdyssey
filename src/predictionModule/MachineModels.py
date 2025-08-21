@@ -7,6 +7,7 @@ import logging
 import datetime
 import re
 import time
+import copy
 from scipy import stats
 
 import tensorflow as tf
@@ -42,6 +43,17 @@ class MachineModels:
         "LSTM_conv1d": True,
         "LSTM_conv1d_kernel_size": 3,
         "LSTM_loss": "mse",
+
+        "LSTM_transformer_before": False,
+        "LSTM_transformer_after": False,
+        "LSTM_tf_d_model": 0,
+        "LSTM_tf_nhead": 4,
+        "LSTM_tf_num_layers_before": 1,
+        "LSTM_tf_num_layers_after": 1,
+        "LSTM_tf_dim_feedforward": 128,
+        "LSTM_tf_dropout": 0.1,
+        "LSTM_tf_positional_encoding": True,
+        "LSTM_tf_pool": "last",
         
         "LGB_num_boost_round": 1500,
         "LGB_lambda_l1": 0.04614242128149404,
@@ -60,6 +72,9 @@ class MachineModels:
     def __init__(self, params: dict):
         self.params = {**self.default_params, **params}
         
+    ###########
+    ##  LGB  ##
+    ###########
     def run_LGB_(self, 
         X_train: np.ndarray, 
         y_train: np.ndarray,
@@ -281,6 +296,9 @@ class MachineModels:
         return gbm
         """
         
+    ###############
+    ##  LSTM tf  ##
+    ###############
     def run_LSTM_tf(self, 
             X_train: np.ndarray, 
             y_train: np.ndarray,
@@ -436,6 +454,9 @@ class MachineModels:
         ) -> np.ndarray:
         return model.predict(X, batch_size=batch_size)[:,0]
         
+    ##################
+    ##  LSTM torch  ##
+    ##################
     def run_LSTM_torch(self, 
             X_train: np.ndarray, 
             y_train: np.ndarray,
@@ -628,8 +649,207 @@ class MachineModels:
                 X_batch = X_batch[0].to(device)
                 preds = model(X_batch).squeeze().cpu().numpy()
                 predictions.append(preds)
-        
+
         return np.concatenate(predictions, axis=0)
+
+    ######################
+    ## LSTM Transformer ##
+    ######################
+    def __run_lstm_transformer_torch(self,
+            X_train: np.ndarray,
+            y_train: np.ndarray,
+            X_test: np.ndarray = None,
+            y_test: np.ndarray = None,
+            device: str = 'cpu'
+        ) -> tuple[torch.nn.Module, dict]:
+        lstm_units = self.params['LSTM_units']
+        num_layers = self.params['LSTM_num_layers']
+        dropout = self.params['LSTM_dropout']
+        recurrent_dropout = self.params['LSTM_recurrent_dropout']
+        learning_rate = self.params['LSTM_learning_rate']
+        optimizer_name = self.params['LSTM_optimizer']
+        bidirectional = self.params['LSTM_bidirectional']
+        batch_size = self.params['LSTM_batch_size']
+        epochs = self.params['LSTM_epochs']
+        loss_name = self.params['LSTM_loss']
+        l1 = self.params.get('LSTM_l1', 0.0)
+        l2 = self.params.get('LSTM_l2', 0.0)
+        inter_dropout = self.params.get('LSTM_inter_dropout', 0.0)
+        noise_std = self.params.get('LSTM_input_gaussian_noise', 0.0)
+        use_conv1d = self.params.get('LSTM_conv1d', False)
+        conv_kernel = self.params.get('LSTM_conv1d_kernel_size', 3)
+
+        transformer_before = self.params.get('LSTM_transformer_before', False)
+        transformer_after = self.params.get('LSTM_transformer_after', False)
+        num_layers_before = self.params.get('LSTM_tf_num_layers_before', 1)
+        num_layers_after = self.params.get('LSTM_tf_num_layers_after', 1)
+        if num_layers_before == 0:
+            transformer_before = False
+        if num_layers_after == 0:
+            transformer_after = False
+        tf_d_model = self.params.get('LSTM_tf_d_model', 0)
+        if tf_d_model in (0, None):
+            tf_d_model = X_train.shape[-1]
+
+        train_ds = TensorDataset(
+            torch.tensor(X_train, dtype=torch.float32),
+            torch.tensor(y_train, dtype=torch.float32)
+        )
+        val_ds = TensorDataset(
+            torch.tensor(X_test, dtype=torch.float32),
+            torch.tensor(y_test, dtype=torch.float32)
+        )
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+        val_loader = DataLoader(val_ds, batch_size=batch_size)
+
+        tf_nhead = self.params.get('LSTM_tf_nhead', 4)
+        tf_d_model = self.params.get('LSTM_tf_d_model', 0) or X_train.shape[-1]
+
+        # make tf_d_model divisible by tf_nhead
+        if tf_d_model % tf_nhead != 0:
+            tf_d_model = ((tf_d_model + tf_nhead - 1) // tf_nhead) * tf_nhead
+            logger.warning(f"Adjusted tf_d_model to {tf_d_model} to be divisible by nhead={tf_nhead}")
+            
+        model = LSTMTransformer_Torch(
+            input_size=X_train.shape[-1],
+            lstm_units=lstm_units,
+            num_layers=num_layers,
+            dropout=dropout,
+            recurrent_dropout=recurrent_dropout,
+            bidirectional=bidirectional,
+            l1=l1,
+            l2=l2,
+            use_conv1d=use_conv1d,
+            conv_kernel=conv_kernel,
+            noise_std=noise_std,
+            inter_dropout=inter_dropout,
+            transformer_before=transformer_before,
+            transformer_after=transformer_after,
+            tf_d_model=tf_d_model,
+            tf_nhead=self.params.get('LSTM_tf_nhead', 4),
+            tf_num_layers_before=num_layers_before,
+            tf_num_layers_after=num_layers_after,
+            tf_dim_feedforward=self.params.get('LSTM_tf_dim_feedforward', 128),
+            tf_dropout=self.params.get('LSTM_tf_dropout', 0.1),
+            tf_positional_encoding=self.params.get('LSTM_tf_positional_encoding', True),
+            tf_pool=self.params.get('LSTM_tf_pool', 'last'),
+        ).to(device)
+
+        def quantile_loss(q):
+            def loss_fn(y_pred, y_true):
+                e = y_true - y_pred
+                return torch.mean(torch.max(q * e, (q - 1) * e))
+            return loss_fn
+
+        def r2_metric(y_pred, y_true):
+            ss_res = torch.sum((y_true - y_pred) ** 2)
+            ss_tot = torch.sum((y_true - torch.mean(y_true)) ** 2)
+            return 1 - ss_res / (ss_tot + 1e-6)
+
+        def neg_r2_loss(y_pred, y_true):
+            return -r2_metric(y_pred, y_true)
+
+        if loss_name == 'mse':
+            criterion = nn.MSELoss()
+        elif loss_name == 'r2':
+            criterion = lambda pred, true: neg_r2_loss(pred, true)
+        else:
+            q = int(loss_name.split('_')[1]) / 10.0
+            criterion = quantile_loss(q)
+
+        optimizer = optim.Adam(
+            model.parameters(), lr=learning_rate, weight_decay=l2
+        )
+        if optimizer_name == 'rmsprop':
+            optimizer = optim.RMSprop(
+                model.parameters(), lr=learning_rate, weight_decay=l2
+            )
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, factor=0.5, patience=2
+        )
+
+        best_rmse, wait = float('inf'), 0
+        start_time = time.time()
+
+        for epoch in trange(epochs, desc='Epochs'):
+            model.train()
+            sum_sq_error = 0.0
+            total_samples = 0
+
+            for X_batch, y_batch in tqdm(train_loader, desc='Training', leave=False):
+                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                optimizer.zero_grad()
+
+                preds = model(X_batch).squeeze()
+                loss = criterion(preds, y_batch)
+                if l1 > 0:
+                    loss = loss + l1 * sum(p.abs().sum() for p in model.parameters())
+                loss.backward()
+                optimizer.step()
+
+                se = ((preds.detach() - y_batch) ** 2).sum().item()
+                sum_sq_error += se
+                total_samples += y_batch.numel()
+
+                if time.time() - start_time > 3600:
+                    break
+
+            train_rmse = (sum_sq_error / total_samples) ** 0.5
+
+            model.eval()
+            val_sse, val_n = 0.0, 0
+            with torch.no_grad():
+                for Xb, yb in val_loader:
+                    pb = model(Xb.to(device)).squeeze()
+                    val_sse += ((pb - yb.to(device))**2).sum().item()
+                    val_n += yb.numel()
+            val_rmse = (val_sse / val_n) ** 0.5
+
+            logger.info(f"Epoch {epoch+1}/{epochs} — "
+                f"Train RMSE: {train_rmse:.4f} — "
+                f"Validation RMSE: {val_rmse:.4f}")
+
+            scheduler.step(val_rmse)
+
+            if val_rmse < best_rmse:
+                best_rmse, wait = val_rmse, 0
+                best_state = copy.deepcopy(model.state_dict())
+            else:
+                wait += 1
+                if wait >= 3:
+                    break
+            if time.time() - start_time > 3600:
+                break
+
+        model.load_state_dict(best_state)
+        return model, {'val_rmse': best_rmse, 'history': None}
+
+    def run_LSTM_transformer_torch(self,
+            X_train: np.ndarray,
+            y_train: np.ndarray,
+            X_test: np.ndarray = None,
+            y_test: np.ndarray = None,
+            device: str = 'cpu'
+        ) -> tuple[torch.nn.Module, dict]:
+        return self.__run_lstm_transformer_torch(X_train, y_train, X_test, y_test, device)
+
+    def predict_LSTM_transformer_torch(self,
+            model: torch.nn.Module,
+            X: np.ndarray,
+            batch_size: int = 2**10,
+            device: str = 'cpu'
+        ) -> np.ndarray:
+        model.eval()
+        X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
+        dataset = TensorDataset(X_tensor)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        preds_list = []
+        with torch.no_grad():
+            for X_batch in loader:
+                X_batch = X_batch[0].to(device)
+                preds = model(X_batch).squeeze().cpu().numpy()
+                preds_list.append(preds)
+        return np.concatenate(preds_list, axis=0)
 
 class LSTM_Torch(nn.Module):
     def __init__(self, 
@@ -685,3 +905,167 @@ class LSTM_Torch(nn.Module):
         if self.dropout:
             out_last = self.dropout(out_last)
         return self.output(out_last)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len: int = 5000):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.pe[:, :x.size(1)]
+
+
+class LSTMTransformer_Torch(nn.Module):
+    def __init__(self,
+            input_size,
+            lstm_units,
+            num_layers,
+            dropout,
+            recurrent_dropout,
+            bidirectional,
+            l1=0.0,
+            l2=0.0,
+            use_conv1d=False,
+            conv_kernel=3,
+            noise_std=0.0,
+            inter_dropout=0.0,
+            transformer_before=False,
+            transformer_after=False,
+            tf_d_model=0,
+            tf_nhead=4,
+            tf_num_layers_before=1,
+            tf_num_layers_after=1,
+            tf_dim_feedforward=128,
+            tf_dropout=0.1,
+            tf_positional_encoding=True,
+            tf_pool="last",
+        ):
+        super().__init__()
+        self.use_conv1d = use_conv1d
+        self.noise_std = noise_std
+        self.inter_dropout = inter_dropout
+
+        if use_conv1d:
+            self.conv1d = nn.Conv1d(
+                in_channels=input_size,
+                out_channels=lstm_units,
+                kernel_size=conv_kernel,
+                padding=conv_kernel // 2,
+            )
+            input_size_after = lstm_units
+        else:
+            input_size_after = input_size
+
+        self.transformer_before = transformer_before
+        self.transformer_after = transformer_after
+
+        if transformer_before:
+            d_model = tf_d_model if tf_d_model > 0 else input_size_after
+            self.pre_proj = nn.Linear(input_size_after, d_model) if input_size_after != d_model else None
+            enc_layer = nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=tf_nhead,
+                dim_feedforward=tf_dim_feedforward,
+                dropout=tf_dropout,
+                batch_first=True,
+            )
+            self.pre_tf = nn.TransformerEncoder(enc_layer, num_layers=tf_num_layers_before)
+            self.pos_enc_before = PositionalEncoding(d_model) if tf_positional_encoding else None
+            lstm_input_size = d_model
+        else:
+            self.pre_proj = None
+            self.pre_tf = None
+            self.pos_enc_before = None
+            lstm_input_size = input_size_after
+
+        self.lstm = nn.LSTM(
+            input_size=lstm_input_size,
+            hidden_size=lstm_units,
+            num_layers=num_layers,
+            dropout=dropout if num_layers > 1 else 0.0,
+            bidirectional=bidirectional,
+            batch_first=True,
+        )
+
+        self.dropout = nn.Dropout(inter_dropout) if inter_dropout > 0 else None
+
+        lstm_out_dim = lstm_units * (2 if bidirectional else 1)
+
+        if transformer_after:
+            d_model_after = tf_d_model if tf_d_model > 0 else lstm_out_dim
+            self.post_proj = nn.Linear(lstm_out_dim, d_model_after) if lstm_out_dim != d_model_after else None
+            enc_layer_a = nn.TransformerEncoderLayer(
+                d_model=d_model_after,
+                nhead=tf_nhead,
+                dim_feedforward=tf_dim_feedforward,
+                dropout=tf_dropout,
+                batch_first=True,
+            )
+            self.post_tf = nn.TransformerEncoder(enc_layer_a, num_layers=tf_num_layers_after)
+            self.pos_enc_after = PositionalEncoding(d_model_after) if tf_positional_encoding else None
+            final_dim = d_model_after
+        else:
+            self.post_proj = None
+            self.post_tf = None
+            self.pos_enc_after = None
+            final_dim = lstm_out_dim
+
+        self.pool = tf_pool
+        if tf_pool == 'attn':
+            self.attn_layer = nn.Linear(final_dim, final_dim)
+            self.attn_vector = nn.Linear(final_dim, 1)
+        else:
+            self.attn_layer = None
+            self.attn_vector = None
+
+        self.output = nn.Linear(final_dim, 1)
+
+    def forward(self, x):
+        if self.noise_std > 0:
+            x = x + torch.randn_like(x) * self.noise_std
+        if self.use_conv1d:
+            x = x.transpose(1, 2)
+            x = self.conv1d(x)
+            x = x.transpose(1, 2)
+
+        if self.transformer_before:
+            if self.pre_proj is not None:
+                x = self.pre_proj(x)
+            if self.pos_enc_before is not None:
+                x = self.pos_enc_before(x)
+            x = self.pre_tf(x)
+
+        out, _ = self.lstm(x)
+        if self.dropout:
+            out = self.dropout(out)
+
+        if self.transformer_after:
+            x2 = out
+            if self.post_proj is not None:
+                x2 = self.post_proj(x2)
+            if self.pos_enc_after is not None:
+                x2 = self.pos_enc_after(x2)
+            x2 = self.post_tf(x2)
+        else:
+            x2 = out
+
+        if self.pool == 'last':
+            pooled = x2[:, -1, :]
+        elif self.pool == 'mean':
+            pooled = x2.mean(dim=1)
+        elif self.pool == 'attn':
+            attn = torch.tanh(self.attn_layer(x2))
+            attn = self.attn_vector(attn).squeeze(-1)
+            attn = torch.softmax(attn, dim=1)
+            pooled = torch.bmm(attn.unsqueeze(1), x2).squeeze(1)
+        else:
+            raise ValueError("Invalid pool option")
+
+        return self.output(pooled)
