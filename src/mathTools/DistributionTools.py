@@ -35,8 +35,6 @@ class DistributionTools():
         
         metric_distrEquality = np.mean(np.abs(q_train - q_test), axis=0)
         
-        del q_train, q_test, qIndices, sam_tr, sam_te
-        
         return metric_distrEquality
     
     @staticmethod

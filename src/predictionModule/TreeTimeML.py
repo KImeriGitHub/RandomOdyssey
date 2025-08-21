@@ -1,19 +1,14 @@
-import os
 import numpy as np
-import pandas as pd
 import polars as pl
-import lightgbm as lgb
 import logging
 import datetime
-import re
-import time
-from scipy import stats
 
 from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.mathTools.DistributionTools import DistributionTools
 from src.predictionModule.LoadupSamples import LoadupSamples
 from src.predictionModule.FilterSamples import FilterSamples
 from src.predictionModule.MachineModels import MachineModels
+from src.predictionModule.WeightSamples import WeightSamples
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +152,16 @@ class TreeTimeML:
         
         ## Establish weights for Tree
         startTime  = datetime.datetime.now()
-        if self.params['TreeTime_MatchFeatures_run']:
+        if self.params['TreeTime_WeightSamples_run']:
             logger.info("Establishing weights for TreeTime features...")
-            self.tree_weights = self.__establish_weights()
+            ws = WeightSamples(
+                Xtree_train=self.train_Xtree,
+                ytree_train=self.train_ytree,
+                Xtree_test=self.test_Xtree,
+                treenames=self.featureTreeNames,
+                params=self.params
+            )
+            self.tree_weights = ws.establish_weights()
             logger.info(f"Weights established in {datetime.datetime.now() - startTime}.")
         else:
             logger.info("Skipping TreeTime feature weights establishment.")
@@ -197,74 +199,6 @@ class TreeTimeML:
             'mask_train': mask_train,
             'mask_test': mask_test,
         }
-        
-    def __establish_weights(self) -> np.ndarray:
-        nSamples = self.train_Xtree.shape[0]
-        mask_sparsing = np.random.rand(nSamples) <= 1e4/nSamples # for speedup
-        
-        ksDist = DistributionTools.ksDistance(
-            self.train_Xtree[mask_sparsing].astype(np.float64), 
-            self.test_Xtree.copy().astype(np.float64), 
-            weights=None,
-            overwrite=True)
-        
-        logger.info(f"  Train-Test Distri Equality: Mean: {np.mean(ksDist)}, Quantile 0.9: {np.quantile(ksDist, 0.9)}")
-
-        indices_masked = self.__establish_matching_featureindices(ksDist)
-        tree_weights = DistributionTools.establishMatchingWeight(
-            self.train_Xtree[:, indices_masked].astype(np.float64),
-            self.test_Xtree[:, indices_masked].astype(np.float64),
-            n_bin = 15,
-            minbd = self.params['TreeTime_MatchFeatures_minWeight']
-        )
-        tree_weights *= (self.train_Xtree.shape[0] / np.sum(tree_weights))
-        
-        logger.debug(f"  Zeros Weight Ratio: {np.sum(tree_weights < 1e-6) / len(tree_weights)}")
-        logger.debug(f"  Negative Weight Ratio: {np.sum(tree_weights < -1e-5) / len(tree_weights)}")
-        logger.debug(f"  Mean Weight: {np.mean(tree_weights)}")
-        logger.debug(f"  Quantile 0.1 Weight: {np.quantile(tree_weights, 0.1)}")
-        logger.debug(f"  Quantile 0.9 Weight: {np.quantile(tree_weights, 0.9)}")
-        
-        return tree_weights
-
-    def __establish_matching_featureindices(self, ksDist) -> np.ndarray:
-        assert ksDist.shape[0] == self.featureTreeNames.shape[0], "Mismatch in matching feature function."
-        
-        nFeat = self.featureTreeNames.shape[0]
-        mask_colToMatch = np.zeros(nFeat, dtype=bool)
-        
-        if self.params["TreeTime_MatchFeatures_Pricediff"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "MathFeature_Price_Diff") >= 0
-            
-        if self.params["TreeTime_MatchFeatures_FinData_quar"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "FinData_quar") >= 0
-            
-        if self.params["TreeTime_MatchFeatures_FinData_metrics"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "FinData_metrics") >= 0
-        
-        if self.params["TreeTime_MatchFeatures_Fourier_RSME"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "Fourier_Price_RSME") >= 0
-            
-        if self.params["TreeTime_MatchFeatures_Fourier_Sign"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "Fourier_Price_Sign") >= 0
-            
-        if self.params["TreeTime_MatchFeatures_TA_trend"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "FeatureTA_trend") >= 0
-            
-        if self.params["TreeTime_MatchFeatures_FeatureGroup_VolGrLvl"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "FeatureGroup_VolGrLvl") >= 0
-            
-        if self.params["TreeTime_MatchFeatures_LSTM_Prediction"]:
-            mask_colToMatch |= np.char.find(self.featureTreeNames, "LSTM_Prediction") >= 0
-            
-        if all(~mask_colToMatch):
-            mask_colToMatch = np.char.find(self.featureTreeNames, "MathFeature_Price_Diff") >= 0
-        
-        idces = np.arange(mask_colToMatch.shape[0])[mask_colToMatch]
-        idces = idces[np.argsort(ksDist[mask_colToMatch])]
-        top_idces = idces[-self.params['TreeTime_MatchFeatures_truncation']:]
-            
-        return top_idces
     
     def __get_top_tickers(self, y_test_pred: np.ndarray, meta_pl: pl.DataFrame) -> pl.DataFrame:
         m = self.params['TreeTime_top_n']

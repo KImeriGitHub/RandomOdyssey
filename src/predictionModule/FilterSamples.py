@@ -18,7 +18,7 @@ class FilterSamples:
 
         "FilterSamples_lincomb_q_up": 0.90,
         "FilterSamples_lincomb_lr": 0.018601,
-        "FilterSamples_lincomb_epochs": 15000,
+        "FilterSamples_lincomb_epochs": 150,
         "FilterSamples_lincomb_probs_noise_std": 0.221060,
         "FilterSamples_lincomb_subsample_ratio": 0.335864,
         "FilterSamples_lincomb_sharpness": 1.528495,
@@ -34,9 +34,9 @@ class FilterSamples:
             treenames: list[str],
             Xtree_test: np.ndarray, 
             samples_dates_train: pl.Series,
-            samples_dates_test: Optional[pl.Series] = None,
+            samples_dates_test: pl.Series | None = None,
             ytree_test: np.ndarray | None = None,
-            params: Optional[dict] = None
+            params: dict | None = None
         ):
         self.Xtree_train = Xtree_train
         self.ytree_train = ytree_train
