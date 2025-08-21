@@ -7,6 +7,7 @@ import logging
 import datetime
 import re
 import time
+import copy
 from scipy import stats
 
 import tensorflow as tf
@@ -71,6 +72,9 @@ class MachineModels:
     def __init__(self, params: dict):
         self.params = {**self.default_params, **params}
         
+    ###########
+    ##  LGB  ##
+    ###########
     def run_LGB_(self, 
         X_train: np.ndarray, 
         y_train: np.ndarray,
@@ -292,6 +296,9 @@ class MachineModels:
         return gbm
         """
         
+    ###############
+    ##  LSTM tf  ##
+    ###############
     def run_LSTM_tf(self, 
             X_train: np.ndarray, 
             y_train: np.ndarray,
@@ -447,6 +454,9 @@ class MachineModels:
         ) -> np.ndarray:
         return model.predict(X, batch_size=batch_size)[:,0]
         
+    ##################
+    ##  LSTM torch  ##
+    ##################
     def run_LSTM_torch(self, 
             X_train: np.ndarray, 
             y_train: np.ndarray,
@@ -626,6 +636,9 @@ class MachineModels:
 
         return np.concatenate(predictions, axis=0)
 
+    ######################
+    ## LSTM Transformer ##
+    ######################
     def __run_lstm_transformer_torch(self,
             X_train: np.ndarray,
             y_train: np.ndarray,
@@ -673,6 +686,14 @@ class MachineModels:
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
         val_loader = DataLoader(val_ds, batch_size=batch_size)
 
+        tf_nhead = self.params.get('LSTM_tf_nhead', 4)
+        tf_d_model = self.params.get('LSTM_tf_d_model', 0) or X_train.shape[-1]
+
+        # make tf_d_model divisible by tf_nhead
+        if tf_d_model % tf_nhead != 0:
+            tf_d_model = ((tf_d_model + tf_nhead - 1) // tf_nhead) * tf_nhead
+            logger.warning(f"Adjusted tf_d_model to {tf_d_model} to be divisible by nhead={tf_nhead}")
+            
         model = LSTMTransformer_Torch(
             input_size=X_train.shape[-1],
             lstm_units=lstm_units,
@@ -760,14 +781,13 @@ class MachineModels:
             train_rmse = (sum_sq_error / total_samples) ** 0.5
 
             model.eval()
-            val_rmses = []
+            val_sse, val_n = 0.0, 0
             with torch.no_grad():
-                for X_batch, y_batch in tqdm(val_loader, desc='Validation', leave=False):
-                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                    preds = model(X_batch).squeeze()
-                    mse = nn.MSELoss()(preds, y_batch)
-                    val_rmses.append(torch.sqrt(mse).item())
-            val_rmse = sum(val_rmses) / len(val_rmses)
+                for Xb, yb in val_loader:
+                    pb = model(Xb.to(device)).squeeze()
+                    val_sse += ((pb - yb.to(device))**2).sum().item()
+                    val_n += yb.numel()
+            val_rmse = (val_sse / val_n) ** 0.5
 
             logger.info(f"Epoch {epoch+1}/{epochs} — "
                 f"Train RMSE: {train_rmse:.4f} — "
@@ -777,7 +797,7 @@ class MachineModels:
 
             if val_rmse < best_rmse:
                 best_rmse, wait = val_rmse, 0
-                best_state = model.state_dict()
+                best_state = copy.deepcopy(model.state_dict())
             else:
                 wait += 1
                 if wait >= 3:
