@@ -26,29 +26,27 @@ logger.info(f"Starting Analyzing {stock_group_short}")
 
 
 def read_parquet_files() -> tuple[list[pl.DataFrame], pl.DataFrame]:
-    pat = re.compile(
-        r"^output_prediction_TreeTime_(?P<group>.+?)_(?P<date>\d{1,2}[A-Za-z]{3}\d{2})_(?P<time>\d{4})(?:\.parquet)?$",
-        re.IGNORECASE,
-    )
+    pat = re.compile(r"^output_prediction_TreeTime_(?P<group>.+?)_(?P<date>\d{1,2}[A-Za-z]{3}\d{2})_(?P<time>\d{4})(?:\.parquet)?$", re.IGNORECASE)
 
-    tables = []
-    rows = []
-
-    for p in Path("outputs").iterdir():
-        if not p.is_file():
-            continue
+    files = sorted((p for p in Path("outputs").iterdir() if p.is_file()), key=lambda p: p.name.lower())
+    tables, rows = [], []
+    for p in files:
         m = pat.match(p.name)
         if not m:
             continue
         tables.append(pl.read_parquet(p))
-        rows.append({"group": m["group"], "date": m["date"], "time": m["time"], "path": str(p)})
+        rows.append({"idx": len(tables)-1, "group": m["group"], "date": m["date"], "time": m["time"], "path": str(p)})
 
-    meta_df = pl.DataFrame(rows).with_columns(
-        pl.col("date").str.strptime(pl.Date, format="%d%b%y", strict=False),
-        pl.col("time").str.strptime(pl.Time, format="%H%M"),
-    )
+    meta_df = (pl.DataFrame(rows)
+               .with_columns(
+                   pl.col("date").str.strptime(pl.Date, format="%d%b%y", strict=False),
+                   pl.col("time").str.strptime(pl.Time, format="%H%M"),
+               )
+               .sort(["date","time","path"]))
 
-    return tables, meta_df
+    order = meta_df["idx"].to_list()
+    tables = [tables[i] for i in order]
+    return tables, meta_df.drop("idx")
 
 params = treetimeParams.params
 
