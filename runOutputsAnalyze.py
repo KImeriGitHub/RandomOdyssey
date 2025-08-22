@@ -87,14 +87,16 @@ if __name__ == "__main__":
     results = []
     for i,jTable in enumerate(tables_joined):
         if jTable is None or jTable.select('target_ratio').to_series().has_nulls():
+            logger.warning(f"Table {list_info['path'].item(i)} could not be analyzed due to null values.")
             continue
 
         if list_info["group"].item(i) != stock_group_short:
-            logger.warning("Group mismatch. Skipping")
+            logger.warning(f"Group mismatch. Skipping table {list_info['path'].item(i)}")
             continue
 
         logger.info(f"Analyzing table {i+1}/{len(tables_joined)}")
         logger.info(f"Date: {list_info['date'].item(i)}, Time: {list_info['time'].item(i)}")
+        logger.info(f"Path: {list_info['path'].item(i)}")
 
         ModelAnalyzer.log_test_result_overall(jTable, last_col="target_ratio")
 
