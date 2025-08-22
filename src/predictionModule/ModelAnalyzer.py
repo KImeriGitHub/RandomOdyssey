@@ -154,11 +154,16 @@ class ModelAnalyzer:
                 pl.col(last_col).first().alias("top_res"),
                 pl.col(last_col).count().alias("n_entries")
             ])
-        test_df_perdate = test_df.group_by("date").agg(agg_exprs)
+        test_df_perdate = (test_df
+            .group_by("date")
+            .agg(agg_exprs)
+            .sort("date")
+        )
 
-        pred_meanmean = test_df_perdate['mean_pred'].mean()
-        pred_meanlast = test_df_perdate['mean_pred'].last()
-        pred_toplast = test_df_perdate['max_pred'].last()
+        last_idx = test_df_perdate["date"].arg_max()
+        pred_meanmean = test_df_perdate["mean_pred"].mean()
+        pred_meanlast = test_df_perdate["mean_pred"].gather(last_idx).item()
+        pred_toplast  = test_df_perdate["max_pred"].gather(last_idx).item()
         logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
         logger.info(f"Over all top last prediction ratio: {pred_toplast:.4f}")
         logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
@@ -188,7 +193,7 @@ class ModelAnalyzer:
                 pl.col(last_col).count().alias("n_entries"),
                 pl.col("prediction_ratio").max().alias("max_pred"),
                 pl.col("prediction_ratio").mean().alias("mean_pred"),
-            ])
+            ]).sort("date")
             results.append(
                 {
                     "end_train_date": end_train_date,
