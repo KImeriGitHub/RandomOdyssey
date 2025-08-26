@@ -384,7 +384,7 @@ class TreeTimeML:
 
         logger.disabled = logger_config
         return (
-            res_df_perdate['mean_pred'].mean(), 
+            res_df_perdate['mean_pred'].last(), 
             {
                 "df_pred_res": res_df.select(['date', 'ticker', 'Close', 'prediction_ratio', 'target_ratio']),
                 "df_pred_res_perdate": res_df_perdate.select(['date', 'n_entries', 'max_pred', 'mean_pred', 'top_res', 'mean_res'])
