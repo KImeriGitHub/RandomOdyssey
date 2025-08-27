@@ -17,7 +17,8 @@ class FilterSamples:
     default_params= {
         "FilterSamples_days_to_train_end": 365,
 
-        "FilterSamples_lincomb_q_up": 0.90,
+        "FilterSamples_q_up": 0.90,
+
         "FilterSamples_lincomb_lr": 0.018601,
         "FilterSamples_lincomb_epochs": 150,
         "FilterSamples_lincomb_probs_noise_std": 0.221060,
@@ -39,7 +40,10 @@ class FilterSamples:
             samples_dates_train: pl.Series,
             samples_dates_test: pl.Series | None = None,
             ytree_test: np.ndarray | None = None,
-            closeprices: np.ndarray | None = None,
+            closeprices_train: np.ndarray | None = None,
+            closeprices_test: np.ndarray | None = None,
+            adjcloseprices_train: np.ndarray | None = None,
+            adjcloseprices_test: np.ndarray | None = None,
             params: dict | None = None
         ):
         self.Xtree_train = Xtree_train
@@ -48,7 +52,10 @@ class FilterSamples:
         self.ytree_test = ytree_test
         self.treenames = treenames
         self.samples_dates_train = samples_dates_train
-        self.closeprices = closeprices
+        self.closeprices_train = closeprices_train
+        self.closeprices_test = closeprices_test
+        self.adjcloseprices_train = adjcloseprices_train
+        self.adjcloseprices_test = adjcloseprices_test
 
         self.doTest = True
         if self.ytree_test is None or np.any(np.isnan(self.ytree_test)):
@@ -66,7 +73,7 @@ class FilterSamples:
         self.params = {**self.default_params, **(params or {})}
         
         self.__simple_tests()
-                
+
     def __simple_tests(self) -> None:
         """
         Perform simple tests on the training and test datasets.
@@ -82,8 +89,14 @@ class FilterSamples:
             logger.error("Sample dates should be pandas Timestamp objects.")
         if self.doTest and not all(isinstance(date, datetime.date) for date in self.samples_dates_test):
             logger.error("Sample dates for test set should be pandas Timestamp objects.")
-        if self.closeprices is not None and self.closeprices.shape[0] != self.Xtree_train.shape[0]:
+        if self.closeprices_train is not None and self.closeprices_train.shape[0] != self.Xtree_train.shape[0]:
             logger.error("Close prices do not match the training samples.")
+        if self.closeprices_test is not None and self.closeprices_test.shape[0] != self.Xtree_test.shape[0]:
+            logger.error("Close prices do not match the test samples.")
+        if self.adjcloseprices_train is not None and self.adjcloseprices_train.shape[0] != self.Xtree_train.shape[0]:
+            logger.error("Adjusted close prices do not match the training samples.")
+        if self.adjcloseprices_test is not None and self.adjcloseprices_test.shape[0] != self.Xtree_test.shape[0]:
+            logger.error("Adjusted close prices do not match the test samples.")
 
     def separate_treefeatures(self) -> list[bool]:
         """
@@ -98,20 +111,37 @@ class FilterSamples:
         """
         Create masks for categorical features in the training and test sets.
         """
-        mask_train = np.ones(self.Xtree_train.shape[1], dtype=bool)
-        mask_test = np.ones(self.Xtree_test.shape[1], dtype=bool)
+        mask_train = np.ones(self.Xtree_train.shape[0], dtype=bool)
+        mask_test = np.ones(self.Xtree_test.shape[0], dtype=bool)
 
         # Apply filter according to something like "FilterSamples_cat_over17.5"
         for k, v in self.params.items():
             m = re.fullmatch(r'FilterSamples_cat_over(\d+(?:\.\d+)?)', k)
             if v and m:
-                mask_train &= self.closeprices > float(m.group(1))
+                th = float(m.group(1))
+                mask_train &= (self.closeprices_train > th)
+                mask_test &= (self.closeprices_test > th)
                 break  # drop this if you want to apply multiple thresholds
+
+        if self.params.get("FilterSamples_cat_posOneYearReturn", False):
+            mask_train &= (
+                (pl.Series(self.adjcloseprices_train) / pl.Series(self.adjcloseprices_train).shift(255)) > 1
+            ).fill_null(False).to_numpy()
+            mask_test &= (
+                (pl.Series(self.adjcloseprices_test) / pl.Series(self.adjcloseprices_test).shift(255)) > 1
+            ).fill_null(False).to_numpy()
+
+        if self.params.get("FilterSamples_cat_posFiveYearReturn", False):
+            mask_train &= (
+                (pl.Series(self.adjcloseprices_train) / pl.Series(self.adjcloseprices_train).shift(5*255)) > 1
+            ).fill_null(False).to_numpy()
+            mask_test &= (
+                (pl.Series(self.adjcloseprices_test) / pl.Series(self.adjcloseprices_test).shift(5*255)) > 1
+            ).fill_null(False).to_numpy()
 
         return mask_train, mask_test
 
-    def lincomb_masks(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-
+    def lincomb_masks(self) -> tuple[np.ndarray, np.ndarray]:
         # Starting Analysis
         score_true_train = self.evaluate_mask(np.ones(self.Xtree_train.shape[0], dtype=bool),
             dates=self.samples_dates_train, 
@@ -123,7 +153,7 @@ class FilterSamples:
                 dates=self.samples_dates_test, 
                 y=self.ytree_test
             )
-            logger.info(f"FilterSamples: (test) mean of y values {score_true_test}.")        
+            logger.info(f"FilterSamples: (test) mean of y values {score_true_test}.")
         
         # Lin comb mask
         logger.debug(f"FilterSamples: Starting Lincomb")
@@ -152,7 +182,24 @@ class FilterSamples:
             )
             logger.info(f"FilterSamples: Final score (test): {score_test:.4f}")
         
-        return lincomb_mask_train, lincomb_mask_test, score_train, score_test if self.doTest else None
+        return lincomb_mask_train, lincomb_mask_test if self.doTest else None
+    
+    def get_recent_training_mask(self, dates_train: pl.Series) -> np.ndarray:
+        """
+        Generates a boolean mask indicating which training samples fall within a recent date range.
+        The range is determined by the most recent date in `dates_train` and a configurable number of days
+        (`FilterSamples_days_to_train_end`) prior to that date. If the parameter is not set or is non-positive,
+        the range includes all available dates.
+        """
+        unique_dates = dates_train.unique().sort()
+        last_Date: datetime.date = unique_dates[-1]
+        days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
+        days_to_train_end_mod = days_to_train_end if days_to_train_end > 0 else len(unique_dates) - 1
+        first_day = last_Date - datetime.timedelta(days = days_to_train_end_mod)
+        return (
+            (self.samples_dates_train >= first_day) 
+            & (self.samples_dates_train <= last_Date)
+        ).fill_null(False).to_numpy()
         
     def __mask_lincomb_featurereduce(self, 
             A_lincomb: np.ndarray, 
@@ -165,18 +212,9 @@ class FilterSamples:
         itermax = self.params["FilterSamples_lincomb_itermax"]
         feature_quot = self.params["FilterSamples_lincomb_featureratio"]**(1/itermax)
         lincomb_fmask = np.array(self.separate_treefeatures())
-        q_lincomb = self.params["FilterSamples_lincomb_q_up"]
-        
-        # Reducing to recent days training data
-        unique_dates = dates_train.unique().sort()
-        last_Date: datetime.date = unique_dates[-1]
-        days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
-        days_to_train_end_mod = days_to_train_end if days_to_train_end > 0 else len(unique_dates) - 1
-        first_day = last_Date - datetime.timedelta(days = days_to_train_end_mod)
-        mask_dates_reduced = (
-            (self.samples_dates_train >= first_day) 
-            & (self.samples_dates_train <= last_Date)
-        ).fill_null(False).to_numpy()
+        q_lincomb = self.params["FilterSamples_q_up"]
+
+        mask_dates_reduced = self.get_recent_training_mask(dates_train)
 
         # Main Loop
         for i in range(itermax):
@@ -243,22 +281,27 @@ class FilterSamples:
         return lincomb_mask_train, lincomb_mask_test
     
     def evaluate_mask(self, mask: np.ndarray, dates: pl.Series, y: np.ndarray) -> float:
-        dates_Mat = self.establish_datesMat(dates, device="cpu").to_dense().numpy()
-        
-        dates_Mat = dates_Mat[:, mask]  # Filter the matrix by the mask
-        y_mask = y[mask]  # Filter the target variable by the mask
-        
-        perdate_mean = ((dates_Mat @ y_mask) / (np.sum(dates_Mat, axis=1) + 1e-8))
-        non_zero_entries = np.sum(perdate_mean > 1e-7)
-        
-        return np.sum(perdate_mean) / (non_zero_entries + 1e-8)
-        
+            mask = np.asarray(mask, dtype=bool)
+            if not mask.any():
+                return np.nan  # or 0.0
+
+            M = self.establish_datesMat(dates, device="cpu").to_dense().numpy()  # (D, N)
+            M = M[:, mask]                               # (D, K)
+            logy = np.log(np.clip(y[mask].astype(float), 1e-12, None))  # safe log
+
+            rowsum = M.sum(axis=1)                       # counts per date
+            valid = rowsum > 0
+            if not valid.any():
+                return 1.0
+
+            perdate_logmean = (M[valid] @ logy) / rowsum[valid]   # log GM per date
+
+            # OPTION A: equal weight per date (matches your intent)
+            return float(np.exp(perdate_logmean.mean()))
     
     def establish_datesMat(self, dates: pl.Series, device: str) -> torch.Tensor:
-        
         """
         Establish a sparse matrix of dates for use in the training process.
-        This method is not used in the current implementation but is kept for reference.
         """
         date_counts_np = dates.value_counts(sort=False, name="count").select("count").to_numpy().squeeze()
         date_counts = torch.tensor(date_counts_np, dtype=torch.long, device=device)  # (N,)
@@ -299,23 +342,32 @@ class FilterSamples:
         ) -> tuple[float, int]:
         D = A_tensor.shape[1]
 
-        # Evaluate each basis vector
-        upper_sign = 1.0 if upper_quantile else -1.0
-        score = [None] * D
+        upper = bool(upper_quantile)
+        score_t = torch.empty(D, device=device, dtype=torch.float64)
+
+        v_log = torch.log(v_tensor.clamp_min(1e-8))  # safe log
+
         for i in range(D):
-            a_basis = torch.zeros(D, device=device)
-            a_basis[i] = 1.0
+            w = A_tensor[:, i]  # (N,)
 
             with torch.no_grad():
-                w      = A_tensor.matmul(a_basis)           # (N,)
-                thresh = torch.quantile(w, q)               # scalar
-                # if upper:  mask = w>thresh;  else: mask = w<thresh
-                mask   = torch.where(upper_sign * w > upper_sign * thresh, 1.0, 0.0)
+                thr  = torch.quantile(w, q)
+                keep = (w > thr) if upper else (w < thr)     # bool mask
+                keep = keep.to(v_log.dtype)                  # [N]
 
-                sum_p     = datesMat_sparse.matmul(mask)            # (D,)
-                sum_pv    = datesMat_sparse.matmul(mask * v_tensor) # (D,)
-                perdate_m = sum_pv / (sum_p + 1e-7)                 # (D,)
-                score[i]  = perdate_m.mean().item()
+            # counts and log-sums per date, only from kept items
+            sum_p  = datesMat_sparse.matmul(keep)                 # (D,)
+            sum_pv = datesMat_sparse.matmul(keep * v_log)         # (D,)
+
+            valid = sum_p > 0
+            if valid.any():
+                perdate_log_gm = sum_pv[valid] / sum_p[valid]     # log GM per date
+                m_all = perdate_log_gm.mean().exp()
+                score_t[i] = m_all.to(dtype=torch.float64)
+            else:
+                score_t[i] = float(1.0)
+
+        score = score_t.cpu().numpy()
 
         # Select from the top toprand scores by randomly picking one
         toprand = self.params.get("FilterSamples_lincomb_init_toprand", 1)
@@ -331,7 +383,6 @@ class FilterSamples:
             best_score = float(score[argsort_score[topidx-1]])
             
         return best_score, best_idx
-        
 
     def ml_train_lincomb(self,
             A: np.ndarray[np.float32],
@@ -342,7 +393,7 @@ class FilterSamples:
             device: Optional[str] = None,
         ) -> np.ndarray[np.float32]:
         
-        q=self.params["FilterSamples_lincomb_q_up"]
+        q=self.params["FilterSamples_q_up"]
         lr=self.params["FilterSamples_lincomb_lr"]
         epochs=self.params["FilterSamples_lincomb_epochs"]
         probs_noise_std=self.params["FilterSamples_lincomb_probs_noise_std"]
@@ -358,7 +409,8 @@ class FilterSamples:
         
         # Convert inputs to torch tensors
         A_tensor = torch.tensor(A, dtype=torch.float32, device=device)  # (N, D)
-        v_tensor: torch.Tensor = torch.tensor(v, dtype=torch.float32, device=device)  # (N,)
+        v_tensor: torch.Tensor     = torch.tensor(v, dtype=torch.float32, device=device)  # (N,)
+        v_log_tensor: torch.Tensor = torch.tensor(np.log(v + 1e-8), dtype=torch.float32, device=device)  # (N,)  # for the geometric mean
 
         datesMat_sparse = self.establish_datesMat(dates, device=device)  # (D, N)
         
@@ -377,13 +429,14 @@ class FilterSamples:
         logger.info(f"FilterSamples: Best init score {best_score:.4f}")
         
         D = A_tensor.shape[1]
-        a = torch.nn.Parameter(torch.ones(D, dtype=torch.float32, device=device)*0.1)
-        a.data[best_idx] = 1.0
+        a = torch.nn.Parameter(torch.zeros(D, device=device))
+        with torch.no_grad():
+            a[best_idx] = 1.0
         # Optimizer
-        optimizer = torch.optim.Adam([a], lr=lr)
+        optimizer = torch.optim.Adam([a], lr=lr, weight_decay=1e-3)
 
         # Training loop
-        subsample_size = max(1, int(A.shape[0] * subsample_ratio))
+
         # Only instantiate tqdm when showing progress
         if show_progress:
             pbar = tqdm(range(epochs), desc="Epochs")
@@ -394,41 +447,176 @@ class FilterSamples:
         for epoch in iterator:
             optimizer.zero_grad()
             w      = A_tensor.matmul(a)                             # (N,)
-            thresh = torch.quantile(w, q)                           # scalar
-            probs  = torch.sigmoid(upper_sign * sharpness * (w - thresh))
             
             # --- regularisation: noise + subsample ---
-            probs = (probs + torch.randn_like(probs) * probs_noise_std).clamp(0,1)
-            
-            # subsample:
-            mask = torch.zeros(probs.size(0), dtype=torch.bool, device=device)
-            idx  = torch.randperm(probs.size(0), device=device)[:subsample_size]  # is slow for large num of parameters
-            mask[idx] = True
-            probs_sub   = probs * mask                                # (N,)
-            v_sub       = v_tensor * mask          # (N,)
+            thresh = torch.quantile(w.detach(), q)                    # detach for stability
+            logits = (upper_sign * sharpness * (w - thresh) +
+                    + torch.randn_like(w) * probs_noise_std).clamp(-20, 20)
+
+            # subsample
+            mask = (torch.rand_like(logits).lt(subsample_ratio)).float()
+            probs_sub = torch.sigmoid(logits) * mask / subsample_ratio
             
             # per-date sums & means on the subsample
-            probs_perdate = datesMat_sparse.matmul(probs_sub)             # (D,)
-            perdate_mean  = (
-                datesMat_sparse.matmul(probs_sub * v_sub) 
-                / (probs_perdate + 1e-8)
-            )  # (D,)
-            nonzero_sum  = (probs_perdate > 0).sum().item()
-            
-            # Loss calculation
-            loss = extreme_sign * perdate_mean.sum() / (nonzero_sum + 1e-8)
+            probs_perdate_raw = datesMat_sparse.matmul(probs_sub)
+            perdate_mean = datesMat_sparse.matmul(probs_sub * v_log_tensor) / (probs_perdate_raw + 1e-8)
+            nonneg_mask = probs_perdate_raw > 1e-8
+            mean_term = perdate_mean[nonneg_mask].mean()
+
+            loss = -mean_term if extreme_sign < 0 else mean_term   # or torch.exp(mean_term.clamp_max(20))
             loss.backward()
             optimizer.step()
             
             if show_progress:
-                mean_all_v = ((probs * v_tensor).sum() / (probs.sum() + 1e-8)).item()
-                perdate_mean_all = datesMat_sparse.matmul(probs * v_tensor) / (datesMat_sparse.matmul(probs) + 1e-8)
-                nonzero_sum_all = (datesMat_sparse.matmul(probs) > 0).sum().item()
-                mean_perdate_v = perdate_mean_all.sum().item() / nonzero_sum_all
-                pbar.set_postfix(
-                    mean_v=f"{mean_all_v:.4f}",
-                    mean_perdate_v=f"{mean_perdate_v:.4f}"
-                )
+                with torch.no_grad():
+                    mat_pv = datesMat_sparse.matmul(probs_sub * v_log_tensor)
+                    perdate_mean_all = mat_pv / (probs_perdate_raw + 1e-8)
+                    nonneg_mask = probs_perdate_raw > 1e-8
+                    mean_perdate_v = perdate_mean_all[nonneg_mask].mean().item()
+                    pbar.set_postfix(mean_perdate_v=f"{mean_perdate_v:.4f}")
 
         # Return optimized `a` as numpy array
         return a.detach().cpu().numpy()
+    
+    def taylor_feature_masks(self) -> tuple[np.ndarray, Optional[np.ndarray]]:
+        """
+        Selects a single feature by maximizing a Taylor score computed on the
+        rolling mean of the per-day target under a recent-window mask.
+
+        Score: x0 + (t/2) * x0', where
+        - x0  = rolling mean at the last training day
+        - x0' = slope (per day) of the rolling mean near the end
+        - t   = horizon in days (param: FilterSamples_taylor_horizon_days; defaults to window)
+        """
+        # --- Params & setup
+        q_up = self.params.get("FilterSamples_q_up", 0.9)
+        roll_w = int(self.params.get("FilterSamples_roll_window_days", 20))
+        roll_w = max(2, roll_w)
+        iter_feats = np.array(self.separate_treefeatures())
+        feat_idx = np.where(iter_feats)[0]
+
+        # Starting Analysis
+        score_true_train = self.evaluate_mask(
+            np.ones(self.Xtree_train.shape[0], dtype=bool),
+            dates=self.samples_dates_train, y=self.ytree_train
+        )
+        logger.info(f"FilterSamples/Taylor: (train) mean of y values {score_true_train}.")
+        if self.doTest:
+            score_true_test = self.evaluate_mask(
+                np.ones(self.Xtree_test.shape[0], dtype=bool),
+                dates=self.samples_dates_test, y=self.ytree_test
+            )
+            logger.info(f"FilterSamples/Taylor: (test) mean of y values {score_true_test}.")
+
+        # Recent window over training
+        mask_recent_train = self.get_recent_training_mask(self.samples_dates_train)
+        dates_recent = self.samples_dates_train.filter(pl.Series(mask_recent_train))
+        y_recent = self.ytree_train[mask_recent_train]
+        A_recent = self.Xtree_train[mask_recent_train][:, iter_feats]
+
+        # Day x Sample matrix (recent)
+        dates_mat_recent = self.establish_datesMat(dates_recent, device="cpu").to_dense().numpy()
+        n_days_recent = dates_mat_recent.shape[0]
+
+        # Horizon t (days)
+        t_h = int(self.params.get("FilterSamples_taylor_horizon_days", roll_w))
+        t_h = max(1, min(t_h, n_days_recent))
+
+        best_feat = None
+        best_score = -np.inf
+        best_thresh = None
+
+        logger.debug("FilterSamples/Taylor: scoring features via rolling-mean Taylor approximation.")
+
+        for k, f in enumerate(feat_idx):
+            vals = A_recent[:, k]  # single feature over recent samples
+            if not np.any(np.isfinite(vals)):
+                continue
+
+            # Threshold on recent quantile
+            try:
+                thresh = np.quantile(vals[np.isfinite(vals)], q_up)
+            except Exception:
+                continue
+
+            sel_recent = (vals >= thresh)
+            if sel_recent.sum() == 0:
+                continue
+
+            # Per-day mean target under selection
+            # counts: (# selected samples per day), sums: (sum of y per day over selected)
+            counts = dates_mat_recent[:, sel_recent].sum(axis=1).astype(float)
+            sums = (dates_mat_recent[:, sel_recent] * y_recent[sel_recent]).sum(axis=1).astype(float)
+            daily_mean = np.divide(
+                sums, counts,
+                out=np.full_like(counts, np.nan, dtype=float),
+                where=counts > 0
+            )
+
+            # Rolling mean (smooth) on per-day means
+            s = pl.Series(daily_mean)
+            s = s.to_frame().select(pl.all().fill_nan(None)).to_series()
+            rm = s.rolling_mean(window_size=roll_w, min_periods=min(max(2, roll_w//2), n_days_recent))\
+                .fill_null(strategy="forward").fill_null(strategy="backward").to_numpy()
+
+            if not np.isfinite(rm[-1]):
+                # still too many NaNs → skip
+                continue
+
+            x0 = float(rm[-1])
+
+            # Slope near the end via OLS on last W points of rolling mean
+            W = min(roll_w, len(rm))
+            y_seg = rm[-W:].astype(float)
+            x_seg = np.arange(W, dtype=float)
+            x_seg_c = x_seg - x_seg.mean()
+            y_seg_c = y_seg - y_seg.mean()
+            denom = (x_seg_c ** 2).sum()
+            slope = float((x_seg_c @ y_seg_c) / (denom + 1e-12))  # per-day slope
+
+            score = x0 + 0.5 * t_h * slope
+
+            logger.debug(
+                f"  Taylor score feat[{f}] {self.treenames[f]}: x0={x0:.6f}, "
+                f"slope={slope:.6f}, t={t_h}, score={score:.6f}"
+            )
+
+            if score > best_score:
+                best_score = score
+                best_feat = f
+                best_thresh = thresh
+
+        if best_feat is None:
+            logger.warning("FilterSamples/Taylor: No valid feature found. Falling back to selecting all.")
+            mask_train = np.ones(self.Xtree_train.shape[0], dtype=bool)
+            mask_test = np.ones(self.Xtree_test.shape[0], dtype=bool) if self.doTest else None
+            return mask_train, mask_test
+
+        logger.info(
+            f"FilterSamples/Taylor: Selected feature '{self.treenames[best_feat]}' "
+            f"with score {best_score:.6f} and threshold {best_thresh:.6g} (q={q_up})."
+        )
+
+        # Final masks (use training recent-derived threshold on full sets)
+        vals_tr = self.Xtree_train[:, best_feat]
+        thr_tr  = np.nanquantile(vals_tr, q_up, method="lower")
+        mask_train = np.isfinite(vals_tr) & (vals_tr >= thr_tr)
+
+        vals_te = self.Xtree_test[:, best_feat]
+        thr_te  = np.nanquantile(vals_te, q_up, method="lower")
+        mask_test = np.isfinite(vals_te) & (vals_te >= thr_te)
+
+        # Ending Analysis
+        score_train = self.evaluate_mask(mask=mask_train, dates=self.samples_dates_train, y=self.ytree_train)
+        logger.info(f"FilterSamples/Taylor: Final score (train): {score_train:.4f}")
+
+        if self.doTest:
+            score_test = self.evaluate_mask(mask=mask_test, dates=self.samples_dates_test, y=self.ytree_test)
+            logger.info(f"FilterSamples/Taylor: Final score (test): {score_test:.4f}")
+
+            # Coverage on test
+            dates_mat_test = self.establish_datesMat(self.samples_dates_test, device="cpu").to_dense().numpy()
+            zeroday_perc = (dates_mat_test[:, mask_test].sum(axis=1) < 0.5).sum() / dates_mat_test.shape[0]
+            logger.info(f"FilterSamples/Taylor: Fraction of days with no coverage by test mask: {np.mean(zeroday_perc):.2%}")
+
+        return mask_train, mask_test
