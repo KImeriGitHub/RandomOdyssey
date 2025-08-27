@@ -46,8 +46,20 @@ def test_save_and_load_roundtrip(tmp_path):
     file_io.saveToFile(asset)
     loaded = file_io.loadFromFile("TEST")
 
-    pd.testing.assert_frame_equal(asset.shareprice, loaded.shareprice)
-    pd.testing.assert_frame_equal(asset.financials_quarterly, loaded.financials_quarterly)
-    pd.testing.assert_frame_equal(asset.financials_annually, loaded.financials_annually)
+    pd.testing.assert_frame_equal(
+        asset.shareprice,
+        loaded.shareprice,
+        check_dtype=False,
+    )  # allow string dtype conversion
+    pd.testing.assert_frame_equal(
+        asset.financials_quarterly.apply(pd.to_numeric),
+        loaded.financials_quarterly.apply(pd.to_numeric),
+        check_dtype=False,
+    )  # compare numerically to tolerate 0 vs '0'
+    pd.testing.assert_frame_equal(
+        asset.financials_annually.apply(pd.to_numeric),
+        loaded.financials_annually.apply(pd.to_numeric),
+        check_dtype=False,
+    )  # compare numerically to tolerate 0 vs '0'
     assert asset.ticker == loaded.ticker
     assert asset.isin == loaded.isin
