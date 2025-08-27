@@ -132,6 +132,15 @@ class Checks:
         if any_consec_dub:
             return False
 
+        # Check whether adjusted close return over a day is between 1e-5 and 1e5
+        adj_close = df["AdjClose"]
+        ret_ratio = adj_close / adj_close.shift(1)
+        # skip the first NaN and check the range
+        upper_bound = 1e2
+        lower_bound = 1e-2
+        if not ret_ratio.iloc[1:].between(lower_bound, upper_bound).all():
+            return False
+
         # Volume non-zero except possibly the last two rows
         last_idx = df.index[-1]
         if ((df["Volume"] == 0) & (df.index != last_idx) & (df.index != last_idx - 1)).any():
