@@ -119,9 +119,9 @@ class TreeTimeML:
         if self.params['TreeTime_WeightSamples_run']:
             logger.info("Establishing weights for TreeTime features...")
             ws = WeightSamples(
-                Xtree_train=self.train_Xtree,
-                ytree_train=self.train_ytree,
-                Xtree_test=self.test_Xtree,
+                Xtree_train=self.train_Xtree[mask_train],
+                ytree_train=self.train_ytree[mask_train],
+                Xtree_test=self.test_Xtree[mask_test],
                 treenames=self.featureTreeNames,
                 params=self.params
             )
