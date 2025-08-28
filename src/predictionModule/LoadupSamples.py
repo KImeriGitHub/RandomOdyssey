@@ -5,6 +5,7 @@ import polars as pl
 import datetime
 import re
 import copy
+import copy as _copy
 from typing import Optional, Tuple
 from sklearn.preprocessing import StandardScaler
 
@@ -106,6 +107,51 @@ class LoadupSamples:
             logger.error("Sample dates should be pandas Timestamp objects.")
         if is_test_env and not all(isinstance(date, datetime.date) for date in self.meta_pl_test['date']):
             logger.error("Sample dates for test set should be pandas Timestamp objects.")
+
+    def copy(self, *, deep: bool = True) -> "LoadupSamples":
+        """Return a copy of this instance.
+        deep=True clones numpy arrays, polars DataFrames and params; deep=False shares them.
+        """
+
+        # Recreate base object
+        new = LoadupSamples(
+            train_start_date=self.train_start_date,
+            test_dates=(list(self.test_dates) if deep else self.test_dates),
+            treegroup=self.treegroup,
+            timegroup=self.timegroup,
+            params=(_copy.deepcopy(self.params) if deep else dict(self.params)),
+        )
+
+        # Preserve (possibly post-init) derived/overridden fields
+        new.min_test_date = self.min_test_date
+        new.max_test_date = self.max_test_date
+        new.daysAfter = self.daysAfter
+        new.idxAfter = self.idxAfter
+        new.timesteps = self.timesteps
+        new.target_option = self.target_option
+
+        # Helpers
+        def _c_arr(a): return None if a is None else (a.copy() if deep else a)
+        def _c_list(v): return None if v is None else (list(v) if deep else v)
+        def _c_pl(df): return None if df is None else (df.clone() if deep else df)
+
+        # Metadata
+        new.featureTreeNames = _c_list(self.featureTreeNames)
+        new.featureTimeNames = _c_list(self.featureTimeNames)
+        new.meta_pl_train = _c_pl(self.meta_pl_train)
+        new.meta_pl_test = _c_pl(self.meta_pl_test)
+
+        # Train/Test arrays
+        new.train_Xtree = _c_arr(self.train_Xtree)
+        new.train_Xtime = _c_arr(self.train_Xtime)
+        new.train_ytree = _c_arr(self.train_ytree)
+        new.train_ytime = _c_arr(self.train_ytime)
+        new.test_Xtree  = _c_arr(self.test_Xtree)
+        new.test_Xtime  = _c_arr(self.test_Xtime)
+        new.test_ytree  = _c_arr(self.test_ytree)
+        new.test_ytime  = _c_arr(self.test_ytime)
+
+        return new
 
     def load_samples(self, main_path: str = "src/featureAlchemy/bin/") -> Optional[pl.DataFrame]:
         years = np.arange(self.train_start_date.year, self.max_test_date.year + 1)
@@ -221,12 +267,12 @@ class LoadupSamples:
         self.meta_pl_test  = meta_pl.filter(pl.Series(mask_at_test_dates))
         
         if self.treegroup is not None:
-            self.featureTreeNames = names_treedata
+            self.featureTreeNames = list(names_treedata)
             self.train_Xtree = all_Xtree_pre[mask_inbetween_date]
             self.test_Xtree = all_Xtree_pre[mask_at_test_dates]
             
         if self.timegroup is not None:
-            self.featureTimeNames = names_timedata
+            self.featureTimeNames = list(names_timedata)
             self.train_Xtime = all_Xtime_pre[mask_inbetween_date]
             self.test_Xtime = all_Xtime_pre[mask_at_test_dates]
         
@@ -368,6 +414,25 @@ class LoadupSamples:
         
         self.dataset_tests()
 
+    def apply_masks(self, mask_train: np.ndarray, mask_test: np.ndarray | None) -> None:
+        if mask_test is None:
+            mask_test = np.ones((self.test_Xtree.shape[0],), dtype=bool)
+        if self.treegroup is not None:
+            self.train_Xtree = self.train_Xtree[mask_train]
+            self.train_ytree = self.train_ytree[mask_train]
+            self.test_Xtree = self.test_Xtree[mask_test]
+            self.test_ytree = self.test_ytree[mask_test]
+        
+        if self.timegroup is not None:
+            self.train_Xtime = self.train_Xtime[mask_train]
+            self.train_ytime = self.train_ytime[mask_train]
+            self.test_Xtime = self.test_Xtime[mask_test]
+            self.test_ytime = self.test_ytime[mask_test]
+        
+        self.meta_pl_train = self.meta_pl_train.filter(pl.Series(mask_train))
+        self.meta_pl_test = self.meta_pl_test.filter(pl.Series(mask_test))
+        
+        self.dataset_tests()
         
     def __add_target(self, meta_pl: pl.DataFrame):
         idx_after = self.__determine_idx_after(meta_pl)
