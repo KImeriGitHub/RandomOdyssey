@@ -29,7 +29,11 @@ class FilterSamples:
         "FilterSamples_lincomb_show_progress": True,
         "FilterSamples_lincomb_init_toprand": 1,
 
-        "FilterSamples_cat_over20": False
+        "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_posOneYearReturn": False,
+        "FilterSamples_cat_posFiveYearReturn": False,
+        "FilterSamples_taylor_horizon_days": 20,
+        "FilterSamples_taylor_roll_window_days": 20
     }
     
     def __init__(self, 
@@ -37,13 +41,9 @@ class FilterSamples:
             ytree_train: np.ndarray, 
             treenames: list[str],
             Xtree_test: np.ndarray, 
-            samples_dates_train: pl.Series,
-            samples_dates_test: pl.Series | None = None,
+            meta_train: pl.DataFrame,
+            meta_test: pl.DataFrame | None = None,
             ytree_test: np.ndarray | None = None,
-            closeprices_train: np.ndarray | None = None,
-            closeprices_test: np.ndarray | None = None,
-            adjcloseprices_train: np.ndarray | None = None,
-            adjcloseprices_test: np.ndarray | None = None,
             params: dict | None = None
         ):
         self.Xtree_train = Xtree_train
@@ -51,16 +51,17 @@ class FilterSamples:
         self.Xtree_test = Xtree_test
         self.ytree_test = ytree_test
         self.treenames = treenames
-        self.samples_dates_train = samples_dates_train
-        self.closeprices_train = closeprices_train
-        self.closeprices_test = closeprices_test
-        self.adjcloseprices_train = adjcloseprices_train
-        self.adjcloseprices_test = adjcloseprices_test
+        self.samples_dates_train = meta_train['date']
+        self.samples_dates_test = meta_test['date'] if meta_test is not None else None
+        self.closeprices_train = meta_train['Close'].to_numpy()
+        self.closeprices_test = meta_test['Close'].to_numpy()
+        self.adjcloseprices_train = meta_train['AdjClose'].to_numpy()
+        self.adjcloseprices_test = meta_test['AdjClose'].to_numpy()
 
         self.doTest = True
         if self.ytree_test is None or np.any(np.isnan(self.ytree_test)):
             self.doTest = False
-        if self.doTest and samples_dates_test is None:
+        if self.doTest and self.samples_dates_test is None:
             # If it is None we assume a single date for all test samples
             self.samples_dates_test = pl.Series(
                 name="sample_dates_test",
@@ -68,7 +69,7 @@ class FilterSamples:
                 dtype=pl.Date
             )
         else:
-            self.samples_dates_test = samples_dates_test
+            self.samples_dates_test = self.samples_dates_test
             
         self.params = {**self.default_params, **(params or {})}
         
@@ -490,7 +491,7 @@ class FilterSamples:
         """
         # --- Params & setup
         q_up = self.params.get("FilterSamples_q_up", 0.9)
-        roll_w = int(self.params.get("FilterSamples_roll_window_days", 20))
+        roll_w = int(self.params.get("FilterSamples_taylor_roll_window_days", 20))
         roll_w = max(2, roll_w)
         iter_feats = np.array(self.separate_treefeatures())
         feat_idx = np.where(iter_feats)[0]

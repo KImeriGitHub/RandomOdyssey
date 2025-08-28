@@ -86,15 +86,13 @@ class TreeTimeML:
         Returns a dictionary of all relevant masked data, trained model, and predictions.
         """
         # Filter samples
-        samples_dates_train = self.meta_pl_train.select(pl.col("date")).to_series()
-        samples_dates_test = self.meta_pl_test.select(pl.col("date")).to_series()
         fs = FilterSamples(
             Xtree_train = self.train_Xtree,
             ytree_train = self.train_ytree,
             treenames = self.featureTreeNames,
             Xtree_test = self.test_Xtree,
-            samples_dates_train = samples_dates_train,
-            samples_dates_test = samples_dates_test,
+            meta_train=self.meta_pl_train,
+            meta_test=self.meta_pl_test,
             ytree_test = self.test_ytree,
             params = self.params
         )
@@ -194,8 +192,11 @@ class TreeTimeML:
         test_std = 1.0 if np.std(preds_test[self.mask_test]) < 1e-6 else np.std(preds_test[self.mask_test])
         self.train_Xtree = np.hstack((self.train_Xtree, ((preds_train-1.0)/train_std).reshape(-1, 1)))
         self.test_Xtree = np.hstack((self.test_Xtree, ((preds_test-1.0)/test_std).reshape(-1, 1)))
-        self.featureTreeNames = np.hstack((self.featureTreeNames, ["LSTM_Prediction"]))
-    
+        if isinstance(self.featureTreeNames, list):
+            self.featureTreeNames.append("LSTM_Prediction")
+        elif isinstance(self.featureTreeNames, np.ndarray):
+            self.featureTreeNames = np.append(self.featureTreeNames, "LSTM_Prediction")
+
     def __get_top_tickers(self, y_test_pred: np.ndarray, meta_pl: pl.DataFrame) -> pl.DataFrame:
         m = self.params['TreeTime_top_n']
         
