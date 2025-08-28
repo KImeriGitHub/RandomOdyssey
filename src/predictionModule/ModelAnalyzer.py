@@ -146,11 +146,11 @@ class ModelAnalyzer:
     def log_test_result_overall(test_df: pl.DataFrame, last_col: str | None = None):
         agg_exprs = [
             pl.col("prediction_ratio").max().alias("max_pred"),  # this is also .first()
-            pl.col("prediction_ratio").mean().alias("mean_pred"),
+            pl.col("prediction_ratio").log().mean().exp().alias("mean_pred"),
         ]
         if last_col is not None:
             agg_exprs.extend([
-                pl.col(last_col).mean().alias("mean_res"),
+                pl.col(last_col).log().mean().exp().alias("mean_res"),
                 pl.col(last_col).first().alias("top_res"),
                 pl.col(last_col).count().alias("n_entries")
             ])
@@ -161,7 +161,7 @@ class ModelAnalyzer:
         )
 
         last_idx = test_df_perdate["date"].arg_max()
-        pred_meanmean = test_df_perdate["mean_pred"].mean()
+        pred_meanmean = np.e ** test_df_perdate["mean_pred"].log().mean()
         pred_meanlast = test_df_perdate["mean_pred"].gather(last_idx).item()
         pred_toplast  = test_df_perdate["max_pred"].gather(last_idx).item()
         logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
@@ -169,9 +169,9 @@ class ModelAnalyzer:
         logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
         
         if last_col is not None:
-            res_meanmean = test_df_perdate['mean_res'].mean()
+            res_meanmean = np.e ** test_df_perdate['mean_res'].log().mean()
             res_meanlast = test_df_perdate['mean_res'].last()
-            res_topmean = test_df_perdate['top_res'].mean()
+            res_topmean = np.e ** test_df_perdate['top_res'].log().mean()
             res_toplast = test_df_perdate['top_res'].last()
             res_sum_n = test_df_perdate['n_entries'].sum()
             
@@ -188,22 +188,22 @@ class ModelAnalyzer:
             end_train_date = df.select('date').min().item()
             end_test_date = df.select('date').max().item()
             df_perdate = df.group_by("date").agg([
-                pl.col(last_col).mean().alias("mean_res"),
+                pl.col(last_col).log().mean().exp().alias("mean_res"),
                 pl.col(last_col).first().alias("top_res"),
                 pl.col(last_col).count().alias("n_entries"),
                 pl.col("prediction_ratio").max().alias("max_pred"),
-                pl.col("prediction_ratio").mean().alias("mean_pred"),
+                pl.col("prediction_ratio").log().mean().exp().alias("mean_pred"),
             ]).sort("date")
             results.append(
                 {
                     "end_train_date": end_train_date,
                     "end_test_date": end_test_date,
-                    "res_meanmean": df_perdate['mean_res'].mean(),
+                    "res_meanmean": np.e ** df_perdate['mean_res'].log().mean(),
                     "res_toplast": df_perdate['top_res'].last(),
                     "res_meanlast": df_perdate['mean_res'].last(),
                     "n_entries": df_perdate['n_entries'].sum(),
                     "pred_toplast": df_perdate['max_pred'].last(),
-                    "pred_meanmean": df_perdate['mean_pred'].mean(),
+                    "pred_meanmean": np.e ** df_perdate['mean_pred'].log().mean(),
                     "pred_meanlast": df_perdate['mean_pred'].last(),
                 }
             )
@@ -212,12 +212,12 @@ class ModelAnalyzer:
         with pl.Config(ascii_tables=True, tbl_rows=-1, tbl_cols=-1):
             logger.info(results_df)
 
-        logger.info(f"Mean over meanmean returns over all cutoffs: {results_df['res_meanmean'].mean()}")
-        logger.info(f"Mean over toplast returns over all cutoffs: {results_df['res_toplast'].mean()}")
-        logger.info(f"Mean over meanlast returns over all cutoffs: {results_df['res_meanlast'].mean()}")
-        logger.info(f"Mean over meanmean predictions over all cutoffs: {results_df['pred_meanmean'].mean()}")
-        logger.info(f"Mean over toplast predictions over all cutoffs: {results_df['pred_toplast'].mean()}")
-        logger.info(f"Mean over meanlast predictions over all cutoffs: {results_df['pred_meanlast'].mean()}")
+        logger.info(f"Mean over meanmean returns over all cutoffs: {np.e ** results_df['res_meanmean'].log().mean()}")
+        logger.info(f"Mean over toplast returns over all cutoffs: {np.e ** results_df['res_toplast'].log().mean()}")
+        logger.info(f"Mean over meanlast returns over all cutoffs: {np.e ** results_df['res_meanlast'].log().mean()}")
+        logger.info(f"Mean over meanmean predictions over all cutoffs: {np.e ** results_df['pred_meanmean'].log().mean()}")
+        logger.info(f"Mean over toplast predictions over all cutoffs: {np.e ** results_df['pred_toplast'].log().mean()}")
+        logger.info(f"Mean over meanlast predictions over all cutoffs: {np.e ** results_df['pred_meanlast'].log().mean()}")
         logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
 
         if len(results_df) > 3:
@@ -234,16 +234,26 @@ class ModelAnalyzer:
 
             # Conditional Means
             with pl.Config(ascii_tables=True, tbl_rows=-1, tbl_cols=-1):
+                cols = ["res_meanmean", "res_toplast", "res_meanlast", "pred_toplast", "pred_meanmean", "pred_meanlast"]
                 logger.info(
                     "Mean over results filtered by 0.5 quantile prediction meanmean: "
-                    f"{results_df.filter(pl.col('pred_meanmean') > pl.col('pred_meanmean').quantile(0.5)).mean()}"
+                    f"{results_df.filter(pl.col('pred_meanmean') > np.quantile(results_df['pred_meanmean'].to_numpy(), 0.5)).select([
+                        (pl.col(c).log().mean().exp()).alias(c)
+                        for c in cols
+                    ])}"
                 )
                 logger.info(
                     f"Mean over results filtered by 0.5 quantile prediction meanlast: "
-                    f"{results_df.filter(pl.col('pred_meanlast') > pl.col('pred_meanlast').quantile(0.5)).mean()}"
+                    f"{results_df.filter(pl.col('pred_meanlast') > np.quantile(results_df['pred_meanlast'].to_numpy(), 0.5)).select([
+                        (pl.col(c).log().mean().exp()).alias(c)
+                        for c in cols
+                    ])}"
                 )
                 logger.info(
                     f"Mean over results filtered by 0.5 quantile prediction toplast: "
-                    f"{results_df.filter(pl.col('pred_toplast') > pl.col('pred_toplast').quantile(0.5)).mean()}"
+                    f"{results_df.filter(pl.col('pred_toplast') > np.quantile(results_df['pred_toplast'].to_numpy(), 0.5)).select([
+                        (pl.col(c).log().mean().exp()).alias(c)
+                        for c in cols
+                    ])}"
                 )
         return results_df
