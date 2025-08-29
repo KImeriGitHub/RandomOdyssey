@@ -324,8 +324,8 @@ class LoadupSamples:
         # Assert resulting np length
         assert len(idx_tree) == len(idx_time), "Tree and Time indices must match in length."
 
-        # Assert Close, AdjClose etc match in combined dataframe
-        cols = ["Close", "AdjClose", "Open"]
+        # Assert Close, Open etc match in combined dataframe
+        cols = ["Close", "Open"] #Adj Close might differ, that is why it is excluded
         left = meta_pl.select(cols)
         right = meta_pl.select([f"{c}_time" for c in cols]).rename(
             {f"{c}_time": c for c in cols}
