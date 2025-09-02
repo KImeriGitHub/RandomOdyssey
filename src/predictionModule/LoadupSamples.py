@@ -431,6 +431,9 @@ class LoadupSamples:
         
         self.meta_pl_train = self.meta_pl_train.filter(pl.Series(mask_train))
         self.meta_pl_test = self.meta_pl_test.filter(pl.Series(mask_test))
+
+        self.min_test_date = self.meta_pl_test.select(pl.min('date')).item()
+        self.max_test_date = self.meta_pl_test.select(pl.max('date')).item()
         
         self.dataset_tests()
         

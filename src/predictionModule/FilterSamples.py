@@ -187,16 +187,17 @@ class FilterSamples:
         
         return lincomb_mask_train, lincomb_mask_test if self.doTest else None
     
-    def get_recent_training_mask(self, dates_train: pl.Series) -> np.ndarray:
+    def get_recent_training_mask(self, days_to_train_end: int | None = None) -> np.ndarray:
         """
         Generates a boolean mask indicating which training samples fall within a recent date range.
-        The range is determined by the most recent date in `dates_train` and a configurable number of days
-        (`FilterSamples_days_to_train_end`) prior to that date. If the parameter is not set or is non-positive,
+        The range is determined by the most recent date in `self.samples_dates_train` and a configurable number of days
+        prior to that date. If the parameter is not set or is non-positive,
         the range includes all available dates.
         """
-        unique_dates = dates_train.unique().sort()
+        unique_dates = self.samples_dates_train.unique().sort()
         last_Date: datetime.date = unique_dates[-1]
-        days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
+        if days_to_train_end is None:
+            days_to_train_end = self.params.get("FilterSamples_days_to_train_end", -1)
         days_to_train_end_mod = days_to_train_end if days_to_train_end > 0 else len(unique_dates) - 1
         first_day = last_Date - datetime.timedelta(days = days_to_train_end_mod)
         return (
@@ -217,7 +218,7 @@ class FilterSamples:
         lincomb_fmask = np.array(self.separate_treefeatures())
         q_lincomb = self.params["FilterSamples_q_up"]
 
-        mask_dates_reduced = self.get_recent_training_mask(dates_train)
+        mask_dates_reduced = self.get_recent_training_mask()
 
         # Main Loop
         for i in range(itermax):
@@ -543,7 +544,7 @@ class FilterSamples:
             logger.info(f"FilterSamples/Taylor: (test) mean of y values {score_true_test}.")
 
         # Recent window over training
-        mask_recent_train = self.get_recent_training_mask(self.samples_dates_train)
+        mask_recent_train = self.get_recent_training_mask()
         dates_recent = self.samples_dates_train.filter(pl.Series(mask_recent_train))
         y_recent = self.ytree_train[mask_recent_train]
         A_recent = self.Xtree_train[mask_recent_train][:, iter_feats]
