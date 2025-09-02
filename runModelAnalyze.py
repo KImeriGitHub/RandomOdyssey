@@ -10,14 +10,15 @@ import datetime
 import copy
 import random
 
-stock_group = "group_finanTo2011"
+timegroup = "group_regOHLCV_over5years"
+stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
     filename=f'logs/output_TreeTime_{stock_group_short}_{formatted_date}.log',
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M'
 )
@@ -31,8 +32,8 @@ logger.info(f" Params: {params}")
 ## ANALYZING ##
 ###############
 # Static config
-global_start_date = datetime.date(2014, 1, 1)     # earliest data
-final_eval_date   = datetime.date(2025, 8, 7)    # last date you want to consider cutoffs up to
+global_start_date = datetime.date(2017, 1, 1)     # earliest data
+final_eval_date   = datetime.date(2025, 7, 7)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
 n_cutoffs = 100                                     # number of cutoffs to generate
 num_reruns = 1                                     # number of times to rerun analysis for each cutoff
@@ -44,8 +45,8 @@ if __name__ == "__main__":
     ls = LoadupSamples(
         train_start_date=global_start_date,
         test_dates=test_dates,  # will be overridden in split loop; kept for init
-        group=stock_group,
-        group_type='Tree',
+        treegroup=stock_group,
+        timegroup=timegroup,
         params=params,
     )
     ls.load_samples()
@@ -75,7 +76,8 @@ if __name__ == "__main__":
                 tt = TreeTimeML(
                     train_start_date=lsc.train_start_date,
                     test_dates=lsc.test_dates,
-                    group=stock_group,
+                    treegroup=stock_group,
+                    timegroup=timegroup,
                     params=params,
                     loadup=lsc
                 )

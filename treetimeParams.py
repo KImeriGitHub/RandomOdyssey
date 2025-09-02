@@ -5,7 +5,6 @@ params = {
     
     "TreeTime_top_n": 5,
     "TreeTime_stoploss": 0.92,
-    "TreeTime_lgb_maskless": False,  # Without masks, it seems to perform worse
     
     "FilterSamples_days_to_train_end": 500,
     
@@ -21,6 +20,7 @@ params = {
     "FilterSamples_lincomb_init_toprand": 10,
 
     'TreeTime_run_lstm': False,
+    "Treetime_LSTM_days_to_train": 500,
     "LSTM_units": 32,
     "LSTM_num_layers": 3,
     "LSTM_dropout": 0.00001,
@@ -38,6 +38,7 @@ params = {
     "LSTM_conv1d_kernel_size": 3,
     "LSTM_loss": "mse",
     
+    "TreeTime_LGB_days_to_train":600,
     "LGB_num_boost_round": 100,
     "LGB_lambda_l1": 0.04614242128149404,
     "LGB_lambda_l2": 0.009786276249261908,
