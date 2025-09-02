@@ -28,12 +28,14 @@ class FilterSamples:
         "FilterSamples_lincomb_itermax": 6,
         "FilterSamples_lincomb_show_progress": True,
         "FilterSamples_lincomb_init_toprand": 1,
+        "FilterSamples_lincomb_batch_size": 2**12,
 
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_taylor_horizon_days": 20,
-        "FilterSamples_taylor_roll_window_days": 20
+        "FilterSamples_taylor_roll_window_days": 20,
+        "FilterSamples_taylor_weight_slope": 0.2
     }
     
     def __init__(self, 
@@ -445,37 +447,67 @@ class FilterSamples:
         else:
             iterator = range(epochs)
         
+        # --- batching params ---
+        batch_size = self.params.get("FilterSamples_lincomb_batch_size", 2**12)  # adjust
+        N, D = A_tensor.shape
+        num_dates = datesMat_sparse.shape[0]
+
+        # map sample -> date (once)
+        if "sample_to_date" not in locals() or sample_to_date is None:
+            coo = datesMat_sparse.coalesce()
+            cols = coo.indices()[1]    # sample ids (size nnz)
+            rows = coo.indices()[0]    # date ids   (size nnz)
+            sample_to_date = torch.empty(N, dtype=torch.long, device=device)
+            sample_to_date[cols] = rows
+
         for epoch in iterator:
             optimizer.zero_grad()
-            w      = A_tensor.matmul(a)                             # (N,)
-            
-            # --- regularisation: noise + subsample ---
-            thresh = torch.quantile(w.detach(), q)                    # detach for stability
-            logits = (upper_sign * sharpness * (w - thresh) +
-                    + torch.randn_like(w) * probs_noise_std).clamp(-20, 20)
 
-            # subsample
-            mask = (torch.rand_like(logits).lt(subsample_ratio)).float()
-            probs_sub = torch.sigmoid(logits) * mask / subsample_ratio
-            
-            # per-date sums & means on the subsample
-            probs_perdate_raw = datesMat_sparse.matmul(probs_sub)
-            perdate_mean = datesMat_sparse.matmul(probs_sub * v_log_tensor) / (probs_perdate_raw + 1e-8)
+            # -------- Pass 1: compute w and the global quantile (no grad) --------
+            with torch.no_grad():
+                w_full = torch.empty(N, device=device)
+                for s in range(0, N, batch_size):
+                    e = min(s + batch_size, N)
+                    w_full[s:e] = A_tensor[s:e].matmul(a)  # (e-s,)
+                thresh = torch.quantile(w_full, q)
+
+            # -------- Pass 2: streamed loss with grad --------
+            probs_perdate_raw = torch.zeros(num_dates, device=device)  # will become grad-connected
+            mat_pv            = torch.zeros(num_dates, device=device)
+
+            for s in range(0, N, batch_size):
+                e = min(s + batch_size, N)
+
+                w_b = A_tensor[s:e].matmul(a)  # (e-s,) — grad path preserved
+
+                logits_b = (upper_sign * sharpness * (w_b - thresh) +
+                            torch.randn_like(w_b) * probs_noise_std).clamp(-20, 20)
+
+                # subsample
+                mask_b = (torch.rand_like(logits_b).lt(subsample_ratio)).float()
+                probs_sub_b = torch.sigmoid(logits_b) * mask_b / subsample_ratio  # (e-s,)
+
+                # per-date accumulation (functional, keeps grad)
+                dates_b = sample_to_date[s:e]  # (e-s,)
+                # index_add (out-of-place) creates grad-linked tensors
+                delta_raw = torch.index_add(torch.zeros(num_dates, device=device), 0, dates_b, probs_sub_b)
+                delta_pv  = torch.index_add(torch.zeros(num_dates, device=device), 0, dates_b,
+                                            probs_sub_b * v_log_tensor[s:e])
+
+                probs_perdate_raw = probs_perdate_raw + delta_raw
+                mat_pv            = mat_pv            + delta_pv
+
+            perdate_mean_all = mat_pv / (probs_perdate_raw + 1e-8)
             nonneg_mask = probs_perdate_raw > 1e-8
-            mean_term = perdate_mean[nonneg_mask].mean()
+            mean_term = perdate_mean_all[nonneg_mask].mean()
 
-            loss = -mean_term if extreme_sign < 0 else mean_term   # or torch.exp(mean_term.clamp_max(20))
+            loss = -mean_term if extreme_sign < 0 else mean_term
             loss.backward()
             optimizer.step()
-            
-            if show_progress:
-                with torch.no_grad():
-                    mat_pv = datesMat_sparse.matmul(probs_sub * v_log_tensor)
-                    perdate_mean_all = mat_pv / (probs_perdate_raw + 1e-8)
-                    nonneg_mask = probs_perdate_raw > 1e-8
-                    mean_perdate_v = perdate_mean_all[nonneg_mask].mean().item()
-                    pbar.set_postfix(mean_perdate_v=f"{mean_perdate_v:.4f}")
 
+            if show_progress:
+                pbar.set_postfix(mean_perdate_v=f"{mean_term.item():.4f}")
+                
         # Return optimized `a` as numpy array
         return a.detach().cpu().numpy()
     
@@ -491,6 +523,7 @@ class FilterSamples:
         """
         # --- Params & setup
         q_up = self.params.get("FilterSamples_q_up", 0.9)
+        weight_slope = self.params.get("FilterSamples_taylor_weight_slope", 0.5)
         roll_w = int(self.params.get("FilterSamples_taylor_roll_window_days", 20))
         roll_w = max(2, roll_w)
         iter_feats = np.array(self.separate_treefeatures())
@@ -575,7 +608,7 @@ class FilterSamples:
             denom = (x_seg_c ** 2).sum()
             slope = float((x_seg_c @ y_seg_c) / (denom + 1e-12))  # per-day slope
 
-            score = x0 + 0.5 * t_h * slope
+            score = x0 + weight_slope * t_h * slope
 
             logger.debug(
                 f"  Taylor score feat[{f}] {self.treenames[f]}: x0={x0:.6f}, "
