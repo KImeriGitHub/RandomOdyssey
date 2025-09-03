@@ -110,7 +110,7 @@ class TreeTimeML:
         # run LSTM to add time prediction to tabular data
         logger.info("Running LSTM to add time prediction to tree data...")
         if self.params['TreeTime_run_lstm']:
-            days_to_train = self.params["Treetime_LSTM_days_to_train"]
+            days_to_train = self.params["TreeTime_LSTM_days_to_train"]
             mask_dates_reduced = fs_pre.get_recent_training_mask(days_to_train)
             self.__run_time_to_tree_addition(lstm_model, mask_dates_reduced)
 

@@ -20,7 +20,7 @@ params = {
     "FilterSamples_lincomb_init_toprand": 10,
 
     'TreeTime_run_lstm': False,
-    "Treetime_LSTM_days_to_train": 500,
+    "TreeTime_LSTM_days_to_train": 500,
     "LSTM_units": 32,
     "LSTM_num_layers": 3,
     "LSTM_dropout": 0.00001,
