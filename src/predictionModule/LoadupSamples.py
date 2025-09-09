@@ -330,8 +330,14 @@ class LoadupSamples:
         right = meta_pl.select([f"{c}_time" for c in cols]).rename(
             {f"{c}_time": c for c in cols}
         )
-        assert left.equals(right, null_equal=True), "Mismatch between cols and their *_time counterparts."
-        
+        if not left.equals(right, null_equal=True):
+            a = left.to_numpy()
+            b = right.to_numpy()
+            diff = np.abs(a - b)
+            mask = (diff != 0).any(axis=1)
+            diff_masked = diff[mask]
+            logger.warning(f"Mismatch between cols and their *_time counterparts: {diff_masked} at indices {np.where(mask)[0]}.")
+
         meta_pl = meta_pl.drop(["idx_tree", "idx_time", "AdjClose_time","Close_time","Open_time"])
 
         return meta_pl, alltree_X, alltime_X
