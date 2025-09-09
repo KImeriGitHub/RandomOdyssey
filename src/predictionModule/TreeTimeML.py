@@ -2,8 +2,9 @@ import numpy as np
 import polars as pl
 import logging
 import datetime
-
+import lightgbm as lgb
 import scipy
+import torch
 
 from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.mathTools.DistributionTools import DistributionTools
@@ -21,9 +22,6 @@ class TreeTimeML:
         "idxAfterPrediction": 10,
         'timesteps': 20,
         'target_option': 'last',
-
-        "TreeTime_LSTM_days_to_train": 300,
-        "TreeTime_FilterSamples_method": "taylor",
 
         "LoadupSamples_time_inc_factor": 10,
         "LoadupSamples_tree_scaling_standard": True,
@@ -90,7 +88,10 @@ class TreeTimeML:
         Common pipeline steps shared by both analyze() and predict().
         Returns a dictionary of all relevant masked data, trained model, and predictions.
         """
-        # Filter samples
+
+        ########################
+        ## PRE FILTER SAMPLES ##
+        ########################
         fs_pre = FilterSamples(
             Xtree_train = self.train_Xtree,
             ytree_train = self.train_ytree,
@@ -107,14 +108,28 @@ class TreeTimeML:
         self.mask_train &= cat_mask_train
         self.mask_test &= cat_mask_test
 
+        ########################
+        ## RUN LSTM   ##########
+        ########################
         # run LSTM to add time prediction to tabular data
         logger.info("Running LSTM to add time prediction to tree data...")
         if self.params['TreeTime_run_lstm']:
             days_to_train = self.params["TreeTime_LSTM_days_to_train"]
             mask_dates_reduced = fs_pre.get_recent_training_mask(days_to_train)
-            self.__run_time_to_tree_addition(lstm_model, mask_dates_reduced)
+            if (mask_dates_reduced & self.mask_train).sum() < 1e2:
+                logger.warning(f"  Not enough training samples ({(mask_dates_reduced & self.mask_train).sum()}) for LSTM; skipping addition to tree data.")
+                return
+            try:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                self.__run_time_to_tree_addition(lstm_model, mask_dates_reduced, device=device)
+            except Exception as e:
+                logger.warning(f"  Error occurred while running LSTM: {e}")
+                return
 
-        # Filter through lincomb strategy
+        #########################
+        ## MAIN FILTER SAMPLES ##
+        #########################
+        logger.info("Running filtering samples...")
         fs = FilterSamples(
             Xtree_train = self.train_Xtree[self.mask_train],
             ytree_train = self.train_ytree[self.mask_train],
@@ -136,7 +151,9 @@ class TreeTimeML:
         self.mask_train[self.mask_train] = fs_mask_train
         self.mask_test[self.mask_test]   = fs_mask_test
         
-        ## Establish weights for Tree
+        ##########################
+        ## ESTABLISHING WEIGHTS ##
+        ##########################
         startTime  = datetime.datetime.now()
         if self.params['TreeTime_WeightSamples_run']:
             logger.info("Establishing weights for TreeTime features...")
@@ -155,63 +172,78 @@ class TreeTimeML:
             logger.info("Skipping TreeTime feature weights establishment.")
             self.tree_weights = np.ones(self.train_Xtree.shape[0], dtype=np.float64)
         
-        # LGB model
+        ##########################
+        ## RUN LGBM ##############
+        ##########################
+        logger.info("Running LGBM...")
         if lgb_model is None:
             startTime  = datetime.datetime.now()
             mm = MachineModels(self.params)
             days_to_train_LGB = self.params["TreeTime_LGB_days_to_train"]
-            mask_dates_reduced = fs.get_recent_training_mask(days_to_train_LGB)
+            mask_dates_reduced = fs_pre.get_recent_training_mask(days_to_train_LGB)
+            if (mask_dates_reduced & self.mask_train).sum() < 1e2:
+                logger.warning(f"  Not enough training samples ({(mask_dates_reduced & self.mask_train).sum()}) for LGB; skipping LGB.")
+                
             lgb_model, lgb_res_dict = mm.run_LGB(
-                X_train=self.train_Xtree[days_to_train_LGB & self.mask_train],
-                y_train=self.train_ytree[days_to_train_LGB & self.mask_train],
+                X_train=self.train_Xtree[mask_dates_reduced & self.mask_train],
+                y_train=self.train_ytree[mask_dates_reduced & self.mask_train],
                 X_test=self.test_Xtree[self.mask_test],
                 y_test=self.test_ytree[self.mask_test],
-                weights=self.tree_weights[days_to_train_LGB & self.mask_train],
+                weights=self.tree_weights[mask_dates_reduced & self.mask_train],
             )
         
         # LGB Predictions
         startTime  = datetime.datetime.now()
-        y_train_pred_masked = lgb_model.predict(self.train_Xtree, num_iteration=lgb_model.best_iteration)
-        y_test_pred_masked = lgb_model.predict(self.test_Xtree, num_iteration=lgb_model.best_iteration)
-        rmse = np.sqrt(np.mean((y_train_pred_masked - self.train_ytree) ** 2))
+        y_train_pred = lgb_model.predict(self.train_Xtree, num_iteration=lgb_model.best_iteration)
+        y_test_pred = lgb_model.predict(self.test_Xtree, num_iteration=lgb_model.best_iteration)
+        rmse = np.sqrt(np.mean((y_train_pred - self.train_ytree) ** 2))
         logger.info(f"  Train (lgbm_pred - ytree)       -> RMSE: {rmse:.4f}")
         logger.info(f"  LGB completed in {datetime.datetime.now() - startTime}.")
 
-        # Return everything needed
+        #############
+        ## RETURNS ##
+        #############
         return {
             'lstm_model': lstm_model,
             'lgb_model': lgb_model,
-            'y_test_pred_masked': y_test_pred_masked,
+            'y_test_pred': y_test_pred,
             'mask_train': self.mask_train,
             'mask_test': self.mask_test,
         }
-    
-    def __run_time_to_tree_addition(self, lstm_model, mask_days_reduced) -> None:
+
+    def __run_time_to_tree_addition(self, lstm_model: torch.nn.Module | None, mask_days_reduced, device = "cuda") -> None:
         """
         Runs LSTM to generate feature(s) to add to the tree data.
         """
         mm = MachineModels(self.params)
 
         starttime = datetime.datetime.now()
-        device = "cuda"
-        lstm_model, res_dict = mm.run_LSTM_torch(
-            self.train_Xtime[mask_days_reduced & self.mask_train], 
-            self.train_ytime[mask_days_reduced & self.mask_train], 
-            device=device
-        )
+        if lstm_model is None:
+            lstm_model, res_dict = mm.run_LSTM_torch(
+                self.train_Xtime[mask_days_reduced & self.mask_train], 
+                self.train_ytime[mask_days_reduced & self.mask_train], 
+                device=device
+            )
+        else:
+            res_dict = {'val_rmse': None}
+
         preds_train = mm.predict_LSTM_torch(lstm_model, self.train_Xtime, batch_size=self.params["LSTM_batch_size"], device=device)
         preds_test = mm.predict_LSTM_torch(lstm_model, self.test_Xtime, batch_size=self.params["LSTM_batch_size"], device=device)
         endtime = datetime.datetime.now()
 
+        if np.std(preds_train[self.mask_train]) < 1e-4 or np.std(preds_test[self.mask_test]) < 1e-4:
+            logger.warning(f"  Std train: {np.std(preds_train[self.mask_train]):.6f}")
+            logger.warning(f"  Std test: {np.std(preds_test[self.mask_test]):.6f}")
+            logger.warning(f"  LSTM predictions have near-zero standard deviation; skipping addition to tree data.")
+            return
+
         logger.info(f"  LSTM RSME: {res_dict['val_rmse']*2/self.params['LoadupSamples_time_inc_factor']:.4f}")
         logger.info(f"  LSTM completed in {endtime - starttime}.")
+        quant_val_train = np.quantile(preds_train[self.mask_train], self.params["FilterSamples_q_up"])
         filtered_train = (
             self.train_ytree
                 [self.mask_train]
-                [
-                    preds_train[self.mask_train] 
-                        >= np.quantile(preds_train[self.mask_train], self.params["FilterSamples_q_up"])
-                ]
+                [preds_train[self.mask_train] >= quant_val_train]
         )
         logger.info(f"  Result of quantile {self.params['FilterSamples_q_up']:.2f}")
         logger.info(f"    Train set (gmean, unreduced): {scipy.stats.gmean(filtered_train):.4f}")
@@ -225,6 +257,8 @@ class TreeTimeML:
             self.featureTreeNames.append("LSTM_Prediction")
         elif isinstance(self.featureTreeNames, np.ndarray):
             self.featureTreeNames = np.append(self.featureTreeNames, "LSTM_Prediction")
+        else:
+            logger.error("featureTreeNames must be a list or numpy array.")
 
     def __get_top_tickers(self, y_test_pred: np.ndarray, meta_pl: pl.DataFrame) -> pl.DataFrame:
         m = self.params['TreeTime_top_n']
@@ -314,12 +348,12 @@ class TreeTimeML:
             ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)
         
         # Additional analysis with test set
-        y_test_pred_masked: np.ndarray = data['y_test_pred_masked']
+        y_test_pred: np.ndarray = data['y_test_pred']
         mask_test: np.ndarray = data['mask_test']
         
         res_df, res_df_perdate_err = (
             self.__df_analysis(
-                y_test_pred_masked, 
+                y_test_pred[mask_test],
                 self.meta_pl_test.filter(pl.Series(mask_test))
             )
         )

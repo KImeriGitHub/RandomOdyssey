@@ -35,9 +35,9 @@ logger.info(f" Params: {params}")
 global_start_date = datetime.date(2017, 1, 1)     # earliest data
 final_eval_date   = datetime.date(2025, 7, 7)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 100                                     # number of cutoffs to generate
-num_reruns = 1                                     # number of times to rerun analysis for each cutoff
-days_delta = 7                                   # days delta for cutoff generation
+n_cutoffs = 10                                     # number of cutoffs to generate
+num_reruns = 2                                     # number of times to rerun analysis for each cutoff
+days_delta = 100                                   # days delta for cutoff generation
 
 if __name__ == "__main__":
     # Pre-load once
@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
     for end_train_date in cutoffs:
         end_test_date = end_train_date + datetime.timedelta(days=test_horizon_days)
-        lsc = copy.deepcopy(ls)  # Create a copy of the LoadupSamples instance
+        lsc = ls.copy(deep=True)  # Create a copy of the LoadupSamples instance
         # Re-split dataset for this window
         lsc.split_dataset(
             start_date=global_start_date,
@@ -72,14 +72,15 @@ if __name__ == "__main__":
         res_dict_list = []
         try:
             for _ in range(num_reruns):
+                lsc_r = lsc.copy(deep=True)  # Deep copy to ensure independence
                 # Train/analyze for this cutoff
                 tt = TreeTimeML(
-                    train_start_date=lsc.train_start_date,
-                    test_dates=lsc.test_dates,
+                    train_start_date=lsc_r.train_start_date,
+                    test_dates=lsc_r.test_dates,
                     treegroup=stock_group,
                     timegroup=timegroup,
                     params=params,
-                    loadup=lsc
+                    loadup=lsc_r,
                 )
                 starttime = datetime.datetime.now()
                 res_loop, res_dict_loop = tt.analyze()

@@ -2,15 +2,16 @@ params = {
     "idxAfterPrediction": 5,
     'timesteps': 85,
     'target_option': 'last',
+    "LoadupSamples_tree_scaling_standard": True,
     "LoadupSamples_time_scaling_stretch": True,
     "LoadupSamples_time_inc_factor": 36,
     
     "TreeTime_top_n": 5,
     "TreeTime_stoploss": 0.92,
     
-    "FilterSamples_q_up": 0.985,
+    "TreeTime_FilterSamples_method": "taylor",
+    "FilterSamples_q_up": 0.65,
     "FilterSamples_days_to_train_end": 10,
-    "FilterSamples_method": "taylor",
     
     "FilterSamples_cat_over20": True,
     "FilterSamples_cat_posOneYearReturn": False,
@@ -30,7 +31,7 @@ params = {
     "FilterSamples_taylor_roll_window_days": 15,
     "FilterSamples_taylor_weight_slope": 0.43,
 
-    'TreeTime_run_lstm': False,
+    'TreeTime_run_lstm': True,
     "TreeTime_LSTM_days_to_train": 1000,
     "LSTM_units": 32,
     "LSTM_num_layers": 2,
