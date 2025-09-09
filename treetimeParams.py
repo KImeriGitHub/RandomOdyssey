@@ -12,6 +12,10 @@ params = {
     "FilterSamples_days_to_train_end": 10,
     "FilterSamples_method": "taylor",
     
+    "FilterSamples_cat_over20": True,
+    "FilterSamples_cat_posOneYearReturn": False,
+    "FilterSamples_cat_posFiveYearReturn": False,
+    
     "FilterSamples_lincomb_lr": 0.0008,
     "FilterSamples_lincomb_epochs": 150,
     "FilterSamples_lincomb_probs_noise_std": 0.010503627436184224,
