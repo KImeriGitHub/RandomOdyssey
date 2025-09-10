@@ -83,7 +83,7 @@ class TreeTimeML:
         self.mask_train = np.ones(self.train_Xtree.shape[0], dtype=bool)
         self.mask_test = np.ones(self.test_Xtree.shape[0], dtype=bool)
         
-    def pipeline(self, lstm_model = None, lgb_model = None) -> dict:
+    def pipeline(self, lstm_model = None, lgb_model = None, mode: str = "predict") -> dict:
         """
         Common pipeline steps shared by both analyze() and predict().
         Returns a dictionary of all relevant masked data, trained model, and predictions.
@@ -121,7 +121,7 @@ class TreeTimeML:
                 return
             try:
                 device = "cuda" if torch.cuda.is_available() else "cpu"
-                self.__run_time_to_tree_addition(lstm_model, mask_dates_reduced, device=device)
+                self.__run_time_to_tree_addition(lstm_model, mask_dates_reduced, device=device, mode=mode)
             except Exception as e:
                 logger.warning(f"  Error occurred while running LSTM: {e}")
                 return
@@ -151,6 +151,13 @@ class TreeTimeML:
         self.mask_train[self.mask_train] = fs_mask_train
         self.mask_test[self.mask_test]   = fs_mask_test
         
+        if mode == "analyze":
+            logger.info(f"  After filtering: ")
+            logger.info(f"    Ratio training samples: {self.mask_train.sum() / len(self.mask_train)}")
+            logger.info(f"    Ratio test samples: {self.mask_test.sum() / len(self.mask_test)}")
+            logger.info(f"    Train set gmean: {scipy.stats.gmean(self.train_ytree[self.mask_train]):.4f}")
+            logger.info(f"    Test set gmean: {scipy.stats.gmean(self.test_ytree[self.mask_test]):.4f}")
+
         ##########################
         ## ESTABLISHING WEIGHTS ##
         ##########################
@@ -179,17 +186,12 @@ class TreeTimeML:
         if lgb_model is None:
             startTime  = datetime.datetime.now()
             mm = MachineModels(self.params)
-            days_to_train_LGB = self.params["TreeTime_LGB_days_to_train"]
-            mask_dates_reduced = fs_pre.get_recent_training_mask(days_to_train_LGB)
-            if (mask_dates_reduced & self.mask_train).sum() < 1e2:
-                logger.warning(f"  Not enough training samples ({(mask_dates_reduced & self.mask_train).sum()}) for LGB; skipping LGB.")
-                
             lgb_model, lgb_res_dict = mm.run_LGB(
-                X_train=self.train_Xtree[mask_dates_reduced & self.mask_train],
-                y_train=self.train_ytree[mask_dates_reduced & self.mask_train],
+                X_train=self.train_Xtree[self.mask_train],
+                y_train=self.train_ytree[self.mask_train],
                 X_test=self.test_Xtree[self.mask_test],
                 y_test=self.test_ytree[self.mask_test],
-                weights=self.tree_weights[mask_dates_reduced & self.mask_train],
+                weights=self.tree_weights[self.mask_train],
             )
         
         # LGB Predictions
@@ -198,6 +200,9 @@ class TreeTimeML:
         y_test_pred = lgb_model.predict(self.test_Xtree, num_iteration=lgb_model.best_iteration)
         rmse = np.sqrt(np.mean((y_train_pred - self.train_ytree) ** 2))
         logger.info(f"  Train (lgbm_pred - ytree)       -> RMSE: {rmse:.4f}")
+        if mode == "analyze":
+            rmse = np.sqrt(np.mean((y_test_pred[self.mask_test] - self.test_ytree[self.mask_test]) ** 2))
+            logger.info(f"  Test  (lgbm_pred - ytree)       -> RMSE: {rmse:.4f}")
         logger.info(f"  LGB completed in {datetime.datetime.now() - startTime}.")
 
         #############
@@ -211,7 +216,7 @@ class TreeTimeML:
             'mask_test': self.mask_test,
         }
 
-    def __run_time_to_tree_addition(self, lstm_model: torch.nn.Module | None, mask_days_reduced, device = "cuda") -> None:
+    def __run_time_to_tree_addition(self, lstm_model: torch.nn.Module | None, mask_days_reduced, device = "cuda", mode: str = "predict") -> None:
         """
         Runs LSTM to generate feature(s) to add to the tree data.
         """
@@ -239,15 +244,38 @@ class TreeTimeML:
 
         logger.info(f"  LSTM RSME: {res_dict['val_rmse']*2/self.params['LoadupSamples_time_inc_factor']:.4f}")
         logger.info(f"  LSTM completed in {endtime - starttime}.")
-        quant_val_train = np.quantile(preds_train[self.mask_train], self.params["FilterSamples_q_up"])
-        filtered_train = (
+        quant_val_train_up   = np.quantile(preds_train[self.mask_train], self.params["FilterSamples_q_up"])
+        quant_val_train_down = np.quantile(preds_train[self.mask_train], 1-self.params["FilterSamples_q_up"])
+        filtered_train_up = (
             self.train_ytree
                 [self.mask_train]
-                [preds_train[self.mask_train] >= quant_val_train]
+                [preds_train[self.mask_train] >= quant_val_train_up]
+        )
+        filtered_train_down = (
+            self.train_ytree
+                [self.mask_train]
+                [preds_train[self.mask_train] <= quant_val_train_down]
         )
         logger.info(f"  Result of quantile {self.params['FilterSamples_q_up']:.2f}")
-        logger.info(f"    Train set (gmean, unreduced): {scipy.stats.gmean(filtered_train):.4f}")
-    
+        logger.info(f"    Train set (gmean, unreduced, upper): {scipy.stats.gmean(filtered_train_up):.4f}")
+        logger.info(f"    Train set (gmean, unreduced, lower): {scipy.stats.gmean(filtered_train_down):.4f}")
+        
+        if mode == "analyze":
+            quant_val_test_up   = np.quantile(preds_test[self.mask_test], self.params["FilterSamples_q_up"])
+            quant_val_test_down = np.quantile(preds_test[self.mask_test], 1-self.params["FilterSamples_q_up"])
+            filtered_test_up = (
+                self.test_ytree
+                    [self.mask_test]
+                    [preds_test[self.mask_test] >= quant_val_test_up]
+            )
+            filtered_test_down = (
+                self.test_ytree
+                    [self.mask_test]
+                    [preds_test[self.mask_test] <= quant_val_test_down]
+            )
+            logger.info(f"    Test set (gmean, unreduced, upper): {scipy.stats.gmean(filtered_test_up):.4f}")
+            logger.info(f"    Test set (gmean, unreduced, lower): {scipy.stats.gmean(filtered_test_down):.4f}")
+
         ## Add LSTM predictions to the tree test set
         train_std = np.std(preds_train)
         test_std = 1.0 if np.std(preds_test) < 1e-6 else np.std(preds_test[self.mask_test])
@@ -342,7 +370,7 @@ class TreeTimeML:
         logger.disabled = logger_disabled
         
         # Run common pipeline in "analyze" mode
-        data = self.pipeline(lstm_model = lstm_model, lgb_model = lgb_model)
+        data = self.pipeline(lstm_model = lstm_model, lgb_model = lgb_model, mode="analyze")
 
         if data["lgb_model"] is not None:
             ModelAnalyzer.print_feature_importance_LGBM(data['lgb_model'], self.featureTreeNames, 15)

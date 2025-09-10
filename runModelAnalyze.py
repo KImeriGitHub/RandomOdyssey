@@ -11,7 +11,7 @@ import copy
 import random
 
 timegroup = "group_regOHLCV_over5years"
-stock_group = "group_debug"
+stock_group = "group_finanTo2011"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -32,12 +32,12 @@ logger.info(f" Params: {params}")
 ## ANALYZING ##
 ###############
 # Static config
-global_start_date = datetime.date(2017, 1, 1)     # earliest data
-final_eval_date   = datetime.date(2025, 7, 7)    # last date you want to consider cutoffs up to
+global_start_date = datetime.date(2014, 1, 1)     # earliest data
+final_eval_date   = datetime.date(2025, 8, 25)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
-n_cutoffs = 10                                     # number of cutoffs to generate
-num_reruns = 2                                     # number of times to rerun analysis for each cutoff
-days_delta = 100                                   # days delta for cutoff generation
+n_cutoffs = 200                                   # number of cutoffs to generate
+num_reruns = 2                                    # number of times to rerun analysis for each cutoff
+days_delta = 14                                   # days delta for cutoff generation
 
 if __name__ == "__main__":
     # Pre-load once

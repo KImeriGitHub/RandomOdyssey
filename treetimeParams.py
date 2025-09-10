@@ -10,7 +10,7 @@ params = {
     "TreeTime_stoploss": 0.92,
     
     "TreeTime_FilterSamples_method": "taylor",
-    "FilterSamples_q_up": 0.65,
+    "FilterSamples_q_up": 0.985,
     "FilterSamples_days_to_train_end": 10,
     
     "FilterSamples_cat_over20": True,
