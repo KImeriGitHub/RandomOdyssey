@@ -50,7 +50,6 @@ params = {
     "LSTM_conv1d_kernel_size": 3,
     "LSTM_loss": "mse",
     
-    "TreeTime_LGB_days_to_train":600,
     "LGB_num_boost_round": 400,
     "LGB_lambda_l1": 5e-5,
     "LGB_lambda_l2": 1e-5,
