@@ -462,8 +462,11 @@ class MachineModels:
             y_train: np.ndarray,
             X_test: np.ndarray | None = None,
             y_test: np.ndarray | None = None, 
-            device='cpu'
+            device='cpu',
+            logger_disabled = False,
         ) -> tuple[torch.nn.Module, dict]:
+        logger_config = logger.disabled
+        logger.disabled = logger_disabled
         # Hyperparameters
         lstm_units = self.params['LSTM_units']
         num_layers = self.params['LSTM_num_layers']
@@ -615,6 +618,8 @@ class MachineModels:
                 break
 
         model.load_state_dict(best_state)
+
+        logger.disabled = logger_config
         return model, {
             'val_rmse': best_rmse,
             'used_validation': val_loader is not None
