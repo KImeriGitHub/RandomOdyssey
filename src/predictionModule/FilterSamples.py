@@ -31,6 +31,7 @@ class FilterSamples:
         "FilterSamples_lincomb_batch_size": 2**12,
 
         "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_under1700": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_taylor_horizon_days": 20,
@@ -124,6 +125,15 @@ class FilterSamples:
                 th = float(m.group(1))
                 mask_train &= (self.closeprices_train > th)
                 mask_test &= (self.closeprices_test > th)
+                break  # drop this if you want to apply multiple thresholds
+            
+        # Apply filter according to something like "FilterSamples_cat_under1700.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_under(\d+(?:\.\d+)?)', k)
+            if v and m:
+                th = float(m.group(1))
+                mask_train &= (self.closeprices_train < th)
+                mask_test &= (self.closeprices_test < th)
                 break  # drop this if you want to apply multiple thresholds
 
         if self.params.get("FilterSamples_cat_posOneYearReturn", False):
