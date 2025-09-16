@@ -67,6 +67,7 @@ class MachineModels:
         "LGB_path_smooth": 0.5935679203578974,
         "LGB_min_sum_hessian_in_leaf": 0.3732876155751053,
         "LGB_max_bin": 150,
+        "LGB_early_stopping_rounds": 150,
     }
     
     def __init__(self, params: dict):
@@ -123,7 +124,7 @@ class MachineModels:
 
         #lgb_params['metric'] = lgb_params['metric'] if test_data is not None else None
         lgb_params['early_stopping_rounds'] = lgb_params['early_stopping_rounds'] if test_data is not None else None
-        gbm = lgb.train(
+        gbm: lgb.Booster = lgb.train(
             lgb_params,
             train_data,
             valid_sets=[test_data] if test_data is not None else None,
@@ -167,7 +168,7 @@ class MachineModels:
 
         train = lgb.Dataset(X_train, label=y_train, weight=weights)
 
-        def log_to_logger(period=100, level=logging.INFO):
+        def log_to_logger(period=100, level=logging.DEBUG):
             def _cb(env):
                 end_it = getattr(env, "end_iteration", None)
                 if period and (env.iteration % period == 0 or (end_it is not None and env.iteration == end_it)):
@@ -183,7 +184,7 @@ class MachineModels:
             valid = lgb.Dataset(X_test, label=y_test, reference=train)
             valid_sets = [valid, train]
             valid_names = ['valid', 'train']
-            callbacks.append(lgb.early_stopping(stopping_rounds=max(1, num_boost_round // 10), verbose=False))
+            callbacks.append(lgb.early_stopping(stopping_rounds=max(1, self.params['LGB_early_stopping_rounds']), verbose=False))
         
         gbm = lgb.train(
             lgb_params,
