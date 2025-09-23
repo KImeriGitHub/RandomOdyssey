@@ -34,6 +34,7 @@ class FilterSamples:
         "FilterSamples_cat_under1700": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
+        "FilterSamples_cat_doubleFiveYearReturn": False,
         "FilterSamples_taylor_horizon_days": 20,
         "FilterSamples_taylor_roll_window_days": 20,
         "FilterSamples_taylor_weight_slope": 0.2
@@ -150,6 +151,14 @@ class FilterSamples:
             ).fill_null(False).to_numpy()
             mask_test &= (
                 (pl.Series(self.adjcloseprices_test) / pl.Series(self.adjcloseprices_test).shift(5*255)) > 1
+            ).fill_null(False).to_numpy()
+            
+        if self.params.get("FilterSamples_cat_doubleFiveYearReturn", False):
+            mask_train &= (
+                (pl.Series(self.adjcloseprices_train) / pl.Series(self.adjcloseprices_train).shift(5*255)) > 2
+            ).fill_null(False).to_numpy()
+            mask_test &= (
+                (pl.Series(self.adjcloseprices_test) / pl.Series(self.adjcloseprices_test).shift(5*255)) > 2
             ).fill_null(False).to_numpy()
 
         return mask_train, mask_test
