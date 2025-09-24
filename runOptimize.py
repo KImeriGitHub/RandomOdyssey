@@ -10,7 +10,7 @@ from src.predictionModule.LoadupSamples import LoadupSamples
 import treetimeParams
 
 timegroup = "group_regOHLCV_over5years"
-stock_group = "group_debug"
+stock_group = "group_finanTo2011"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
@@ -29,17 +29,28 @@ strategy_name = params.get("TreeTime_FilterSamples_method", "taylor")
 strategy = StratFilterSamples(filter_method=strategy_name)
 logger.info("Using strategy: %s", StratFilterSamples.__name__)
 
-def main() -> None:
-    optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-    optuna_duration = 60 * 60 * 1
-    global_start_date = datetime.date(2016, 1, 1)
-    final_eval_date = datetime.date(2025, 7, 15)
-    test_horizon_days = 7
-    n_splits = 200
-    n_startup_trials = max(10, n_splits // 5)
-    training_window_days = 900
-    direction = "maximize"
+optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
+optuna_duration = 60 * 60 * 5
+global_start_date = datetime.date(2016, 1, 1)
+final_eval_date = datetime.date(2025, 7, 15)
+test_horizon_days = 7
+n_splits = 200
+n_startup_trials = max(10, n_splits // 5)
+training_window_days = 900
+direction = "maximize"
 
+logger.info("Optuna study name: %s", optuna_study_name)
+logger.info("Optuna duration (seconds): %s", optuna_duration)
+logger.info("Global start date: %s", global_start_date)
+logger.info("Final evaluation date: %s", final_eval_date)
+logger.info("Test horizon days: %s", test_horizon_days)
+logger.info("Number of splits: %s", n_splits)
+logger.info("Number of startup trials: %s", n_startup_trials)
+logger.info("Training window days: %s", training_window_days)
+logger.info("Optimization direction: %s", direction)
+
+
+def main() -> None:
     test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
 
     ls = LoadupSamples(
