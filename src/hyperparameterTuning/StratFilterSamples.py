@@ -1,14 +1,16 @@
-import logging
-from typing import Dict
-
 import numpy as np
 import optuna
 import polars as pl
+import datetime
 
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
+from src.predictionModule.FilterSamples import FilterSamples
+from src.predictionModule.MachineModels import MachineModels
 
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
+
+import logging
 logger = logging.getLogger(__name__)
-
 
 class StratFilterSamples(BaseStrategy):
     default_params = {
@@ -17,23 +19,6 @@ class StratFilterSamples(BaseStrategy):
         "target_option": "last",
         "LoadupSamples_time_scaling_stretch": True,
         "LoadupSamples_time_inc_factor": 61,
-        "Treetime_LSTM_days_to_train": 1000,
-        "LSTM_units": 32,
-        "LSTM_num_layers": 1,
-        "LSTM_dropout": 0.003264,
-        "LSTM_recurrent_dropout": 0.028886,
-        "LSTM_learning_rate": 0.000135,
-        "LSTM_optimizer": "adam",
-        "LSTM_bidirectional": True,
-        "LSTM_batch_size": 2**12,
-        "LSTM_epochs": 2,
-        "LSTM_l1": 0.003816,
-        "LSTM_l2": 0.000290,
-        "LSTM_inter_dropout": 0.001947,
-        "LSTM_input_gaussian_noise": 0.001,
-        "LSTM_conv1d": True,
-        "LSTM_conv1d_kernel_size": 3,
-        "LSTM_loss": "mse",
         "FilterSamples_q_up": 0.985,
         "FilterSamples_days_to_train_end": 115,
         "FilterSamples_cat_over20": True,
@@ -50,7 +35,8 @@ class StratFilterSamples(BaseStrategy):
         "FilterSamples_taylor_weight_slope": 1.268923,
     }
 
-    def __init__(self, filter_method: str) -> None:
+    def __init__(self, filter_method: str, base_params: dict = {}) -> None:
+        self.base_params = {**self.default_params, **base_params}
         if filter_method not in {"lincomb", "taylor"}:
             raise ValueError("filter_method must be either 'lincomb' or 'taylor'.")
         self.filter_method = filter_method
@@ -75,7 +61,7 @@ class StratFilterSamples(BaseStrategy):
             "FilterSamples_taylor_weight_slope": ("float", 1.5, 3.5, {"log": False}),
         }
 
-        params = dict(self.default_params)
+        params = dict(self.base_params)
         if self.filter_method == "lincomb":
             params.update(self._parse_params(trial, lincomb_space))
         else:
@@ -90,38 +76,23 @@ class StratFilterSamples(BaseStrategy):
         Xte_tree,
         Xte_time,
         yte_tree,
-        params: dict,
+        treenames,
+        timenames,
+        meta_train,
+        meta_test,
+        opt_params: dict,
     ) -> float:
-        mask_train_pre = self._ensure_mask(params.get("pre_mask_train"), Xtr_tree)
-        mask_test_pre = self._ensure_mask(params.get("pre_mask_test"), Xte_tree)
-        treenames = params.get("treenames")
-        meta_train = params.get("meta_train")
-        meta_test = params.get("meta_test")
-        mm = params.get("mm") or params.get("model_machine")
-
-        if treenames is None or meta_train is None:
-            raise ValueError("Tree feature names and meta_train must be provided.")
-        if mm is None or not hasattr(mm, "params"):
-            raise ValueError("A MachineModels-like object with 'params' must be supplied.")
-
-        meta_train_filtered = meta_train.filter(pl.Series(mask_train_pre))
-        if meta_test is None:
-            meta_test = meta_train
-        meta_test_filtered = meta_test.filter(pl.Series(mask_test_pre))
-
-        y_test = yte_tree[mask_test_pre] if yte_tree is not None else ytr_tree[mask_test_pre]
-
-        from src.predictionModule.FilterSamples import FilterSamples
+        mm: MachineModels = MachineModels(opt_params)
 
         fs = FilterSamples(
-            Xtree_train=Xtr_tree[mask_train_pre],
-            ytree_train=ytr_tree[mask_train_pre],
+            Xtree_train=Xtr_tree,
+            ytree_train=ytr_tree,
             treenames=treenames,
-            Xtree_test=Xte_tree[mask_test_pre],
-            ytree_test=y_test,
-            meta_train=meta_train_filtered,
-            meta_test=meta_test_filtered,
-            params=mm.params,
+            Xtree_test=Xte_tree,
+            ytree_test=yte_tree,
+            meta_train=meta_train,
+            meta_test=meta_test,
+            params=opt_params,
         )
 
         if self.filter_method == "lincomb":
@@ -131,13 +102,13 @@ class StratFilterSamples(BaseStrategy):
 
         score_train = fs.evaluate_mask(
             mask_train,
-            meta_train_filtered["date"],
-            ytr_tree[mask_train_pre],
+            meta_train["date"],
+            ytr_tree,
         )
         score_test = fs.evaluate_mask(
             mask_test,
-            meta_test_filtered["date"],
-            y_test,
+            meta_test["date"],
+            yte_tree,
         )
 
         logger.info("  Score (train) = %s", score_train)
@@ -153,23 +124,16 @@ class StratFilterSamples(BaseStrategy):
         Xte_tree,
         Xte_time,
         yte_tree,
-        params: dict,
-    ) -> Dict[str, np.ndarray]:
-        treenames = params.get("treenames")
-        meta_train = params.get("meta_train")
-        meta_test = params.get("meta_test")
-        mm = params.get("mm") or params.get("model_machine")
-
-        if treenames is None or meta_train is None or mm is None or not hasattr(mm, "params"):
-            raise ValueError("treenames, meta_train and a MachineModels instance are required.")
-
-        if meta_test is None:
-            meta_test = meta_train
+        treenames,
+        timenames,
+        meta_train,
+        meta_test,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        if treenames is None or meta_train is None or meta_test is None:
+            raise ValueError("treenames, meta_train and meta_test are required.")
 
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
-
-        from src.predictionModule.FilterSamples import FilterSamples
 
         fs = FilterSamples(
             Xtree_train=Xtr_tree,
@@ -179,7 +143,7 @@ class StratFilterSamples(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=mm.params,
+            params=self.base_params,
         )
 
         cat_train, cat_test = fs.categorical_masks()
@@ -187,20 +151,22 @@ class StratFilterSamples(BaseStrategy):
         if cat_test is not None:
             cat_mask_test &= cat_test
 
-        recent_mask = fs.get_recent_training_mask(mm.params.get("FilterSamples_days_to_train_end"))
-        mask_train_pre = cat_mask_train & recent_mask
-        mask_test_pre = cat_mask_test
+        if self.filter_method == "taylor":
+            dates_tr = meta_train["date"].unique().sort()
+            last_day = dates_tr[-1]
+            n_max_days_to_consider = 200
+            start_day = last_day - datetime.timedelta(days=n_max_days_to_consider)
+            
+            filtered_train_mask: pl.Series = (meta_train["date"] >= start_day) & (meta_train["date"] <= last_day)
+            cat_mask_train &= filtered_train_mask.fill_null(False).to_numpy()
 
         logger.info(
             "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
-            100 * mask_train_pre.mean(),
-            100 * mask_test_pre.mean(),
+            100 * cat_mask_train.mean(),
+            100 * cat_mask_test.mean(),
         )
 
-        return {
-            "pre_mask_train": mask_train_pre,
-            "pre_mask_test": mask_test_pre,
-        }
+        return cat_mask_train, cat_mask_test
 
     # ------------------------------------------------------------------
     # Helpers
@@ -213,9 +179,3 @@ class StratFilterSamples(BaseStrategy):
             suggest = trial.suggest_int if kind == "int" else trial.suggest_float
             out[name] = suggest(name.replace("FilterSamples_", ""), lo, hi, **kw)
         return out
-
-    @staticmethod
-    def _ensure_mask(mask, array) -> np.ndarray:
-        if mask is None:
-            return np.ones(array.shape[0], dtype=bool)
-        return np.asarray(mask, dtype=bool)

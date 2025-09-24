@@ -4,17 +4,17 @@ import random
 from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
+import polars as pl
 import optuna
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.predictionModule.LoadupSamples import LoadupSamples
+from src.predictionModule.MachineModels import MachineModels as _MachineModels
 
 logger = logging.getLogger(__name__)
 
-
 SlicePair = Tuple[slice, slice]
-
 
 class OptunaClient:
     """Utility orchestrating Optuna optimisation on top of ``LoadupSamples``."""
@@ -35,8 +35,6 @@ class OptunaClient:
         self.n_training_days = n_training_days
         self._rng = rng if rng is not None else random.Random()
         if model_cls is None:
-            from src.predictionModule.MachineModels import MachineModels as _MachineModels
-
             model_cls = _MachineModels
         self._model_cls = model_cls
 
@@ -84,8 +82,8 @@ class OptunaClient:
         dates_tr_idx = dfta(self.meta_train, "date").getNextLowerOrEqualIndices(dates_tr)
 
         N = len(dates_tr_idx)
-        lo = self.n_training_days - 1
-        hi = N - self.n_test_days - 2
+        lo = self.n_training_days
+        hi = (N - 1) - (self.n_test_days)
         eligible = list(range(lo, hi + 1))
         if len(eligible) < self.n_splits:
             raise ValueError(
@@ -99,17 +97,24 @@ class OptunaClient:
 
     def get_slices(self) -> List[SlicePair]:
         """Return list of (train_slice, test_slice) pairs for cross-validation."""
-
+        
         pivots = self.get_pivots()
         dates_tr = self.meta_train["date"].unique().sort()
         dates_tr_idx = dfta(self.meta_train, "date").getNextLowerOrEqualIndices(dates_tr)
+        N = len(dates_tr_idx)
 
         slices: List[SlicePair] = [None] * self.n_splits  # type: ignore[list-item]
         for i, p in enumerate(pivots):
+            if p + self.n_test_days + 1 > N:
+                raise ValueError("Pivot too far to the end of training dates.")
+
             tr_l_idx = dates_tr_idx[p - self.n_training_days + 1]
             tr_u_idx = dates_tr_idx[p + 1] - 1
             te_l_idx = dates_tr_idx[p + 1]
-            te_u_idx = dates_tr_idx[p + self.n_test_days + 1] - 1
+            if p + self.n_test_days + 1 == N:
+                te_u_idx = len(self.meta_train["date"]) - 1
+            else:
+                te_u_idx = dates_tr_idx[p + self.n_test_days + 1] - 1
 
             s_tr = slice(tr_l_idx, tr_u_idx + 1)
             s_te = slice(te_l_idx, te_u_idx + 1)
@@ -124,57 +129,65 @@ class OptunaClient:
         """Create an Optuna objective callable using the provided strategy."""
 
         slices = self.get_slices()
+        
+        ######################
+        ## PRE-PROCESSING
+        ######################
+        preprocess_masks = [None] * self.n_splits
+        for i, (s_tr, s_te) in enumerate(slices):
+            Xtr_tree = self.X_tree[s_tr].copy()
+            Xtr_time = self.X_time[s_tr].copy()
+            ytr_tree = self.y_tree[s_tr].copy()
+            Xte_tree = self.X_tree[s_te].copy()
+            Xte_time = self.X_time[s_te].copy()
+            yte_tree = self.y_tree[s_te].copy()
 
-        def _slice_optional(arr: Optional[Sequence], sl: slice):
-            if arr is None:
-                return None
-            return arr[sl]
+            meta_train_slice = self.meta_train[s_tr] if self.meta_train is not None else None
+            meta_test_slice = self.meta_train[s_te] if self.meta_train is not None else None
 
+            try:
+                mask_train_pre, mask_test_pre = strategy.mask_precompute(
+                    Xtr_tree,
+                    Xtr_time,
+                    ytr_tree,
+                    Xte_tree,
+                    Xte_time,
+                    yte_tree,
+                    treenames=self.treenames,
+                    timenames=self.timenames,
+                    meta_train=meta_train_slice,
+                    meta_test=meta_test_slice,
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.exception("mask_precompute failed: %s", exc)
+                full_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
+                full_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
+                mask_train_pre, mask_test_pre = full_mask_train, full_mask_test
+
+            preprocess_masks[i] = (mask_train_pre, mask_test_pre)
+
+        ######################
+        ## Objective function
+        ######################
         def objective(trial: optuna.Trial) -> float:
             opt_params = strategy.sample_params(trial)
             logger.info("Trial %s with params: %s", trial.number, opt_params)
 
             scores: List[float] = []
-            mm = self._model_cls(params=opt_params)
+            for i, (s_tr, s_te) in enumerate(slices):
+                mask_train_pre, mask_test_pre = preprocess_masks[i]
 
-            for s_tr, s_te in slices:
-                Xtr_tree = self.X_tree[s_tr]
-                ytr_tree = self.y_tree[s_tr]
-                Xte_tree = self.X_tree[s_te]
-                yte_tree = self.y_tree[s_te]
+                Xtr_tree = self.X_tree[s_tr][mask_train_pre]
+                ytr_tree = self.y_tree[s_tr][mask_train_pre]
+                Xte_tree = self.X_tree[s_te][mask_test_pre]
+                yte_tree = self.y_tree[s_te][mask_test_pre]
+                Xtr_time = self.X_time[s_tr][mask_train_pre]
+                Xte_time = self.X_time[s_te][mask_test_pre]
 
-                Xtr_time = _slice_optional(self.X_time, s_tr)
-                ytr_time = _slice_optional(self.y_time, s_tr)
-                Xte_time = _slice_optional(self.X_time, s_te)
-                yte_time = _slice_optional(self.y_time, s_te)
+                meta_tr = self.meta_train[s_tr].filter(pl.Series(mask_train_pre))
+                meta_te = self.meta_train[s_te].filter(pl.Series(mask_test_pre))
 
-                meta_train_slice = self.meta_train[s_tr] if self.meta_train is not None else None
-                meta_test_slice = self.meta_train[s_te] if self.meta_train is not None else None
-
-                base_params = {
-                    "mm": mm,
-                    "treenames": self.treenames,
-                    "timenames": self.timenames,
-                    "meta_train": meta_train_slice,
-                    "meta_test": meta_test_slice,
-                }
-
-                try:
-                    mask_params = strategy.mask_precompute(
-                        Xtr_tree,
-                        Xtr_time,
-                        ytr_tree,
-                        Xte_tree,
-                        Xte_time,
-                        yte_tree,
-                        params=base_params,
-                    )
-                except Exception as exc:  # pragma: no cover - defensive
-                    logger.exception("mask_precompute failed: %s", exc)
-                    mask_params = {}
-
-                score_params = {**base_params, **(mask_params or {})}
-
+                sc = 1.0
                 try:
                     sc = strategy.score(
                         Xtr_tree,
@@ -183,12 +196,14 @@ class OptunaClient:
                         Xte_tree,
                         Xte_time,
                         yte_tree,
-                        params=score_params,
+                        treenames=self.treenames,
+                        timenames=self.timenames,
+                        meta_train=meta_tr,
+                        meta_test=meta_te,
+                        opt_params=opt_params,
                     )
-                except Exception as exc:  # pragma: no cover - defensive
+                except Exception as exc:
                     logger.exception("Score computation failed: %s", exc)
-                    trial.should_prune()
-                    sc = np.nan
 
                 scores.append(float(sc) if sc is not None else np.nan)
 
@@ -199,7 +214,7 @@ class OptunaClient:
 
             vals_log = np.log(np.asarray(vals))
             if len(vals) < (len(scores) // 2):
-                return 0.0
+                raise optuna.TrialPruned()
             return float(np.mean(vals_log))
 
         return objective

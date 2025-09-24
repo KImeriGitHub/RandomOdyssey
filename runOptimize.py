@@ -5,12 +5,13 @@ from pathlib import Path
 from src.hyperparameterTuning.OptunaClient import OptunaClient
 from src.hyperparameterTuning.OptunaTuning import OptunaTuning
 from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
+from src.hyperparameterTuning.StratLGBLeaves import StratLGBLeaves
 from src.predictionModule.LoadupSamples import LoadupSamples
 
 import treetimeParams
 
 timegroup = "group_regOHLCV_over5years"
-stock_group = "group_finanTo2011"
+stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
@@ -26,32 +27,31 @@ params = treetimeParams.params
 logger.info("Params: %s", params)
 
 strategy_name = params.get("TreeTime_FilterSamples_method", "taylor")
-strategy = StratFilterSamples(filter_method=strategy_name)
-logger.info("Using strategy: %s", StratFilterSamples.__name__)
+strategy = StratLGBLeaves(base_params=params)
+logger.info("Using strategy: %s", StratLGBLeaves.__name__)
 
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
 optuna_duration = 60 * 60 * 5
 global_start_date = datetime.date(2016, 1, 1)
 final_eval_date = datetime.date(2025, 7, 15)
-test_horizon_days = 7
+n_test_days = 7
 n_splits = 200
 n_startup_trials = max(10, n_splits // 5)
-training_window_days = 900
+max_training_days = 900
 direction = "maximize"
 
 logger.info("Optuna study name: %s", optuna_study_name)
 logger.info("Optuna duration (seconds): %s", optuna_duration)
 logger.info("Global start date: %s", global_start_date)
 logger.info("Final evaluation date: %s", final_eval_date)
-logger.info("Test horizon days: %s", test_horizon_days)
+logger.info("Test days: %s", n_test_days)
 logger.info("Number of splits: %s", n_splits)
 logger.info("Number of startup trials: %s", n_startup_trials)
-logger.info("Training window days: %s", training_window_days)
+logger.info("Training max days: %s", max_training_days)
 logger.info("Optimization direction: %s", direction)
 
-
-def main() -> None:
-    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
+if __name__ == "__main__":
+    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(n_test_days)][::-1]
 
     ls = LoadupSamples(
         train_start_date=global_start_date,
@@ -65,18 +65,9 @@ def main() -> None:
     optuna_client = OptunaClient(
         ls=ls,
         n_splits=n_splits,
-        n_test_days=test_horizon_days,
-        n_training_days=training_window_days,
+        n_test_days=n_test_days,
+        n_training_days=max_training_days,
     )
-
-    # Log the selected split dates for traceability
-    try:
-        optuna_client.get_split_dates(
-            final_split_date=final_eval_date,
-            start_train_date=global_start_date,
-        )
-    except ValueError as exc:
-        logger.warning("Unable to sample split dates for logging: %s", exc)
 
     objective = optuna_client.make_objective(strategy=strategy)
 
@@ -96,6 +87,3 @@ def main() -> None:
     logger.info("Saved Optuna results to %s", output_path)
     logger.info("Optuna study finished with %s completed trials.", len(df))
 
-
-if __name__ == "__main__":
-    main()
