@@ -197,7 +197,7 @@ class OptunaClient:
             if not vals:
                 return float("-inf")
 
-            vals_log = np.log1p(np.asarray(vals))
+            vals_log = np.log(np.asarray(vals))
             if len(vals) < (len(scores) // 2):
                 return 0.0
             return float(np.mean(vals_log))

@@ -9,13 +9,13 @@ from src.predictionModule.LoadupSamples import LoadupSamples
 
 import treetimeParams
 
-
-stock_group = "group_finanTo2011"
-stock_group_short = stock_group.replace("group_", "")
+timegroup = "group_regOHLCV_over5years"
+stock_group = "group_debug"
+stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
-    filename=f"logs/output_optuna_TreeTime_{stock_group_short}_{formatted_date}.log",
+    filename=f"logs/output_optuna_{stock_group_short}_{formatted_date}.log",
     level=logging.INFO,
     format="%(asctime)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M",
@@ -25,16 +25,20 @@ logger = logging.getLogger(__name__)
 params = treetimeParams.params
 logger.info("Params: %s", params)
 
+strategy_name = params.get("TreeTime_FilterSamples_method", "taylor")
+strategy = StratFilterSamples(filter_method=strategy_name)
+logger.info("Using strategy: %s", StratFilterSamples.__name__)
 
 def main() -> None:
     optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-    optuna_duration = 60 * 60 * 10
-    global_start_date = datetime.date(2014, 1, 1)
+    optuna_duration = 60 * 60 * 1
+    global_start_date = datetime.date(2016, 1, 1)
     final_eval_date = datetime.date(2025, 7, 15)
     test_horizon_days = 7
     n_splits = 200
-    n_startup_trials = max(20, n_splits // 5)
-    training_window_days = params.get("Treetime_LSTM_days_to_train", 365)
+    n_startup_trials = max(10, n_splits // 5)
+    training_window_days = 900
+    direction = "maximize"
 
     test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
 
@@ -42,6 +46,7 @@ def main() -> None:
         train_start_date=global_start_date,
         test_dates=test_dates,
         treegroup=stock_group,
+        timegroup=timegroup,
         params=params,
     )
     ls.load_samples()
@@ -52,9 +57,6 @@ def main() -> None:
         n_test_days=test_horizon_days,
         n_training_days=training_window_days,
     )
-
-    strategy_name = params.get("TreeTime_FilterSamples_method", "lincomb")
-    strategy = StratFilterSamples(filter_method=strategy_name)
 
     # Log the selected split dates for traceability
     try:
@@ -72,7 +74,7 @@ def main() -> None:
         n_startup_trials=n_startup_trials,
         studytime=optuna_duration,
         objective=objective,
-        direction="maximize",
+        direction=direction,
     )
 
     study, df = optuna_tuner.run()
