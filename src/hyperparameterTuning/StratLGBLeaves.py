@@ -24,7 +24,7 @@ class StratLGBLeaves(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
         "LoadupSamples_time_inc_factor": 1,
 
-        "FilterSamples_q_up": 0.985,
+        "FilterSamples_q_up": 0.9,
 
         "FilterSamples_cat_over2.0": True,
         "FilterSamples_cat_under20.0": True,
@@ -56,7 +56,7 @@ class StratLGBLeaves(BaseStrategy):
         opt_params["LGB_early_stopping_rounds"]     = 20
 
         opt_params["t_win"]             = trial.suggest_int("t_win", 4, 35)
-        opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
+        #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
         opt_params["do_transform"]      = False
         opt_params["tree_n_max"]        = trial.suggest_int("tree_n_max", 5, 75, step=5)
         opt_params["min_n_tar"]         = 5
@@ -81,7 +81,6 @@ class StratLGBLeaves(BaseStrategy):
         opt_params: dict,
     ) -> float:
         t_win =             opt_params["t_win"]
-        n_training_days =   opt_params["n_training_days"]
         do_transform =      opt_params["do_transform"]
         tree_n_max =        opt_params["tree_n_max"]
         min_n_tar =         opt_params["min_n_tar"]
@@ -94,6 +93,9 @@ class StratLGBLeaves(BaseStrategy):
         keep_te = ~bad_te
         Xd_tr, ytr_tree = Xd_tr[keep_tr], ytr_tree[keep_tr]
         Xd_te, yte_tree = Xd_te[keep_te], yte_tree[keep_te]
+
+        logger.debug(f"  After design: tr {Xd_tr.shape}, te {Xd_te.shape}")
+        logger.debug(f"   ytr_tree: n={ytr_tree.size}, mean={ytr_tree.mean():.6f}, std={ytr_tree.std():.6f}")
 
         if do_transform:
             scaler = StandardScaler().fit(Xd_tr)
@@ -111,23 +113,25 @@ class StratLGBLeaves(BaseStrategy):
         except Exception as e:
             logger.disabled = False
             logger.warning(f"  LGB failed: {e}")
-            return self._metric(1.0)
+            return 1.0
         finally:
             logger.disabled = False
 
         tree_n_max = min(model_lgb.num_trees(), tree_n_max)
         labels_top, scores_top = self._top_leaf_labels_per_tree(
-            model_lgb, Xd_tr, ytr_tree, tree_n_max=tree_n_max, top_n_max=max(1, top_n_max or 1)
+            model_lgb, Xd_tr, ytr_tree, tree_n_max=tree_n_max, top_n_max = max(1, top_n_max or 1)
         )
+        n_trees = labels_top.shape[1]
         
         # Top labels by score
-        n_trees = scores_top.shape[1] if scores_top.ndim > 1 else 1
-        leaf_te = model_lgb.predict(Xd_te, pred_leaf=True)[:, :n_trees]
-        
+        leaf_te = model_lgb.predict(Xd_te, pred_leaf=True)
+        leaf_te = leaf_te.reshape(-1, 1) if leaf_te.ndim == 1 else leaf_te  # shape (n_samples, n_trees)
+        leaf_te = leaf_te[:, :n_trees]  # restrict to used trees
+
         # If everything is -1 across all ranks, bail out
         if labels_top.size == 0 or np.all(labels_top == -1):
             logger.warning("  LGB failed to generate predictions.")
-            return self._metric(1.0)
+            return 1.0
         
         # Rank every (rank, tree) pair by descending score
         r_idx, t_idx = np.unravel_index(np.argsort(scores_top.ravel())[::-1], scores_top.shape)
@@ -141,7 +145,7 @@ class StratLGBLeaves(BaseStrategy):
             if lbl == -1:
                 continue
             mask_sel |= (leaf_te[:, t] == lbl)
-            sel_pairs.append((lbl, int(t), int(r)))
+            sel_pairs.append((int(lbl), int(t), int(r)))
             if mask_sel.sum() >= min_n_tar:
                 break
         y_selected = yte_tree[mask_sel]
@@ -153,14 +157,14 @@ class StratLGBLeaves(BaseStrategy):
 
         if y_selected.size == 0:
             logger.warning("  LGB failed to select testing values.")
-            return self._metric(1.0)
+            return 1.0
 
-        score = self._metric(y_selected)
+        score = self._geometric_mean_safe(y_selected)
         logger.info(
             f"score={score:.6f}, selected={y_selected.size}/{yte_tree.size}"
         )
 
-        return float(score) if np.isfinite(score) else self._metric(1.0)
+        return float(score) if np.isfinite(score) else 1.0
 
     def mask_precompute(
         self,
@@ -197,12 +201,6 @@ class StratLGBLeaves(BaseStrategy):
         minv = np.min(arr) if arr.size else 0.0
         shift = -minv + 1e-9 if minv <= 0 else 0.0
         return float(np.exp(np.mean(np.log(arr + shift)))) if arr.size else np.nan
-
-    def _metric(self, arr):
-        """Custom cluster score function."""
-        gm = self._geometric_mean_safe(arr)
-
-        return gm - 1
     
     def _make_design(self, X, t_win, f_idx):
         Xw: np.ndarray = X[:, -(t_win+1):, f_idx].copy()
@@ -210,7 +208,7 @@ class StratLGBLeaves(BaseStrategy):
         
         mask_bad = np.zeros(Xw.shape[0], dtype=bool)
         if f_idx == 0:
-            bound_bad = 1- np.tanh(1) - 1e-4
+            bound_bad = 1 - np.tanh(1 - 1e-4)
             mask_bad = np.any((Xw_mid <= (-1+bound_bad)) | (Xw_mid >= (1-bound_bad)), axis=1)
             Xw_mid = np.clip(Xw_mid, -1+bound_bad, 1-bound_bad)
         else:
@@ -243,14 +241,13 @@ class StratLGBLeaves(BaseStrategy):
         And score values associated with those labels, shape (top_n_max, tree_idx_max); pads with metric(1.0).
         Assumes y > 0 (for geometric mean).
         """
-        booster = model
-        leaf_mat = booster.predict(X, pred_leaf=True)  # shape: (n_samples, n_trees_total)
-        n_trees_total = leaf_mat.shape[1] if leaf_mat.ndim > 1 else 1
-        n_trees = min(tree_n_max, n_trees_total)
+        leaf_mat = model.predict(X, pred_leaf=True)  # shape: (n_samples, n_trees_total)
+        leaf_mat = leaf_mat.reshape(-1, 1) if leaf_mat.ndim == 1 else leaf_mat  # shape (n_samples, n_trees)
+        n_trees = min(tree_n_max, leaf_mat.shape[1])
 
         y_arr = np.asarray(y, dtype=float)
         out_label = np.full((top_n_max, n_trees), -1, dtype=np.int32)
-        out_score = np.full((top_n_max, n_trees), self._metric(1.0), dtype=float)
+        out_score = np.full((top_n_max, n_trees), 1.0, dtype=float)
 
         for t in range(n_trees):
             labels_t = leaf_mat[:, t].astype(np.int32)

@@ -173,7 +173,8 @@ class OptunaClient:
             opt_params = strategy.sample_params(trial)
             logger.info("Trial %s with params: %s", trial.number, opt_params)
 
-            scores: List[float] = []
+            scores = []
+            n_valid = 0
             for i, (s_tr, s_te) in enumerate(slices):
                 mask_train_pre, mask_test_pre = preprocess_masks[i]
 
@@ -202,20 +203,32 @@ class OptunaClient:
                         meta_test=meta_te,
                         opt_params=opt_params,
                     )
+                    if sc is not None and np.isfinite(sc):
+                        n_valid = n_valid + 1
+                        sc = float(sc)
+                    else:
+                        sc = 1.0
                 except Exception as exc:
                     logger.exception("Score computation failed: %s", exc)
+                    sc = 1.0
 
-                scores.append(float(sc) if sc is not None else np.nan)
+                scores.append(float(sc))
 
-            vals = [v for v in scores if np.isfinite(v)]
-            logger.info("Scores per split: %s", vals)
-            if not vals:
-                return float("-inf")
+            logger.info("Scores per split: %s", scores)
 
-            vals_log = np.log(np.asarray(vals))
-            if len(vals) < (len(scores) // 2):
+            if np.any(np.array(scores) <= 1e-4):
+                logger.info("Pruning trial %s due to negative scores.", trial.number)
+                logger.info("Num of negative scores: %s", np.sum(np.array(scores) <= 1e-4))
                 raise optuna.TrialPruned()
-            return float(np.mean(vals_log))
+
+            if n_valid < (len(slices) // 2):
+                logger.info("Pruning trial %s due to insufficient valid scores.", trial.number)
+                logger.info("Num of valid scores: %s", n_valid)
+                logger.info("Num of splits: %s", len(slices))
+                raise optuna.TrialPruned()
+            
+            scores_log = np.log(np.array(scores))
+            return float(np.mean(scores_log))
 
         return objective
 
