@@ -7,6 +7,7 @@ from src.hyperparameterTuning.OptunaTuning import OptunaTuning
 from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
 from src.hyperparameterTuning.StratLGBLeavesTime import StratLGBLeavesTime
 from src.hyperparameterTuning.StratLGBLeavesTree import StratLGBLeavesTree
+from src.hyperparameterTuning.StratLGBMOnFiltered import StratLGBMOnFiltered
 from src.predictionModule.LoadupSamples import LoadupSamples
 
 import treetimeParams
@@ -27,8 +28,8 @@ logger = logging.getLogger(__name__)
 params = treetimeParams.params
 logger.info("Params: %s", params)
 
-strategy = StratLGBLeavesTree(base_params=params)
-logger.info("Using strategy: %s", StratLGBLeavesTree.__name__)
+strategy = StratLGBMOnFiltered(base_params=params)
+logger.info("Using strategy: %s", StratLGBMOnFiltered.__name__)
 
 logger.setLevel(logging.DEBUG)
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
