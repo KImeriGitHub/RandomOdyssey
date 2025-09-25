@@ -7,6 +7,7 @@ import torch
 from tqdm import tqdm
 import random
 from src.mathTools.DistributionTools import DistributionTools
+from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
 
 import logging
 logger = logging.getLogger(__name__)
@@ -30,14 +31,16 @@ class FilterSamples:
         "FilterSamples_lincomb_init_toprand": 1,
         "FilterSamples_lincomb_batch_size": 2**12,
 
+        "FilterSamples_taylor_horizon_days": 20,
+        "FilterSamples_taylor_roll_window_days": 20,
+        "FilterSamples_taylor_weight_slope": 0.2,
+
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_under1700": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
-        "FilterSamples_taylor_horizon_days": 20,
-        "FilterSamples_taylor_roll_window_days": 20,
-        "FilterSamples_taylor_weight_slope": 0.2
+        "FilterSamples_cat_highestShareholderEquity_q0.5": False,
     }
     
     def __init__(self, 
@@ -160,6 +163,42 @@ class FilterSamples:
             mask_test &= (
                 (pl.Series(self.adjcloseprices_test) / pl.Series(self.adjcloseprices_test).shift(5*255)) > 2
             ).fill_null(False).to_numpy()
+
+        # Apply filter according to something like "FilterSamples_cat_highestShareholderEquity_q0.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_highestShareholderEquity_q(\d+(?:\.\d+)?)', k)
+            if v and m:
+                q = float(m.group(1))
+                # Get stock with highest shareholder equity per day
+                tot_Rev_name = "FinData_quar_totalRevenue_RANK"
+                tot_Equity_nivRev_name = "FinData_quar_totalShareholderEquity_nivRev"
+                tot_Rev_idx = self.treenames.index(tot_Rev_name)
+                tot_Equity_idx = self.treenames.index(tot_Equity_nivRev_name)
+                tot_Equity_tr = self.Xtree_train[:, tot_Equity_idx] * self.Xtree_train[:, tot_Rev_idx]
+                tot_Equity_te = self.Xtree_test[:, tot_Equity_idx] * self.Xtree_test[:, tot_Rev_idx]
+
+                # Filter train
+                dates_tr = self.samples_dates_train.unique().sort()
+                dates_tr_idx = dfta(self.samples_dates_train.to_frame("date"), "date").getIndices(dates_tr)
+                mask_equity_tr = np.ones(tot_Equity_tr.shape[0], dtype=bool)
+                for i, d_idx in enumerate(dates_tr_idx):
+                    dnext_idx = dates_tr_idx[i+1] if i+1 < len(dates_tr_idx) else len(self.samples_dates_train)
+                    quant_tr = np.quantile(tot_Equity_tr[d_idx:dnext_idx], q)
+
+                    mask_equity_tr[d_idx:dnext_idx] = tot_Equity_tr[d_idx:dnext_idx] <= quant_tr
+
+                #Filter test
+                dates_te = self.samples_dates_test.unique().sort()
+                dates_te_idx = dfta(self.samples_dates_test.to_frame("date"), "date").getIndices(dates_te)
+                mask_equity_te = np.ones(tot_Equity_te.shape[0], dtype=bool)
+                for i, d_idx in enumerate(dates_te_idx):
+                    dnext_idx = dates_te_idx[i+1] if i+1 < len(dates_te_idx) else len(self.samples_dates_test)
+                    quant_te = np.quantile(tot_Equity_te[d_idx:dnext_idx], q)
+
+                    mask_equity_te[d_idx:dnext_idx] = tot_Equity_te[d_idx:dnext_idx] <= quant_te
+
+                mask_train &= mask_equity_tr
+                mask_test &= mask_equity_te
 
         return mask_train, mask_test
 

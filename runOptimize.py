@@ -30,7 +30,7 @@ logger.info("Params: %s", params)
 strategy = StratLGBLeavesTree(base_params=params)
 logger.info("Using strategy: %s", StratLGBLeavesTree.__name__)
 
-logger.level = logging.DEBUG
+logger.setLevel(logging.DEBUG)
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
 optuna_duration = 60 * 60 * 5
 global_start_date = datetime.date(2016, 1, 1)

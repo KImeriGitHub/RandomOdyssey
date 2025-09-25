@@ -31,6 +31,7 @@ class StratLGBLeavesTree(BaseStrategy):
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.8": True,
     }
 
     def __init__(self, base_params: dict = {}) -> None:
@@ -44,7 +45,7 @@ class StratLGBLeavesTree(BaseStrategy):
         opt_params["LGB_num_boost_round"]           = 100 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
         opt_params["LGB_lambda_l1"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l1", 5e-3, 1e-1, log=True)
         opt_params["LGB_lambda_l2"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l2", 1e-5, 1e-3, log=True)
-        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.4, 0.9, {})
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.2, 0.9)
         opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 550, step=25)
         opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 15, step=1)
         opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
@@ -59,7 +60,7 @@ class StratLGBLeavesTree(BaseStrategy):
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
         opt_params["do_transform"]      = False
         opt_params["tree_n_max"]        = trial.suggest_int("tree_n_max", 5, 75, step=5)
-        opt_params["min_n_tar"]         = 5
+        opt_params["min_n_tar"]         = trial.suggest_int("min_n_tar", 0, 5)
         opt_params["top_n_max"]         = 5 #trial.suggest_int("top_n_max", 3, 7)  
 
         params = dict(self.base_params)
@@ -196,37 +197,6 @@ class StratLGBLeavesTree(BaseStrategy):
         cat_mask_train &= cat_train
         if cat_test is not None:
             cat_mask_test &= cat_test
-
-        # Get stock with highest shareholder equity per day
-        tot_Rev_name = "FinData_quar_totalRevenue_RANK"
-        tot_Equity_nivRev_name = "FinData_quar_totalShareholderEquity_nivRev"
-        tot_Rev_idx = treenames.index(tot_Rev_name)
-        tot_Equity_idx = treenames.index(tot_Equity_nivRev_name)
-        tot_Equity_tr = Xtr_tree[:, tot_Equity_idx] * Xtr_tree[:, tot_Rev_idx]
-        tot_Equity_te = Xte_tree[:, tot_Equity_idx] * Xte_tree[:, tot_Rev_idx]
-
-        # Filter train
-        dates_tr = meta_train["date"].unique().sort()
-        dates_tr_idx = dfta(meta_train, "date").getIndices(dates_tr)
-        mask_equity_tr = np.ones(tot_Equity_tr.shape[0], dtype=bool)
-        for i, d_idx in enumerate(dates_tr_idx):
-            dnext_idx = dates_tr_idx[i+1] if i+1 < len(dates_tr_idx) else len(meta_train)
-            quant_tr = np.quantile(tot_Equity_tr[d_idx:dnext_idx], self.base_params["Cat_q"])
-
-            mask_equity_tr[d_idx:dnext_idx] = tot_Equity_tr[d_idx:dnext_idx] <= quant_tr
-        
-        #Filter test
-        dates_te = meta_test["date"].unique().sort()
-        dates_te_idx = dfta(meta_test, "date").getIndices(dates_te)
-        mask_equity_te = np.ones(tot_Equity_te.shape[0], dtype=bool)
-        for i, d_idx in enumerate(dates_te_idx):
-            dnext_idx = dates_te_idx[i+1] if i+1 < len(dates_te_idx) else len(meta_test)
-            quant_te = np.quantile(tot_Equity_te[d_idx:dnext_idx], self.base_params["Cat_q"])
-
-            mask_equity_te[d_idx:dnext_idx] = tot_Equity_te[d_idx:dnext_idx] <= quant_te
-
-        cat_mask_train &= mask_equity_tr
-        cat_mask_test &= mask_equity_te
 
         logger.info(
             "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
