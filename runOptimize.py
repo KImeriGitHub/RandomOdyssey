@@ -5,7 +5,8 @@ from pathlib import Path
 from src.hyperparameterTuning.OptunaClient import OptunaClient
 from src.hyperparameterTuning.OptunaTuning import OptunaTuning
 from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
-from src.hyperparameterTuning.StratLGBLeaves import StratLGBLeaves
+from src.hyperparameterTuning.StratLGBLeavesTime import StratLGBLeavesTime
+from src.hyperparameterTuning.StratLGBLeavesTree import StratLGBLeavesTree
 from src.predictionModule.LoadupSamples import LoadupSamples
 
 import treetimeParams
@@ -26,9 +27,8 @@ logger = logging.getLogger(__name__)
 params = treetimeParams.params
 logger.info("Params: %s", params)
 
-strategy_name = params.get("TreeTime_FilterSamples_method", "taylor")
-strategy = StratLGBLeaves(base_params=params)
-logger.info("Using strategy: %s", StratLGBLeaves.__name__)
+strategy = StratLGBLeavesTree(base_params=params)
+logger.info("Using strategy: %s", StratLGBLeavesTree.__name__)
 
 logger.level = logging.DEBUG
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
@@ -41,6 +41,8 @@ n_startup_trials = max(10, n_splits // 5)
 max_training_days = 900
 direction = "maximize"
 
+logger.info("Stock group: %s", stock_group)
+logger.info("Time group: %s", timegroup)
 logger.info("Optuna study name: %s", optuna_study_name)
 logger.info("Optuna duration (seconds): %s", optuna_duration)
 logger.info("Global start date: %s", global_start_date)

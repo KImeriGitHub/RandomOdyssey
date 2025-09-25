@@ -15,7 +15,7 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
 import logging
 logger = logging.getLogger(__name__)
 
-class StratLGBLeaves(BaseStrategy):
+class StratLGBLeavesTime(BaseStrategy):
     default_params = {
         "idxAfterPrediction": 5,
         "timesteps": 60,
@@ -26,8 +26,8 @@ class StratLGBLeaves(BaseStrategy):
 
         "FilterSamples_q_up": 0.9,
 
-        "FilterSamples_cat_over2.0": True,
-        "FilterSamples_cat_under20.0": True,
+        "FilterSamples_cat_over20.0": True,
+        "FilterSamples_cat_under2000.0": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
