@@ -14,8 +14,11 @@ params = {
     "FilterSamples_days_to_train_end": 10,
     
     "FilterSamples_cat_over20": True,
+    "FilterSamples_cat_under2000.0": True,
     "FilterSamples_cat_posOneYearReturn": False,
     "FilterSamples_cat_posFiveYearReturn": False,
+    "FilterSamples_cat_doubleFiveYearReturn": False,
+    "FilterSamples_cat_highestShareholderEquity_q0.5": False,
     
     "FilterSamples_lincomb_lr": 0.0008,
     "FilterSamples_lincomb_epochs": 150,
