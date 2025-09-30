@@ -34,8 +34,8 @@ class StratLGBLeavesTree(BaseStrategy):
         "FilterSamples_cat_highestShareholderEquity_q0.8": True,
     }
 
-    def __init__(self, base_params: dict = {}) -> None:
-        self.base_params = {**self.default_params, **base_params}
+    def __init__(self) -> None:
+        self.base_params = self.default_params
 
     # ------------------------------------------------------------------
     # Optuna hooks

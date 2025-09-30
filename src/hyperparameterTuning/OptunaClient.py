@@ -130,10 +130,11 @@ class OptunaClient:
 
         slices = self.get_slices()
         
-        ######################
-        ## PRE-PROCESSING
-        ######################
+        ####################
+        ## PRE-PROCESSING ##
+        ####################
         preprocess_masks = [None] * self.n_splits
+        scores = [None] * self.n_splits
         for i, (s_tr, s_te) in enumerate(slices):
             Xtr_tree = self.X_tree[s_tr].copy()
             Xtr_time = self.X_time[s_tr].copy()
@@ -165,6 +166,17 @@ class OptunaClient:
                 mask_train_pre, mask_test_pre = full_mask_train, full_mask_test
 
             preprocess_masks[i] = (mask_train_pre, mask_test_pre)
+            scores[i] = np.exp(np.mean(np.log(yte_tree[mask_test_pre])))
+            
+        logger.info("Preprocessing complete.")
+        logger.info("Precomputed scores per split (geometric mean of y_test): %s", scores)
+        logger.info("Precomputed geometric mean of scores: %s", float(np.exp(np.mean(np.log(np.array(scores))))))
+        logger.info("Precomputed arithmetic mean of scores: %s", float(np.mean(np.array(scores))))
+        logger.info("Precomputed variance of scores: %s", float(np.var(np.array(scores))))
+        logger.info("Precomputed standard deviation of scores: %s", float(np.std(np.array(scores))))
+        logger.info("Precomputed min score: %s", float(np.min(np.array(scores))))
+        logger.info("Precomputed max score: %s", float(np.max(np.array(scores))))
+        logger.info("Precomputed Sharpe ratio (mean/std): %s", (float(np.mean(np.array(scores))) - 1.0) / np.std(np.array(scores)))
 
         ######################
         ## Objective function
@@ -215,6 +227,14 @@ class OptunaClient:
                 scores.append(float(sc))
 
             logger.info("Scores per split: %s", scores)
+            logger.info("Number of valid scores: %s", n_valid)
+            logger.info("Geometric mean of scores: %s", float(np.exp(np.mean(np.log(np.array(scores))))))
+            logger.info("Arithmetic mean of scores: %s", float(np.mean(np.array(scores))))
+            logger.info("Variance of scores: %s", float(np.var(np.array(scores))))
+            logger.info("Standard deviation of scores: %s", float(np.std(np.array(scores))))
+            logger.info("Min score: %s", float(np.min(np.array(scores))))
+            logger.info("Max score: %s", float(np.max(np.array(scores))))
+            logger.info("Sharpe ratio (mean/std): %s", (float(np.mean(np.array(scores))) - 1.0) / np.std(np.array(scores)))
 
             if np.any(np.array(scores) <= 1e-4):
                 logger.info("Pruning trial %s due to negative scores.", trial.number)

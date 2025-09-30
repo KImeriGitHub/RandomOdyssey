@@ -19,40 +19,51 @@ class StratFilterSamples(BaseStrategy):
         "target_option": "last",
         "LoadupSamples_time_scaling_stretch": True,
         "LoadupSamples_time_inc_factor": 61,
+        
         "FilterSamples_q_up": 0.985,
-        "FilterSamples_days_to_train_end": 115,
+        "FilterSamples_days_to_train_end": 15,
+        
         "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_under2000.0": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
+        
         "FilterSamples_lincomb_epochs": 5,
         "FilterSamples_lincomb_show_progress": False,
         "FilterSamples_lincomb_featureratio": 0.5,
         "FilterSamples_lincomb_itermax": 1,
         "FilterSamples_lincomb_init_toprand": 3,
         "FilterSamples_lincomb_batch_size": 2**12,
+        "FilterSamples_lincomb_lr": 0.00005,
+        "FilterSamples_lincomb_subsample_ratio": 0.5,
+        "FilterSamples_lincomb_sharpness": 1.0,
+        
         "FilterSamples_taylor_horizon_days": 50,
         "FilterSamples_taylor_roll_window_days": 10,
         "FilterSamples_taylor_weight_slope": 1.268923,
     }
 
-    def __init__(self, filter_method: str, base_params: dict = {}) -> None:
-        self.base_params = {**self.default_params, **base_params}
+    def __init__(self, filter_method: str) -> None:
+        self.base_params = self.default_params
         if filter_method not in {"lincomb", "taylor"}:
             raise ValueError("filter_method must be either 'lincomb' or 'taylor'.")
         self.filter_method = filter_method
+        logger.info("Initialized StratFilterSamples with filter_method: %s", self.filter_method)
 
     # ------------------------------------------------------------------
     # Optuna hooks
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         lincomb_space = {
-            "FilterSamples_days_to_train_end": ("int", 250, 350, {"step": 10}),
-            "FilterSamples_lincomb_lr": ("float", 1e-4, 5e-3, {"log": False}),
-            "FilterSamples_lincomb_epochs": ("int", 10, 200, {"step": 10}),
-            "FilterSamples_lincomb_probs_noise_std": ("float", 0.1, 0.3, {"log": False}),
-            "FilterSamples_lincomb_subsample_ratio": ("float", 0.2, 0.4, {}),
-            "FilterSamples_lincomb_sharpness": ("float", 2.0, 5.0, {"log": False}),
-            "FilterSamples_lincomb_init_toprand": ("int", 2, 15, {}),
+            "FilterSamples_days_to_train_end": ("int", 13, 16, {"step": 1}),
+            "FilterSamples_lincomb_lr": ("float", 5e-6, 1e-4, {"log": True}),
+            "FilterSamples_lincomb_epochs": ("int", 1, 10, {"step": 1}),
+            "FilterSamples_lincomb_probs_noise_std": ("float", 0.045, 0.065, {}),
+            "FilterSamples_lincomb_subsample_ratio": ("float", 0.48, 0.55, {}),
+            "FilterSamples_lincomb_sharpness": ("float", 0.5, 1.5, {}),
+            #"FilterSamples_lincomb_init_toprand": ("int", 1, 4, {}),
+            #"FilterSamples_lincomb_featureratio": ("float", 0.15, 0.9, {}),
+            #"FilterSamples_lincomb_itermax": ("int", 1, 3, {}),
         }
         taylor_space = {
             "FilterSamples_days_to_train_end": ("int", 19, 48, {"step": 1}),

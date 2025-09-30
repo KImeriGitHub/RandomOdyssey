@@ -16,6 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class StratLGBMOnFiltered(BaseStrategy):
+    val_split = 0.05
     default_params = {
         "idxAfterPrediction": 5,
         "timesteps": 60,
@@ -24,7 +25,7 @@ class StratLGBMOnFiltered(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
         "LoadupSamples_time_inc_factor": 1,
 
-        "FilterSamples_q_up": 0.9,
+        "FilterSamples_q_up": 0.985,
         "FilterSamples_method": "taylor",
 
         "FilterSamples_cat_over20.0": True,
@@ -64,25 +65,25 @@ class StratLGBMOnFiltered(BaseStrategy):
     }
 
     def __init__(self, base_params: dict = {}) -> None:
-        self.base_params = {**self.default_params, **base_params}
+        self.base_params = self.default_params
 
     # ------------------------------------------------------------------
     # Optuna hooks
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
-        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 5e-3, 1e-1, log=True)
-        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 1e-5, 1e-3, log=True)
-        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.2, 0.9)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 550, step=25)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 15, step=1)
-        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 30, 950, step=10)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-0, log=True)
-        opt_params["LGB_path_smooth"]               = trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 5e-3, 1e-0, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 25, 605, step=10)
+        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 100, 400, step=25)
+        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.00005, 0.9, log=True)
+        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.00005, 0.9, log=True)
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.1, 0.99)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 1000, step=25)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 4, 17, step=1)
+        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 0.00001, 2.0, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 25, 600, step=25)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 0.0001, 0.1, log=True)
+        opt_params["LGB_path_smooth"]               = trial.suggest_float("LGB_path_smooth", 0.01, 0.9, log=True)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.0001, 0.1, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 50, 800, step=25)
         opt_params["LGB_early_stopping_rounds"]     = opt_params["LGB_num_boost_round"]//10
 
         params = dict(self.base_params)
@@ -116,13 +117,14 @@ class StratLGBMOnFiltered(BaseStrategy):
             Xd_tr = scaler.transform(Xd_tr)
             Xd_te = scaler.transform(Xd_te)
 
+        sam_split = int(Xd_tr.shape[0] * (1 - self.val_split))
         try:
             logger.disabled = True
             model_lgb, info = mm.run_LGB(
-                X_train=Xd_tr,
-                y_train=ytr_tree,
-                X_test=Xd_te,
-                y_test=yte_tree,
+                X_train=Xd_tr[:sam_split],
+                y_train=ytr_tree[:sam_split],
+                X_test=Xd_tr[sam_split:],
+                y_test=ytr_tree[sam_split:],
             )
         except Exception as e:
             logger.disabled = False
@@ -171,7 +173,7 @@ class StratLGBMOnFiltered(BaseStrategy):
             res_toplast   = test_df_perdate["top_res"].item(-1)
         res_sum_n = int(test_df_perdate["n_entries"].sum())
         
-        score = predmeanmean
+        score = res_meanlast
 
         # Final  Analysis
         logger.info(f"  Final top last prediction ratio: {pred_toplast:.4f}")
@@ -179,6 +181,7 @@ class StratLGBMOnFiltered(BaseStrategy):
         logger.info(f"  Final top last P/L Ratio: {res_toplast:.4f}")
         logger.info(f"  Final mean last P/L Ratio: {res_meanlast:.4f}")
         logger.info(f"  Number of entries: {res_sum_n}")
+        logger.info(f"  Score value: {score:.4f}")
 
         return float(score) if np.isfinite(score) else 1.0
 
