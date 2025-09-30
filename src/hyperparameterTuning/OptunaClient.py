@@ -90,7 +90,16 @@ class OptunaClient:
                 f"Too few eligible pivots ({len(eligible)}) for n_splits={self.n_splits}."
             )
 
-        pivots = sorted(self._rng.sample(eligible, self.n_splits))
+        bases = np.linspace(lo, hi, self.n_splits).round().astype(int)
+        gap = (hi - lo) / (self.n_splits - 1)
+
+        # jitter by one fourth gap (integer), seeded from self._rng for reproducibility
+        jmax = int(gap // 4)
+        rng = np.random.default_rng(self._rng.getrandbits(64))
+        jitter = rng.integers(-jmax, jmax + 1, size=self.n_splits) if jmax > 0 else 0
+
+        pivots = np.clip(bases + jitter, lo, hi).astype(int)
+        pivots = [int(i) for i in pivots]
         for p in pivots:
             logger.info("  Pivot %s: Date %s", p, dates_tr[p])
         return pivots
