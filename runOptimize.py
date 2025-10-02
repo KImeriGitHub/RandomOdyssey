@@ -8,12 +8,14 @@ from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
 from src.hyperparameterTuning.StratLGBLeavesTime import StratLGBLeavesTime
 from src.hyperparameterTuning.StratLGBLeavesTree import StratLGBLeavesTree
 from src.hyperparameterTuning.StratLGBMOnFiltered import StratLGBMOnFiltered
+from src.hyperparameterTuning.StratClusteringLSTM import StratClusteringLSTM
+from src.hyperparameterTuning.StratRidgeRegression import StratRidgeRegression
 from src.predictionModule.LoadupSamples import LoadupSamples
 
 import treetimeParams
 
 timegroup = "group_regOHLCV_over5years"
-stock_group = "group_finanTo2011"
+stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
@@ -28,16 +30,16 @@ logger = logging.getLogger(__name__)
 params = treetimeParams.params
 logger.info("Params: %s", params)
 
-strategy = StratFilterSamples(filter_method="lincomb")
-logger.info("Using strategy: %s", StratFilterSamples.__name__)
+strategy = StratRidgeRegression()
+logger.info("Using strategy: %s", StratRidgeRegression.__name__)
 
 logger.setLevel(logging.DEBUG)
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-optuna_duration = 60 * 60 * 8
+optuna_duration = 60 * 5
 global_start_date = datetime.date(2016, 1, 1)
 final_eval_date = datetime.date(2025, 7, 15)
 n_test_days = 7
-n_splits = 200
+n_splits = 20
 n_startup_trials = 3
 n_training_days_reserved = 2000
 direction = "maximize"
