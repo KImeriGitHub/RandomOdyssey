@@ -39,7 +39,7 @@ final_eval_date = datetime.date(2025, 7, 15)
 n_test_days = 7
 n_splits = 200
 n_startup_trials = 3
-max_training_days = 900
+n_training_days_reserved = 2000
 direction = "maximize"
 
 logger.info("Stock group: %s", stock_group)
@@ -51,7 +51,7 @@ logger.info("Final evaluation date: %s", final_eval_date)
 logger.info("Test days: %s", n_test_days)
 logger.info("Number of splits: %s", n_splits)
 logger.info("Number of startup trials: %s", n_startup_trials)
-logger.info("Training max days: %s", max_training_days)
+logger.info("Training days reserved: %s", n_training_days_reserved)
 logger.info("Optimization direction: %s", direction)
 
 if __name__ == "__main__":
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         ls=ls,
         n_splits=n_splits,
         n_test_days=n_test_days,
-        n_training_days=max_training_days,
+        n_training_days=n_training_days_reserved,
     )
 
     objective = optuna_client.make_objective(strategy=strategy)
