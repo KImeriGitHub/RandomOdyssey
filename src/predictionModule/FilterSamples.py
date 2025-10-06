@@ -185,7 +185,7 @@ class FilterSamples:
                     dnext_idx = dates_tr_idx[i+1] if i+1 < len(dates_tr_idx) else len(self.samples_dates_train)
                     quant_tr = np.quantile(tot_Equity_tr[d_idx:dnext_idx], q)
 
-                    mask_equity_tr[d_idx:dnext_idx] = tot_Equity_tr[d_idx:dnext_idx] <= quant_tr
+                    mask_equity_tr[d_idx:dnext_idx] = tot_Equity_tr[d_idx:dnext_idx] >= quant_tr
 
                 #Filter test
                 dates_te = self.samples_dates_test.unique().sort()
@@ -195,7 +195,7 @@ class FilterSamples:
                     dnext_idx = dates_te_idx[i+1] if i+1 < len(dates_te_idx) else len(self.samples_dates_test)
                     quant_te = np.quantile(tot_Equity_te[d_idx:dnext_idx], q)
 
-                    mask_equity_te[d_idx:dnext_idx] = tot_Equity_te[d_idx:dnext_idx] <= quant_te
+                    mask_equity_te[d_idx:dnext_idx] = tot_Equity_te[d_idx:dnext_idx] >= quant_te
 
                 mask_train &= mask_equity_tr
                 mask_test &= mask_equity_te
