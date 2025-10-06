@@ -37,6 +37,7 @@ class StratClusteringLSTM(BaseStrategy):
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.8": True,
         "LSTM_val_split": 0.1,
     }
 
@@ -55,12 +56,12 @@ class StratClusteringLSTM(BaseStrategy):
         params = dict(self.base_params)
 
         params.update({
-            "t_win":                    35,
+            "t_win":                    trial.suggest_int("t_win", 15, 55, step=5),
             "time_inc_factor":          60,
-            "n_clusters":               trial.suggest_int("n_clusters", 3, 43, step=10),
+            "n_clusters":               trial.suggest_int("n_clusters", 3, 13, step=2),
             "LSTM_units":               16,
             "LSTM_num_layers":          1,
-            "LSTM_learning_rate":       trial.suggest_float("LSTM_learning_rate", 1e-5, 5e-2, log=True),
+            "LSTM_learning_rate":       trial.suggest_float("LSTM_learning_rate", 1e-5, 1e-2, log=True),
             "LSTM_dropout":             0.05,
             "LSTM_inter_dropout":       0.05,
             "LSTM_recurrent_dropout":   0.05,
@@ -68,7 +69,7 @@ class StratClusteringLSTM(BaseStrategy):
             "LSTM_l1":                  0.001,
             "LSTM_l2":                  0.001,
             "LSTM_conv1d_kernel_size":  5,
-            "selection_quantile":       0.98,
+            "selection_quantile":       0.9,
             "min_cluster_train":        500,
         })
 

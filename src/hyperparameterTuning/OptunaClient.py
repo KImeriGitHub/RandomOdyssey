@@ -177,6 +177,7 @@ class OptunaClient:
             preprocess_masks[i] = (mask_train_pre, mask_test_pre)
             scores[i] = np.exp(np.mean(np.log(yte_tree[mask_test_pre])))
             
+        scores = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores]
         logger.info("Preprocessing complete.")
         logger.info("Precomputed scores per split (geometric mean of y_test): %s", scores)
         logger.info("Precomputed geometric mean of scores: %s", float(np.exp(np.mean(np.log(np.array(scores))))))

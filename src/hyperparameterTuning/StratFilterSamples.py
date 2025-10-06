@@ -20,13 +20,14 @@ class StratFilterSamples(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": True,
         "LoadupSamples_time_inc_factor": 61,
         
-        "FilterSamples_q_up": 0.985,
+        "FilterSamples_q_up": 0.96,
         "FilterSamples_days_to_train_end": 15,
         
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_under2000.0": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.5": True,
         
         "FilterSamples_lincomb_epochs": 5,
         "FilterSamples_lincomb_show_progress": False,
@@ -55,21 +56,21 @@ class StratFilterSamples(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         lincomb_space = {
-            "FilterSamples_days_to_train_end": ("int", 13, 16, {"step": 1}),
-            "FilterSamples_lincomb_lr": ("float", 5e-6, 1e-4, {"log": True}),
-            "FilterSamples_lincomb_epochs": ("int", 1, 10, {"step": 1}),
-            "FilterSamples_lincomb_probs_noise_std": ("float", 0.045, 0.065, {}),
-            "FilterSamples_lincomb_subsample_ratio": ("float", 0.48, 0.55, {}),
+            "FilterSamples_days_to_train_end": ("int", 10, 35, {"step": 1}),
+            "FilterSamples_lincomb_lr": ("float", 5e-6, 5e-1, {"log": True}),
+            "FilterSamples_lincomb_epochs": ("int", 8, 50, {"step": 1}),
+            "FilterSamples_lincomb_probs_noise_std": ("float", 0.01, 0.1, {"log": True}),
+            "FilterSamples_lincomb_subsample_ratio": ("float", 0.1, 0.7, {}),
             "FilterSamples_lincomb_sharpness": ("float", 0.5, 1.5, {}),
             #"FilterSamples_lincomb_init_toprand": ("int", 1, 4, {}),
             #"FilterSamples_lincomb_featureratio": ("float", 0.15, 0.9, {}),
             #"FilterSamples_lincomb_itermax": ("int", 1, 3, {}),
         }
         taylor_space = {
-            "FilterSamples_days_to_train_end": ("int", 19, 48, {"step": 1}),
-            "FilterSamples_taylor_horizon_days": ("int", 24, 28, {"step": 2}),
-            "FilterSamples_taylor_roll_window_days": ("int", 1, 6, {"step": 1}),
-            "FilterSamples_taylor_weight_slope": ("float", 1.5, 3.5, {"log": False}),
+            "FilterSamples_days_to_train_end": ("int", 3, 8, {"step": 1}),
+            "FilterSamples_taylor_horizon_days": ("int", 2, 8, {"step": 1}),
+            "FilterSamples_taylor_roll_window_days": ("int", 2, 8, {"step": 1}),
+            "FilterSamples_taylor_weight_slope": ("float", 0.1, 4.5, {"log": True}),
         }
 
         params = dict(self.base_params)

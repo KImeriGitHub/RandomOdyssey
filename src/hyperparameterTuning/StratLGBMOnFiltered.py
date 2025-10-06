@@ -25,30 +25,31 @@ class StratLGBMOnFiltered(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
         "LoadupSamples_time_inc_factor": 1,
 
-        "FilterSamples_q_up": 0.985,
+        "FilterSamples_q_up": 0.96,
         "FilterSamples_method": "taylor",
+        "FilterSamples_days_to_train_end": 4,
 
         "FilterSamples_cat_over20.0": True,
         "FilterSamples_cat_under2000.0": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.5": False,
-
-        "FilterSamples_lincomb_epochs": 150,
-        "FilterSamples_lincomb_lr": 0.0005,
-        "FilterSamples_lincomb_probs_noise_std": 0.15,
+        "FilterSamples_cat_highestShareholderEquity_q0.5": True,
+        
+        "FilterSamples_lincomb_epochs": 8,
+        "FilterSamples_lincomb_lr": 0.000009,
+        "FilterSamples_lincomb_probs_noise_std": 0.057207,
         "FilterSamples_lincomb_show_progress": False,
-        "FilterSamples_lincomb_subsample_ratio": 0.3,
-        "FilterSamples_lincomb_sharpness": 2.3,
+        "FilterSamples_lincomb_subsample_ratio": 0.527366,
+        "FilterSamples_lincomb_sharpness": 0.78169,
         "FilterSamples_lincomb_featureratio": 0.8,
         "FilterSamples_lincomb_itermax": 1,
-        "FilterSamples_lincomb_init_toprand":  6,
+        "FilterSamples_lincomb_init_toprand":  3,
         "FilterSamples_lincomb_batch_size": 2**12,
 
-        "FilterSamples_taylor_horizon_days": 24,
-        "FilterSamples_taylor_roll_window_days": 3,
-        "FilterSamples_taylor_weight_slope": 1.965,
+        "FilterSamples_taylor_horizon_days": 6,
+        "FilterSamples_taylor_roll_window_days": 6,
+        "FilterSamples_taylor_weight_slope": 0.85,
 
         "LGB_num_boost_round": 950,
         "LGB_lambda_l1": 0.000100,
@@ -64,7 +65,7 @@ class StratLGBMOnFiltered(BaseStrategy):
         "LGB_max_bin": 850,
     }
 
-    def __init__(self, base_params: dict = {}) -> None:
+    def __init__(self) -> None:
         self.base_params = self.default_params
 
     # ------------------------------------------------------------------
@@ -72,7 +73,7 @@ class StratLGBMOnFiltered(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 100, 400, step=25)
+        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 50, 400, step=25)
         opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.00005, 0.9, log=True)
         opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.00005, 0.9, log=True)
         opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.1, 0.99)
