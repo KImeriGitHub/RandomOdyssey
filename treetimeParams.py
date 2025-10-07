@@ -3,8 +3,8 @@ params = {
     'timesteps': 85,
     'target_option': 'last',
     "LoadupSamples_tree_scaling_standard": False,
-    "LoadupSamples_time_scaling_stretch": True,
-    "LoadupSamples_time_inc_factor": 36,
+    "LoadupSamples_time_scaling_stretch": False,
+    "LoadupSamples_time_inc_factor": 1,
     
     "TreeTime_top_n": 5,
     "TreeTime_stoploss": 0.92,

@@ -41,26 +41,26 @@ class StratLGBLeavesTime(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = 100 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
-        opt_params["LGB_lambda_l1"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l1", 5e-3, 1e-1, log=True)
-        opt_params["LGB_lambda_l2"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l2", 1e-5, 1e-3, log=True)
-        opt_params["LGB_feature_fraction"]          = 0.1
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 550, step=25)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 15, step=1)
-        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 30, 950, step=10)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-0, log=True)
+        opt_params["LGB_num_boost_round"]           = 5 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
+        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 1e-5, 2e-0, log=True)
+        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 1e-5, 2e-0, log=True)
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.95, 1.0, log=True)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 600, 800, step=5)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 31, step=2)
+        opt_params["LGB_learning_rate"]             = 0.1 #trial.suggest_float("LGB_learning_rate", 1e-3, 1e-1, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 1800, 1950, step=1)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-5, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 5e-3, 1e-0, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 25, 605, step=10)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 1e-2, 5e-2, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 300, 500, step=10)
         opt_params["LGB_early_stopping_rounds"]     = 20
 
-        opt_params["t_win"]             = trial.suggest_int("t_win", 4, 35)
+        opt_params["t_win"]             = trial.suggest_int("t_win", 3, 7)
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
-        opt_params["do_transform"]      = False
-        opt_params["tree_n_max"]        = trial.suggest_int("tree_n_max", 5, 75, step=5)
-        opt_params["min_n_tar"]         = 5
-        opt_params["top_n_max"]         = 5 #trial.suggest_int("top_n_max", 3, 7)  
+        opt_params["do_transform"]      = False #trial.suggest_categorical("do_transform", [True, False])
+        opt_params["tree_n_max"]        = 1 #trial.suggest_int("tree_n_max", 5, 75, step=5)
+        opt_params["min_n_tar"]         = 0
+        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 11, 20)  
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -87,8 +87,8 @@ class StratLGBLeavesTime(BaseStrategy):
         top_n_max =         opt_params["top_n_max"]
         mm: MachineModels = MachineModels(opt_params)
 
-        Xd_tr, bad_tr = self._make_design(Xtr_time, t_win, f_idx=0)
-        Xd_te, bad_te = self._make_design(Xte_time, t_win, f_idx=0)
+        Xd_tr, bad_tr = self._make_design(Xtr_time, t_win)
+        Xd_te, bad_te = self._make_design(Xte_time, t_win)
         keep_tr = ~bad_tr
         keep_te = ~bad_te
         Xd_tr, ytr_tree = Xd_tr[keep_tr], ytr_tree[keep_tr]
@@ -98,9 +98,9 @@ class StratLGBLeavesTime(BaseStrategy):
         logger.debug(f"   ytr_tree: n={ytr_tree.size}, mean={ytr_tree.mean():.6f}, std={ytr_tree.std():.6f}")
 
         if do_transform:
-            scaler = StandardScaler().fit(Xd_tr)
-            Xd_tr = scaler.transform(Xd_tr)
-            Xd_te = scaler.transform(Xd_te)
+            ss = StandardScaler()
+            Xd_tr = ss.fit_transform(Xd_tr)
+            Xd_te = ss.transform(Xd_te)
 
         try:
             logger.disabled = True
@@ -202,26 +202,16 @@ class StratLGBLeavesTime(BaseStrategy):
         shift = -minv + 1e-9 if minv <= 0 else 0.0
         return float(np.exp(np.mean(np.log(arr + shift)))) if arr.size else np.nan
     
-    def _make_design(self, X, t_win, f_idx):
-        Xw: np.ndarray = X[:, -(t_win+1):, f_idx].copy()
-        Xw_mid = (Xw-0.5)*2.0
+    def _make_design(self, X, t_win):
+        Xw: np.ndarray = X[:, -(t_win+1):, 0:5].copy()
+        Xw = (Xw-0.5)*2.0
         
         mask_bad = np.zeros(Xw.shape[0], dtype=bool)
-        if f_idx == 0:
-            bound_bad = 1 - np.tanh(1 - 1e-4)
-            mask_bad = np.any((Xw_mid <= (-1+bound_bad)) | (Xw_mid >= (1-bound_bad)), axis=1)
-            Xw_mid = np.clip(Xw_mid, -1+bound_bad, 1-bound_bad)
-        else:
-            bound_bad = 0.0001
-            mask_bad = np.any((Xw_mid <= (-1+bound_bad)) | (Xw_mid >= (1-bound_bad)), axis=1)
-            Xw_mid = np.clip(Xw_mid, -1+bound_bad, 1-bound_bad)
+        bound_bad = 1 - np.tanh(1 - 1e-4)
+        mask_bad = np.any((Xw[:,:,0:4] <= (-1+bound_bad)) | (Xw[:,:,0:4] >= (1-bound_bad)), axis=(1,2))
+        Xw[:,:,0:4] = np.clip(Xw[:,:,0:4], -1+bound_bad, 1-bound_bad)
         
-        Xw = np.arctanh(Xw_mid) + 1.0
-        prev = Xw[:, :-1]
-        curr = Xw[:, 1:]
-        eps = 1e-4
-        Xw = (curr / (prev + eps)) - 1.0
-        Xw = np.clip(Xw, 1e-5, 1e5)
+        Xw[:,:,0:4] = np.arctanh(Xw[:,:,0:4]) + 1.0
         
         return Xw.reshape(Xw.shape[0], -1), mask_bad
 
@@ -284,12 +274,3 @@ class StratLGBLeavesTime(BaseStrategy):
                 out_score[:k, t] = arr[:k, 1].astype(float)
 
         return out_label, out_score
-
-    @staticmethod
-    def _parse_params(trial: optuna.Trial, space: dict) -> dict:
-        out = {}
-        for name, spec in space.items():
-            kind, lo, hi, kw = spec
-            suggest = trial.suggest_int if kind == "int" else trial.suggest_float
-            out[name] = suggest(name.replace("FilterSamples_", ""), lo, hi, **kw)
-        return out

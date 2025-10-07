@@ -64,7 +64,9 @@ class OptunaTuning:
                 logger.info("%s: %s", key, value)
 
         df_pl = pl.from_pandas(df)
-        param_cols = [c for c in df.columns if c.startswith("params_")]
+        param_cols = [c for c in df.columns if c.startswith("params_") and df_pl.schema[c] in pl.NUMERIC_DTYPES]
+        logger.info("Parameter columns: %s", param_cols)
+        logger.info("Non-Numeric parameter columns: %s", [c for c in df.columns if c.startswith("params_") and df_pl.schema[c] not in pl.NUMERIC_DTYPES])
         if param_cols:
             df_roll_mean = df_pl.sort("value").select(
                 [pl.col("value")] + [pl.col(c).rolling_mean(window_size=10).alias(f"{c}_rollmean10") for c in param_cols]
