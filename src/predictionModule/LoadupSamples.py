@@ -626,18 +626,10 @@ class LoadupSamples:
         
         center = 0.5
 
-        # per‐sample min/max along time
-        mins = X.min(axis=1, keepdims=True)
-        maxs = X.max(axis=1, keepdims=True)
-
-        # distances from center
-        den_above = maxs - center
-        den_below = center - mins
-        den = np.maximum(den_above, den_below)
-
-        # avoid div-by-zero
-        eps = 1e-6
-        den = np.where(np.abs(den)<eps, 1.0, den)
+        # max absolute deviation from 0.5 along time
+        D = np.abs(X - center)                            # (N, T, F)
+        den = D.max(axis=1, keepdims=True)                # (N, 1, F)
+        den = np.where(den < 1e-4, 1.0, den)              # avoid div-by-zero
 
         # linear stretch 
         return np.clip((X - center) / den + center, 0.0, 1.0)
