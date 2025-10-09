@@ -26,8 +26,8 @@ class StratLGBLeavesTree(BaseStrategy):
 
         "Cat_q": 0.6,
 
-        "FilterSamples_cat_over20.0": True,
-        "FilterSamples_cat_under2000.0": True,
+        "FilterSamples_cat_over20.0": False,
+        "FilterSamples_cat_under2000.0": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
@@ -42,11 +42,11 @@ class StratLGBLeavesTree(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = 100 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
+        opt_params["LGB_num_boost_round"]           = 5 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
         opt_params["LGB_lambda_l1"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l1", 5e-3, 1e-1, log=True)
         opt_params["LGB_lambda_l2"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l2", 1e-5, 1e-3, log=True)
-        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.2, 0.9)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 550, step=25)
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.2, 0.99, log=True)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 950, step=25)
         opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 15, step=1)
         opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
         opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 30, 950, step=10)
@@ -56,12 +56,11 @@ class StratLGBLeavesTree(BaseStrategy):
         opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 25, 605, step=10)
         opt_params["LGB_early_stopping_rounds"]     = 20
 
-        opt_params["t_win"]             = trial.suggest_int("t_win", 4, 35)
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
-        opt_params["do_transform"]      = False
-        opt_params["tree_n_max"]        = trial.suggest_int("tree_n_max", 5, 75, step=5)
-        opt_params["min_n_tar"]         = trial.suggest_int("min_n_tar", 0, 5)
-        opt_params["top_n_max"]         = 5 #trial.suggest_int("top_n_max", 3, 7)  
+        opt_params["do_transform"]      = trial.suggest_categorical("do_transform", [True, False])
+        opt_params["tree_n_max"]        = 1 #trial.suggest_int("tree_n_max", 5, 75, step=5)
+        opt_params["min_n_tar"]         = 0 #trial.suggest_int("min_n_tar", 0, 5)
+        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 3, 15)  
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -81,7 +80,6 @@ class StratLGBLeavesTree(BaseStrategy):
         meta_test,
         opt_params: dict,
     ) -> float:
-        t_win =             opt_params["t_win"]
         do_transform =      opt_params["do_transform"]
         tree_n_max =        opt_params["tree_n_max"]
         min_n_tar =         opt_params["min_n_tar"]
@@ -215,29 +213,6 @@ class StratLGBLeavesTree(BaseStrategy):
         shift = -minv + 1e-9 if minv <= 0 else 0.0
         return float(np.exp(np.mean(np.log(arr + shift)))) if arr.size else np.nan
     
-    def _make_design(self, X, t_win, f_idx):
-        Xw: np.ndarray = X[:, -(t_win+1):, f_idx].copy()
-        Xw_mid = (Xw-0.5)*2.0
-        
-        mask_bad = np.zeros(Xw.shape[0], dtype=bool)
-        if f_idx == 0:
-            bound_bad = 1 - np.tanh(1 - 1e-4)
-            mask_bad = np.any((Xw_mid <= (-1+bound_bad)) | (Xw_mid >= (1-bound_bad)), axis=1)
-            Xw_mid = np.clip(Xw_mid, -1+bound_bad, 1-bound_bad)
-        else:
-            bound_bad = 0.0001
-            mask_bad = np.any((Xw_mid <= (-1+bound_bad)) | (Xw_mid >= (1-bound_bad)), axis=1)
-            Xw_mid = np.clip(Xw_mid, -1+bound_bad, 1-bound_bad)
-        
-        Xw = np.arctanh(Xw_mid) + 1.0
-        prev = Xw[:, :-1]
-        curr = Xw[:, 1:]
-        eps = 1e-4
-        Xw = (curr / (prev + eps)) - 1.0
-        Xw = np.clip(Xw, 1e-5, 1e5)
-        
-        return Xw.reshape(Xw.shape[0], -1), mask_bad
-
     def _top_leaf_labels_per_tree(self,
         model: lgb.Booster,
         X,

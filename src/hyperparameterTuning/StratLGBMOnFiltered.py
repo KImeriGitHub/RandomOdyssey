@@ -73,18 +73,18 @@ class StratLGBMOnFiltered(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 50, 400, step=25)
-        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.00005, 0.9, log=True)
-        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.00005, 0.9, log=True)
-        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.1, 0.99)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 1000, step=25)
+        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 75, 200, step=5)
+        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.0001, 0.005, log=True)
+        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.001, 0.05, log=True)
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.8, 0.99)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 800, 1500, step=25)
         opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 4, 17, step=1)
-        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 0.00001, 2.0, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 25, 600, step=25)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 0.0001, 0.1, log=True)
+        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 0.0001, 2.0, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 200, 600, step=25)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 0.0001, 0.02, log=True)
         opt_params["LGB_path_smooth"]               = trial.suggest_float("LGB_path_smooth", 0.01, 0.9, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.0001, 0.1, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 50, 800, step=25)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.0001, 0.005, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 400, 800, step=25)
         opt_params["LGB_early_stopping_rounds"]     = opt_params["LGB_num_boost_round"]//10
 
         params = dict(self.base_params)

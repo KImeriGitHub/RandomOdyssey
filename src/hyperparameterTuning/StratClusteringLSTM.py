@@ -35,10 +35,10 @@ class StratClusteringLSTM(BaseStrategy):
         "target_option": "last",
         "FilterSamples_q_up": 0.6,
         "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_under2000": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_highestShareholderEquity_q0.8": True,
-        "LSTM_val_split": 0.1,
     }
 
     def __init__(self, *, device: str | None = None, random_state: int | None = 0) -> None:
@@ -58,7 +58,7 @@ class StratClusteringLSTM(BaseStrategy):
         params.update({
             "t_win":                    trial.suggest_int("t_win", 15, 55, step=5),
             "time_inc_factor":          60,
-            "n_clusters":               trial.suggest_int("n_clusters", 3, 13, step=2),
+            "n_clusters":               trial.suggest_int("n_clusters", 3, 8, step=1),
             "LSTM_units":               16,
             "LSTM_num_layers":          1,
             "LSTM_learning_rate":       trial.suggest_float("LSTM_learning_rate", 1e-5, 1e-2, log=True),
@@ -69,7 +69,7 @@ class StratClusteringLSTM(BaseStrategy):
             "LSTM_l1":                  0.001,
             "LSTM_l2":                  0.001,
             "LSTM_conv1d_kernel_size":  5,
-            "selection_quantile":       0.9,
+            "selection_quantile":       trial.suggest_float("selection_quantile", 0.9, 0.99),
             "min_cluster_train":        500,
         })
 
@@ -99,13 +99,12 @@ class StratClusteringLSTM(BaseStrategy):
         time_factor = opt_params.get("time_inc_factor")
         n_clusters = int(opt_params.get("n_clusters", 4))
         quantile_val = float(opt_params.get("selection_quantile", 0.95))
-        feature_indices = list(range(Xtr_time.shape[-1]))
         min_cluster_train = int(opt_params.get("min_cluster_train", 50))
 
         ytr_time_scaled = np.tanh((ytr_tree - 1.0) * time_factor) / 2.0 + 0.5
 
-        Xd_tr = self._make_design(Xtr_time, t_win, feature_indices)
-        Xd_te = self._make_design(Xte_time, t_win, feature_indices)
+        Xd_tr = Xtr_time[:, -t_win:, :].reshape(Xtr_time.shape[0], -1)
+        Xd_te = Xte_time[:, -t_win:, :].reshape(Xte_time.shape[0], -1)
 
         if n_clusters >= Xd_tr.shape[0]:
             logger.warning(
@@ -115,7 +114,7 @@ class StratClusteringLSTM(BaseStrategy):
             )
             return 1.0
 
-        n_feat = len(feature_indices)
+        n_feat = Xtr_time.shape[-1]
         Xseq_tr = Xd_tr.reshape(-1, t_win, n_feat)
         Xseq_te = Xd_te.reshape(-1, t_win, n_feat)
 
@@ -276,12 +275,6 @@ class StratClusteringLSTM(BaseStrategy):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    @staticmethod
-    def _make_design(X: np.ndarray, t_win: int, feature_indices: Sequence[int]) -> np.ndarray:
-        """Return flattened windows restricted to selected features."""
-        idx = np.atleast_1d(feature_indices)
-        Xw = X[:, -t_win:, idx]
-        return Xw.reshape(X.shape[0], -1)
 
     @staticmethod
     def _geometric_mean_safe(arr: Iterable[float]) -> float:

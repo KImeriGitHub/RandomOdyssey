@@ -30,12 +30,12 @@ class StratPCAandLeaves(BaseStrategy):
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.5": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.9": True,
         
-        "FilterSamples_q_up": 0.98,
-        "FilterSamples_method": "lincomb",
+        "FilterSamples_q_up": 0.9914,
+        "FilterSamples_method": "taylor",
 
-        "FilterSamples_days_to_train_end": 13,
+        "FilterSamples_days_to_train_end": 10,
         "FilterSamples_lincomb_epochs": 8,
         "FilterSamples_lincomb_lr": 0.000009,
         "FilterSamples_lincomb_probs_noise_std": 0.057207,
@@ -46,6 +46,10 @@ class StratPCAandLeaves(BaseStrategy):
         "FilterSamples_lincomb_itermax": 1,
         "FilterSamples_lincomb_init_toprand":  3,
         "FilterSamples_lincomb_batch_size": 2**12,
+        
+        "FilterSamples_taylor_horizon_days": 60,
+        "FilterSamples_taylor_roll_window_days": 15,
+        "FilterSamples_taylor_weight_slope": 0.43,
     }
 
     def __init__(self) -> None:
@@ -56,24 +60,24 @@ class StratPCAandLeaves(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = 10 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
+        opt_params["LGB_num_boost_round"]           = 100 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
         opt_params["LGB_lambda_l1"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l1", 5e-3, 1e-1, log=True)
         opt_params["LGB_lambda_l2"]                 = 5e-1 #trial.suggest_float("LGB_lambda_l2", 1e-5, 1e-3, log=True)
-        opt_params["LGB_feature_fraction"]          = 1.0#trial.suggest_float("LGB_feature_fraction", 0.2, 0.9)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 550, step=25)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 15, step=1)
-        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 30, 950, step=10)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-0, log=True)
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.5, 0.7)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 50, 100, step=25)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 6, step=1)
+        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 1e-4, 0.003, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 800, 1050, step=10)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 0.5, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
         opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 5e-3, 1e-0, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 25, 605, step=10)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 25, 200, step=5)
         opt_params["LGB_early_stopping_rounds"]     = 10
 
-        opt_params["n_components"]       = trial.suggest_int("n_components", 5, 50, step = 5)
-        opt_params["tree_n_max"]        = trial.suggest_int("tree_n_max", 5, 75, step=5)
+        opt_params["n_components"]       = trial.suggest_int("n_components", 5, 20, step = 5)
+        opt_params["tree_n_max"]        = trial.suggest_int("tree_n_max", 25, 75, step=5)
         opt_params["min_n_tar"]         = trial.suggest_int("min_n_tar", 0, 5)
-        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 3, 7)  
+        opt_params["top_n_max"]         = 5 #trial.suggest_int("top_n_max", 3, 13)  
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -208,32 +212,32 @@ class StratPCAandLeaves(BaseStrategy):
             cat_mask_test &= cat_test
 
         ### MAIN FILTERING
-        fs = FilterSamples(
-            Xtree_train = Xtr_tree[cat_mask_train], 
-            ytree_train = ytr_tree[cat_mask_train], 
-            treenames   = treenames,
-            Xtree_test  = Xte_tree[cat_mask_test],
-            ytree_test  = yte_tree[cat_mask_test],
-            meta_train  = meta_train.filter(pl.Series(cat_mask_train)), 
-            meta_test   = meta_test.filter(pl.Series(cat_mask_test)), 
-            params      = self.base_params,
-        )
+        #fs = FilterSamples(
+        #    Xtree_train = Xtr_tree[cat_mask_train], 
+        #    ytree_train = ytr_tree[cat_mask_train], 
+        #    treenames   = treenames,
+        #    Xtree_test  = Xte_tree[cat_mask_test],
+        #    ytree_test  = yte_tree[cat_mask_test],
+        #    meta_train  = meta_train.filter(pl.Series(cat_mask_train)), 
+        #    meta_test   = meta_test.filter(pl.Series(cat_mask_test)), 
+        #    params      = self.base_params,
+        #)
 
-        if self.base_params["FilterSamples_method"] == "taylor":
-            mask_train, mask_test = fs.taylor_feature_masks()
-        if self.base_params["FilterSamples_method"] == "lincomb":
-            mask_train, mask_test = fs.lincomb_masks()
+        #if self.base_params["FilterSamples_method"] == "taylor":
+        #    mask_train, mask_test = fs.taylor_feature_masks()
+        #if self.base_params["FilterSamples_method"] == "lincomb":
+        #    mask_train, mask_test = fs.lincomb_masks()
 
-        score_train = fs.evaluate_mask(mask_train, 
-            meta_train.filter(pl.Series(cat_mask_train))['date'], ytr_tree[cat_mask_train])
-        score_test  = fs.evaluate_mask(mask_test,  
-            meta_test.filter(pl.Series(cat_mask_test))['date'], yte_tree[cat_mask_test])
-        logger.info(f"  Filtering Score (train) = {score_train}")
-        logger.info(f"  Filtering Score (test)  = {score_test}")
+        #score_train = fs.evaluate_mask(mask_train, 
+        #    meta_train.filter(pl.Series(cat_mask_train))['date'], ytr_tree[cat_mask_train])
+        #score_test  = fs.evaluate_mask(mask_test,  
+        #    meta_test.filter(pl.Series(cat_mask_test))['date'], yte_tree[cat_mask_test])
+        #logger.info(f"  Filtering Score (train) = {score_train}")
+        #logger.info(f"  Filtering Score (test)  = {score_test}")
 
-        cat_mask_train[cat_mask_train] = mask_train
-        if mask_test is not None:
-            cat_mask_test[cat_mask_test] = mask_test
+        #cat_mask_train[cat_mask_train] = mask_train
+        #if mask_test is not None:
+        #    cat_mask_test[cat_mask_test] = mask_test
 
         logger.info(
             "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",

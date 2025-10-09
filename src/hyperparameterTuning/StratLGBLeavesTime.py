@@ -24,13 +24,31 @@ class StratLGBLeavesTime(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
         "LoadupSamples_time_inc_factor": 1,
 
-        "FilterSamples_q_up": 0.9,
+        "FilterSamples_q_up": 0.5,
+        "FilterSamples_method": "taylor",
+        "FilterSamples_days_to_train_end": 4,
 
         "FilterSamples_cat_over20.0": True,
         "FilterSamples_cat_under2000.0": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.95": True,
+        
+        "FilterSamples_lincomb_epochs": 8,
+        "FilterSamples_lincomb_lr": 0.000009,
+        "FilterSamples_lincomb_probs_noise_std": 0.057207,
+        "FilterSamples_lincomb_show_progress": False,
+        "FilterSamples_lincomb_subsample_ratio": 0.527366,
+        "FilterSamples_lincomb_sharpness": 0.78169,
+        "FilterSamples_lincomb_featureratio": 0.8,
+        "FilterSamples_lincomb_itermax": 1,
+        "FilterSamples_lincomb_init_toprand":  3,
+        "FilterSamples_lincomb_batch_size": 2**12,
+
+        "FilterSamples_taylor_horizon_days": 6,
+        "FilterSamples_taylor_roll_window_days": 6,
+        "FilterSamples_taylor_weight_slope": 0.85,
     }
 
     def __init__(self) -> None:
@@ -42,25 +60,25 @@ class StratLGBLeavesTime(BaseStrategy):
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
         opt_params["LGB_num_boost_round"]           = 5 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
-        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 1e-5, 2e-0, log=True)
-        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 1e-5, 2e-0, log=True)
-        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.95, 1.0, log=True)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 600, 800, step=5)
+        opt_params["LGB_lambda_l1"]                 = 0.001 #trial.suggest_float("LGB_lambda_l1", 1e-5, 2e-0, log=True)
+        opt_params["LGB_lambda_l2"]                 = 0.001 #trial.suggest_float("LGB_lambda_l2", 1e-5, 2e-0, log=True)
+        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.90, 1.0, log=True)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 1200, 3500, step=25)
         opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 31, step=2)
         opt_params["LGB_learning_rate"]             = 0.1 #trial.suggest_float("LGB_learning_rate", 1e-3, 1e-1, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 1800, 1950, step=1)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-5, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 50, 2000, step=50)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-1, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 1e-2, 5e-2, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 300, 500, step=10)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 1e-3, 5e-1, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 50, 950, step=50)
         opt_params["LGB_early_stopping_rounds"]     = 20
 
-        opt_params["t_win"]             = trial.suggest_int("t_win", 3, 7)
+        opt_params["t_win"]             = trial.suggest_int("t_win", 3, 22)
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
         opt_params["do_transform"]      = False #trial.suggest_categorical("do_transform", [True, False])
         opt_params["tree_n_max"]        = 1 #trial.suggest_int("tree_n_max", 5, 75, step=5)
         opt_params["min_n_tar"]         = 0
-        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 11, 20)  
+        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 5, 20)  
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -185,11 +203,55 @@ class StratLGBLeavesTime(BaseStrategy):
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
-        #logger.info(
-        #    "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
-        #    100 * cat_mask_train.mean(),
-        #    100 * cat_mask_test.mean(),
+        fs_pre = FilterSamples(
+            Xtree_train=Xtr_tree,
+            ytree_train=ytr_tree,
+            treenames=treenames,
+            Xtree_test=Xte_tree,
+            ytree_test=yte_tree,
+            meta_train=meta_train,
+            meta_test=meta_test,
+            params=self.base_params,
+        )
+
+        cat_train, cat_test = fs_pre.categorical_masks()
+        cat_mask_train &= cat_train
+        if cat_test is not None:
+            cat_mask_test &= cat_test
+
+        #### MAIN FILTERING
+        #fs = FilterSamples(
+        #    Xtree_train = Xtr_tree[cat_mask_train], 
+        #    ytree_train = ytr_tree[cat_mask_train], 
+        #    treenames   = treenames,
+        #    Xtree_test  = Xte_tree[cat_mask_test],
+        #    ytree_test  = yte_tree[cat_mask_test],
+        #    meta_train  = meta_train.filter(pl.Series(cat_mask_train)), 
+        #    meta_test   = meta_test.filter(pl.Series(cat_mask_test)), 
+        #    params      = self.base_params,
         #)
+
+        #if self.base_params["FilterSamples_method"] == "taylor":
+        #    mask_train, mask_test = fs.taylor_feature_masks()
+        #if self.base_params["FilterSamples_method"] == "lincomb":
+        #    mask_train, mask_test = fs.lincomb_masks()
+
+        #score_train = fs.evaluate_mask(mask_train, 
+        #    meta_train.filter(pl.Series(cat_mask_train))['date'], ytr_tree[cat_mask_train])
+        #score_test  = fs.evaluate_mask(mask_test,  
+        #    meta_test.filter(pl.Series(cat_mask_test))['date'], yte_tree[cat_mask_test])
+        #logger.info(f"  Filtering Score (train) = {score_train}")
+        #logger.info(f"  Filtering Score (test)  = {score_test}")
+
+        #cat_mask_train[cat_mask_train] = mask_train
+        #if mask_test is not None:
+        #    cat_mask_test[cat_mask_test] = mask_test
+
+        logger.info(
+            "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
+            100 * cat_mask_train.mean(),
+            100 * cat_mask_test.mean(),
+        )
 
         return cat_mask_train, cat_mask_test
 
