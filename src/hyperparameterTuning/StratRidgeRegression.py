@@ -20,16 +20,19 @@ class StratRidgeRegression(BaseStrategy):
     (a simple market proxy).  Optuna is then used to tune the ridge
     regularisation strength, feature subset size and selection aggressiveness.
     """
-
-    default_params = {
-        "idxAfterPrediction": 5,
-        "timesteps": 60,
-        "target_option": "last",
-        "min_close": None,
+    expected_load_params = {
+        "LoadupSamples_time_inc_factor": 1,
+        "LoadupSamples_tree_scaling_standard": False,
+        "LoadupSamples_time_scaling_stretch": False,
+    }
+    precompute_params = {
+        "min_close": 20.0,
     }
 
+    base_params = {}
+
     def __init__(self) -> None:
-        self.base_params = dict(self.default_params)
+        pass
 
     # ------------------------------------------------------------------
     # Optuna hooks
@@ -157,14 +160,17 @@ class StratRidgeRegression(BaseStrategy):
     ) -> tuple[np.ndarray, np.ndarray]:
         del Xtr_time, ytr_tree, Xte_time, yte_tree, treenames, timenames
 
+        params = self.precompute_params.copy()
+
         mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
-        min_close = self.base_params.get("min_close")
+        min_close = params.get("min_close")
         threshold = float(min_close)
-        fs_params = self.base_params.copy()
+        fs_params = params
         fs_params[f"FilterSamples_cat_over{threshold: .2f}"] = True
-        fs_params[f"FilterSamples_cat_under10000.0"] = True
+        fs_params[f"FilterSamples_cat_under2000.0"] = True
+
         fs = FilterSamples(
             Xtree_train=Xtr_tree,
             ytree_train=ytr_tree,
@@ -173,7 +179,7 @@ class StratRidgeRegression(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=self.base_params,
+            params=params,
         )
         cat_train, cat_test = fs.categorical_masks()
         mask_train &= cat_train

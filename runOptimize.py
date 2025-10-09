@@ -16,7 +16,7 @@ from src.predictionModule.LoadupSamples import LoadupSamples
 import treetimeParams
 
 timegroup = "group_regOHLCV_over5years"
-stock_group = "group_finanTo2011"
+stock_group = "group_debug"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
@@ -28,21 +28,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-params = treetimeParams.params
-logger.info("Params: %s", params)
+loadup_params = {
+    "idxAfterPrediction": 5,
+    'timesteps': 85,
+    'target_option': 'last',
+    "LoadupSamples_tree_scaling_standard": False,
+    "LoadupSamples_time_scaling_stretch": False,
+    "LoadupSamples_time_inc_factor": 1,
+}
+logger.info("Params: %s", loadup_params)
 
-strategy = StratLGBMOnFiltered()
-logger.info("Using strategy: %s", StratLGBMOnFiltered.__name__)
+strategy = StratLGBLeavesTime()
+logger.info("Using strategy: %s", StratLGBLeavesTime.__name__)
 
 logger.setLevel(logging.DEBUG)
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-optuna_duration = 60 * 60*8
-global_start_date = datetime.date(2014, 1, 1)
+optuna_duration = 60 * 60
+global_start_date = datetime.date(2016, 1, 1)
 final_eval_date = datetime.date(2025, 7, 15)
 n_test_days = 7
-n_splits = 100
+n_splits = 200
 n_startup_trials = 3
-n_training_days_reserved = 2000
+n_training_days_reserved = 1500
 direction = "maximize"
 
 logger.info("Stock group: %s", stock_group)
@@ -65,7 +72,7 @@ if __name__ == "__main__":
         test_dates=test_dates,
         treegroup=stock_group,
         timegroup=timegroup,
-        params=params,
+        params=loadup_params,
     )
     ls.load_samples()
 
@@ -78,7 +85,7 @@ if __name__ == "__main__":
 
     objective = optuna_client.make_objective(
         strategy=strategy, 
-        preset_params=params
+        preset_params=loadup_params
     )
 
     optuna_tuner = OptunaTuning(

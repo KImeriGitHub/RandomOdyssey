@@ -17,14 +17,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 class StratPCAandLeaves(BaseStrategy):
-    default_params = {
-        "idxAfterPrediction": 5,
-        "timesteps": 60,
-        "target_option": "last",
-        "LoadupSamples_tree_scaling_standard": True,
-        "LoadupSamples_time_scaling_stretch": False,
+    expected_load_params = {
         "LoadupSamples_time_inc_factor": 1,
-
+        "LoadupSamples_tree_scaling_standard": False,
+        "LoadupSamples_time_scaling_stretch": False,
+    }
+    precompute_params = {
         "FilterSamples_cat_over20.0": True,
         "FilterSamples_cat_under2000.0": True,
         "FilterSamples_cat_posOneYearReturn": False,
@@ -52,8 +50,10 @@ class StratPCAandLeaves(BaseStrategy):
         "FilterSamples_taylor_weight_slope": 0.43,
     }
 
+    base_params = {}
+
     def __init__(self) -> None:
-        self.base_params = self.default_params
+        pass
 
     # ------------------------------------------------------------------
     # Optuna hooks
@@ -192,6 +192,8 @@ class StratPCAandLeaves(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
+        params = dict(self.precompute_params)
+
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
@@ -203,7 +205,7 @@ class StratPCAandLeaves(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=self.base_params,
+            params=params,
         )
 
         cat_train, cat_test = fs.categorical_masks()
@@ -220,12 +222,12 @@ class StratPCAandLeaves(BaseStrategy):
         #    ytree_test  = yte_tree[cat_mask_test],
         #    meta_train  = meta_train.filter(pl.Series(cat_mask_train)), 
         #    meta_test   = meta_test.filter(pl.Series(cat_mask_test)), 
-        #    params      = self.base_params,
+        #    params      = params,
         #)
 
-        #if self.base_params["FilterSamples_method"] == "taylor":
+        #if params["FilterSamples_method"] == "taylor":
         #    mask_train, mask_test = fs.taylor_feature_masks()
-        #if self.base_params["FilterSamples_method"] == "lincomb":
+        #if params["FilterSamples_method"] == "lincomb":
         #    mask_train, mask_test = fs.lincomb_masks()
 
         #score_train = fs.evaluate_mask(mask_train, 

@@ -16,43 +16,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 class StratLGBLeavesTime(BaseStrategy):
-    default_params = {
-        "idxAfterPrediction": 5,
-        "timesteps": 60,
-        "target_option": "last",
-        "LoadupSamples_tree_scaling_standard": True,
-        "LoadupSamples_time_scaling_stretch": False,
+    expected_load_params = {
         "LoadupSamples_time_inc_factor": 1,
-
-        "FilterSamples_q_up": 0.5,
-        "FilterSamples_method": "taylor",
-        "FilterSamples_days_to_train_end": 4,
-
-        "FilterSamples_cat_over20.0": True,
-        "FilterSamples_cat_under2000.0": True,
-        "FilterSamples_cat_posOneYearReturn": False,
-        "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_doubleFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.95": True,
-        
-        "FilterSamples_lincomb_epochs": 8,
-        "FilterSamples_lincomb_lr": 0.000009,
-        "FilterSamples_lincomb_probs_noise_std": 0.057207,
-        "FilterSamples_lincomb_show_progress": False,
-        "FilterSamples_lincomb_subsample_ratio": 0.527366,
-        "FilterSamples_lincomb_sharpness": 0.78169,
-        "FilterSamples_lincomb_featureratio": 0.8,
-        "FilterSamples_lincomb_itermax": 1,
-        "FilterSamples_lincomb_init_toprand":  3,
-        "FilterSamples_lincomb_batch_size": 2**12,
-
-        "FilterSamples_taylor_horizon_days": 6,
-        "FilterSamples_taylor_roll_window_days": 6,
-        "FilterSamples_taylor_weight_slope": 0.85,
+        "LoadupSamples_tree_scaling_standard": False,
+        "LoadupSamples_time_scaling_stretch": False,
     }
 
+    precompute_params = {
+        "FilterSamples_q_up": 0.6,
+        "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_under2000": True,
+        "FilterSamples_cat_posOneYearReturn": False,
+        "FilterSamples_cat_posFiveYearReturn": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.8": True
+    }
+
+    base_params = {}
+
     def __init__(self) -> None:
-        self.base_params = self.default_params
+        pass
 
     # ------------------------------------------------------------------
     # Optuna hooks
@@ -200,6 +182,8 @@ class StratLGBLeavesTime(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
+        params = self.precompute_params
+
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
@@ -211,7 +195,7 @@ class StratLGBLeavesTime(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=self.base_params,
+            params=params,
         )
 
         cat_train, cat_test = fs_pre.categorical_masks()
@@ -228,7 +212,7 @@ class StratLGBLeavesTime(BaseStrategy):
         #    ytree_test  = yte_tree[cat_mask_test],
         #    meta_train  = meta_train.filter(pl.Series(cat_mask_train)), 
         #    meta_test   = meta_test.filter(pl.Series(cat_mask_test)), 
-        #    params      = self.base_params,
+        #    params      = params,
         #)
 
         #if self.base_params["FilterSamples_method"] == "taylor":

@@ -16,16 +16,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class StratLGBLeavesTree(BaseStrategy):
-    default_params = {
-        "idxAfterPrediction": 5,
-        "timesteps": 60,
-        "target_option": "last",
-        "LoadupSamples_tree_scaling_standard": True,
-        "LoadupSamples_time_scaling_stretch": False,
+    expected_load_params = {
         "LoadupSamples_time_inc_factor": 1,
+        "LoadupSamples_tree_scaling_standard": False,
+        "LoadupSamples_time_scaling_stretch": False,
+    }
 
-        "Cat_q": 0.6,
-
+    precompute_params = {
+        "FilterSamples_q_up": 0.6,
         "FilterSamples_cat_over20.0": False,
         "FilterSamples_cat_under2000.0": False,
         "FilterSamples_cat_posOneYearReturn": False,
@@ -35,7 +33,7 @@ class StratLGBLeavesTree(BaseStrategy):
     }
 
     def __init__(self) -> None:
-        self.base_params = self.default_params
+        pass
 
     # ------------------------------------------------------------------
     # Optuna hooks
@@ -177,6 +175,8 @@ class StratLGBLeavesTree(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
+        params = self.precompute_params
+
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
@@ -188,7 +188,7 @@ class StratLGBLeavesTree(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=self.base_params,
+            params=params,
         )
 
         cat_train, cat_test = fs.categorical_masks()
