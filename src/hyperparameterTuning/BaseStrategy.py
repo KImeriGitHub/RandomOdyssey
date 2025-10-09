@@ -2,12 +2,19 @@ import optuna
 import numpy as np
 import polars as pl
 from abc import ABC, abstractmethod
-
+from typing import ClassVar, Dict, Any
 
 class BaseStrategy(ABC):
     """Interface for Optuna optimisation strategies."""
 
-    base_params: dict = {}
+    # To check the loaded data
+    expected_load_params: ClassVar[Dict[str, Any]]
+    
+    # params needed for precomputation
+    precompute_params: ClassVar[Dict[str, Any]]
+
+    # params needed for scoring
+    base_params: ClassVar[Dict[str, Any]]
 
     @abstractmethod
     def sample_params(self, trial: optuna.Trial) -> dict:

@@ -29,20 +29,24 @@ class StratClusteringLSTM(BaseStrategy):
     through the geometric mean of the selected tree targets.
     """
 
-    default_params = {
-        "idxAfterPrediction": 5,
-        "timesteps": 90,
-        "target_option": "last",
+    expected_load_params = {
+        "LoadupSamples_time_inc_factor": 1,
+        "LoadupSamples_tree_scaling_standard": False,
+        "LoadupSamples_time_scaling_stretch": False,
+    }
+
+    precompute_params = {
         "FilterSamples_q_up": 0.6,
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_under2000": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.8": True,
+        "FilterSamples_cat_highestShareholderEquity_q0.8": True
     }
 
+    base_params = {}
+
     def __init__(self, *, device: str | None = None, random_state: int | None = 0) -> None:
-        self.base_params = dict(self.default_params)
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._random_state = random_state
         self._scaler_cls = StandardScaler
@@ -246,6 +250,8 @@ class StratClusteringLSTM(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
+        params = self.precompute_params
+
         mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
@@ -257,7 +263,7 @@ class StratClusteringLSTM(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=self.base_params,
+            params=params,
         )
         cat_train, cat_test = fs.categorical_masks()
         mask_train &= cat_train

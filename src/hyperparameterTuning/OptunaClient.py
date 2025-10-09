@@ -134,11 +134,19 @@ class OptunaClient:
     # ------------------------------------------------------------------
     # Objective helper
     # ------------------------------------------------------------------
-    def make_objective(self, strategy: BaseStrategy) -> Callable[[optuna.Trial], float]:
+    def make_objective(self, strategy: BaseStrategy, preset_params: dict) -> Callable[[optuna.Trial], float]:
         """Create an Optuna objective callable using the provided strategy."""
 
         slices = self.get_slices()
-        
+
+        #######################
+        ## Check loaded data ##
+        #######################
+        for key, val in strategy.expected_load_params.items():
+            if key in preset_params.keys():
+                if preset_params[key] != val:
+                    raise ValueError(f"Preset param {key} has value {preset_params[key]}, expected {val}.")
+
         ####################
         ## PRE-PROCESSING ##
         ####################

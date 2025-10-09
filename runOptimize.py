@@ -76,7 +76,10 @@ if __name__ == "__main__":
         n_training_days=n_training_days_reserved,
     )
 
-    objective = optuna_client.make_objective(strategy=strategy)
+    objective = optuna_client.make_objective(
+        strategy=strategy, 
+        preset_params=params
+    )
 
     optuna_tuner = OptunaTuning(
         studyname=optuna_study_name,

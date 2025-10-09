@@ -13,39 +13,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 class StratFilterSamples(BaseStrategy):
-    default_params = {
-        "idxAfterPrediction": 5,
-        "timesteps": 60,
-        "target_option": "last",
-        "LoadupSamples_time_scaling_stretch": True,
-        "LoadupSamples_time_inc_factor": 61,
-        
-        "FilterSamples_q_up": 0.96,
-        "FilterSamples_days_to_train_end": 15,
-        
-        "FilterSamples_cat_over20": True,
-        "FilterSamples_cat_under2000.0": True,
-        "FilterSamples_cat_posOneYearReturn": False,
-        "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.5": True,
-        
-        "FilterSamples_lincomb_epochs": 5,
-        "FilterSamples_lincomb_show_progress": False,
-        "FilterSamples_lincomb_featureratio": 0.5,
-        "FilterSamples_lincomb_itermax": 1,
-        "FilterSamples_lincomb_init_toprand": 3,
-        "FilterSamples_lincomb_batch_size": 2**12,
-        "FilterSamples_lincomb_lr": 0.00005,
-        "FilterSamples_lincomb_subsample_ratio": 0.5,
-        "FilterSamples_lincomb_sharpness": 1.0,
-        
-        "FilterSamples_taylor_horizon_days": 50,
-        "FilterSamples_taylor_roll_window_days": 10,
-        "FilterSamples_taylor_weight_slope": 1.268923,
+    expected_load_params = {
+        "LoadupSamples_time_inc_factor": 1,
+        "LoadupSamples_tree_scaling_standard": False,
+        "LoadupSamples_time_scaling_stretch": False,
     }
 
+    preprocess_params = {
+        "FilterSamples_q_up": 0.6,
+        "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_under2000": True,
+        "FilterSamples_cat_posOneYearReturn": False,
+        "FilterSamples_cat_posFiveYearReturn": False,
+        "FilterSamples_cat_highestShareholderEquity_q0.8": True
+    }
+
+    base_params = {}
+
     def __init__(self, filter_method: str) -> None:
-        self.base_params = self.default_params
         if filter_method not in {"lincomb", "taylor"}:
             raise ValueError("filter_method must be either 'lincomb' or 'taylor'.")
         self.filter_method = filter_method
@@ -144,6 +129,8 @@ class StratFilterSamples(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
+        params = dict(self.preprocess_params)
+
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
@@ -155,7 +142,7 @@ class StratFilterSamples(BaseStrategy):
             ytree_test=yte_tree,
             meta_train=meta_train,
             meta_test=meta_test,
-            params=self.base_params,
+            params=params,
         )
 
         cat_train, cat_test = fs.categorical_masks()
