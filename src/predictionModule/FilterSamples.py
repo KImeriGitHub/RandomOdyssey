@@ -41,6 +41,10 @@ class FilterSamples:
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
         "FilterSamples_cat_highestShareholderEquity_q0.5": False,
+        "FilterSamples_cat_topVolatility_qup0.5": False,
+        "FilterSamples_cat_topVolatility_qdown0.5": False,
+        "FilterSamples_cat_topPredictability_qup0.5": False,
+        "FilterSamples_cat_topPredictability_qdown0.5": False,
     }
     
     def __init__(self, 
@@ -58,6 +62,8 @@ class FilterSamples:
         self.Xtree_test = Xtree_test
         self.ytree_test = ytree_test
         self.treenames = treenames
+        self.meta_train = meta_train
+        self.meta_test = meta_test
         self.samples_dates_train = meta_train['date']
         self.samples_dates_test = meta_test['date'] if meta_test is not None else None
         self.closeprices_train = meta_train['Close'].to_numpy()
@@ -199,7 +205,182 @@ class FilterSamples:
 
                 mask_train &= mask_equity_tr
                 mask_test &= mask_equity_te
+                
+        # Apply filter according to something like "FilterSamples_cat_volatility_qup0.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_volatility_qup(\d+(?:\.\d+)?)', k)
+            if v and m:
+                q = float(m.group(1))
+                W = 20  # rolling window (rows) per ticker
 
+                tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
+                te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
+
+                both = pl.concat([tr, te]).sort(["ticker", "date"]).with_columns(
+                    r = pl.col("AdjClose").log().diff().over("ticker"),
+                ).with_columns(
+                    vol_Wd = pl.col("r").rolling_std(window_size=W).over("ticker"),
+                ).with_columns(
+                    thr = pl.col("vol_Wd").quantile(q).over("date"),
+                ).with_columns(
+                    keep = pl.col("vol_Wd").ge(pl.col("thr")).fill_null(False),
+                )
+
+                mask_volat_tr = (
+                    both.filter(pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+                mask_volat_te = (
+                    both.filter(~pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+
+                mask_train &= mask_volat_tr
+                mask_test  &= mask_volat_te
+                
+        # Apply filter according to something like "FilterSamples_cat_volatility_qdown0.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_volatility_qdown(\d+(?:\.\d+)?)', k)
+            if v and m:
+                q = float(m.group(1))
+                W = 20  # rolling window (rows) per ticker
+
+                tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
+                te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
+
+                both = pl.concat([tr, te]).sort(["ticker", "date"]).with_columns(
+                    r = pl.col("AdjClose").log().diff().over("ticker"),
+                ).with_columns(
+                    vol_Wd = pl.col("r").rolling_std(window_size=W).over("ticker"),
+                ).with_columns(
+                    thr = pl.col("vol_Wd").quantile(q).over("date"),
+                ).with_columns(
+                    keep = pl.col("vol_Wd").le(pl.col("thr")).fill_null(False),
+                )
+
+                mask_volat_tr = (
+                    both.filter(pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+                mask_volat_te = (
+                    both.filter(~pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+
+                mask_train &= mask_volat_tr
+                mask_test  &= mask_volat_te
+                
+        # Apply filter according to something like "FilterSamples_cat_predictability_qup0.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_predictability_qup(\d+(?:\.\d+)?)', k)
+            if v and m:
+                q = float(m.group(1))
+                W = 20  # rolling window size
+
+                tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
+                te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
+
+                both = (
+                    pl.concat([tr, te])
+                    .sort(["ticker", "date"])
+                    .with_columns(
+                        r  = pl.col("AdjClose").log().diff().over("ticker"),
+                        r1 = pl.col("AdjClose").log().diff().shift(1).over("ticker"),
+                    )
+                    .with_columns(
+                        mu  = pl.col("r").rolling_mean(W).over("ticker"),
+                        mu1 = pl.col("r1").rolling_mean(W).over("ticker"),
+                        mrr = (pl.col("r")**2).rolling_mean(W).over("ticker"),
+                        m11 = (pl.col("r")*pl.col("r1")).rolling_mean(W).over("ticker"),
+                    )
+                    .with_columns(
+                        v   = pl.col("mrr") - pl.col("mu")**2,
+                        cov = pl.col("m11") - pl.col("mu")*pl.col("mu1"),
+                    )
+                    .with_columns(
+                        ac1 = pl.when(pl.col("v") > 0)
+                                .then((pl.col("cov") / pl.col("v")).clip(-0.999, 0.999))
+                                .otherwise(None)
+                    )
+                    .with_columns(se    = (1 / pl.lit(W)).sqrt())
+                    .with_columns(z     = pl.col("ac1") / pl.col("se"))
+                    .with_columns(score = pl.col("z").abs())
+                    .with_columns(thr   = pl.col("score").quantile(q).over("date"))
+                    .with_columns(keep  = (pl.col("score") >= pl.col("thr")).fill_null(False))
+                )
+
+                mask_predictability_tr = (
+                    both.filter(pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+                mask_predictability_te = (
+                    both.filter(~pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+
+                mask_train &= mask_predictability_tr
+                mask_test  &= mask_predictability_te
+                
+        # Apply filter according to something like "FilterSamples_cat_predictability_qdown0.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_predictability_qdown(\d+(?:\.\d+)?)', k)
+            if v and m:
+                q = float(m.group(1))
+                W = 20  # rolling window size
+
+                tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
+                te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
+
+                both = (
+                    pl.concat([tr, te])
+                    .sort(["ticker", "date"])
+                    .with_columns(
+                        r  = pl.col("AdjClose").log().diff().over("ticker"),
+                        r1 = pl.col("AdjClose").log().diff().shift(1).over("ticker"),
+                    )
+                    .with_columns(
+                        mu  = pl.col("r").rolling_mean(W).over("ticker"),
+                        mu1 = pl.col("r1").rolling_mean(W).over("ticker"),
+                        mrr = (pl.col("r")**2).rolling_mean(W).over("ticker"),
+                        m11 = (pl.col("r")*pl.col("r1")).rolling_mean(W).over("ticker"),
+                    )
+                    .with_columns(
+                        v   = pl.col("mrr") - pl.col("mu")**2,
+                        cov = pl.col("m11") - pl.col("mu")*pl.col("mu1"),
+                    )
+                    .with_columns(
+                        ac1 = pl.when(pl.col("v") > 0)
+                                .then((pl.col("cov") / pl.col("v")).clip(-0.999, 0.999))
+                                .otherwise(None)
+                    )
+                    .with_columns(se    = (1 / pl.lit(W)).sqrt())
+                    .with_columns(z     = pl.col("ac1") / pl.col("se"))
+                    .with_columns(score = pl.col("z").abs())
+                    .with_columns(thr   = pl.col("score").quantile(q).over("date"))
+                    .with_columns(keep  = (pl.col("score") <= pl.col("thr")).fill_null(False))
+                )
+
+                mask_predictability_tr = (
+                    both.filter(pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+                mask_predictability_te = (
+                    both.filter(~pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+
+                mask_train &= mask_predictability_tr
+                mask_test  &= mask_predictability_te
+                
+        
         return mask_train, mask_test
 
     def lincomb_masks(self) -> tuple[np.ndarray, np.ndarray]:

@@ -52,6 +52,18 @@ n_startup_trials = 3
 n_training_days_reserved = 1500
 direction = "maximize"
 
+logger.info("Loadup params:")
+for k, v in loadup_params.items():
+    logger.info("  %s: %s", k, v)
+    
+logger.info("Precomputing params:")
+for k, v in strategy.precompute_params.items():
+    logger.info("  %s: %s", k, v)
+
+logger.info("Base params:")
+for k, v in strategy.base_params.items():
+    logger.info("  %s: %s", k, v)
+
 logger.info("Stock group: %s", stock_group)
 logger.info("Time group: %s", timegroup)
 logger.info("Optuna study name: %s", optuna_study_name)

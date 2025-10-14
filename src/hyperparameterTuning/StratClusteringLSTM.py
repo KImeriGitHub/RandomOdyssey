@@ -36,12 +36,13 @@ class StratClusteringLSTM(BaseStrategy):
     }
 
     precompute_params = {
-        "FilterSamples_q_up": 0.6,
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_under2000": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.8": True
+        "FilterSamples_cat_highestShareholderEquity_q0.6": False,
+        "FilterSamples_cat_volatility_qdown0.05": True,
+        "FilterSamples_cat_predictability_qup0.9": False,
     }
 
     base_params = {}
@@ -60,6 +61,7 @@ class StratClusteringLSTM(BaseStrategy):
         params = dict(self.base_params)
 
         params.update({
+            "val_split":                0.1,
             "t_win":                    trial.suggest_int("t_win", 15, 55, step=5),
             "time_inc_factor":          60,
             "n_clusters":               trial.suggest_int("n_clusters", 3, 8, step=1),
@@ -69,11 +71,11 @@ class StratClusteringLSTM(BaseStrategy):
             "LSTM_dropout":             0.05,
             "LSTM_inter_dropout":       0.05,
             "LSTM_recurrent_dropout":   0.05,
-            "LSTM_epochs":              2,
+            "LSTM_epochs":              30,
             "LSTM_l1":                  0.001,
             "LSTM_l2":                  0.001,
             "LSTM_conv1d_kernel_size":  5,
-            "selection_quantile":       trial.suggest_float("selection_quantile", 0.9, 0.99),
+            "selection_quantile":       trial.suggest_float("selection_quantile", 0.9, 0.99, log=True),
             "min_cluster_train":        500,
         })
 
@@ -99,7 +101,7 @@ class StratClusteringLSTM(BaseStrategy):
         if Xtr_time.ndim != 3 or Xte_time.ndim != 3:
             raise ValueError("Xtr_time and Xte_time must be 3-dimensional arrays.")
 
-        t_win = int(opt_params.get("t_win", self.base_params["timesteps"]))
+        t_win = int(opt_params.get("t_win", 5))
         time_factor = opt_params.get("time_inc_factor")
         n_clusters = int(opt_params.get("n_clusters", 4))
         quantile_val = float(opt_params.get("selection_quantile", 0.95))
@@ -144,10 +146,12 @@ class StratClusteringLSTM(BaseStrategy):
             n_test = int(mask_te.sum())
             if n_train < min_cluster_train:
                 logger.info(
-                    "[LSTM] cluster %s skipped (train size %s < %s)",
+                    "[LSTM] cluster %s skipped (train size %s < %s): ytr_mean=%.4f, yte_mean=%.4f",
                     c,
                     n_train,
                     min_cluster_train,
+                    np.mean(ytr_tree[mask_tr]) if mask_tr.sum() > 0 else float("nan"),
+                    np.mean(yte_tree[mask_te]) if mask_te.sum() > 0 else float("nan"),
                 )
                 continue
 
@@ -158,11 +162,12 @@ class StratClusteringLSTM(BaseStrategy):
                 continue
 
             try:
+                val_split_n = max(1, int(Xc_tr.shape[0] * (1-float(opt_params.get("val_split", 0.1)))))
                 model_c, info = mm.run_LSTM_torch(
-                    X_train=Xc_tr,
-                    y_train=yc_tr,
-                    X_test=None,
-                    y_test=None,
+                    X_train=Xc_tr[:val_split_n],
+                    y_train=yc_tr[:val_split_n],
+                    X_test=Xc_tr[val_split_n:],
+                    y_test=yc_tr[val_split_n:],
                     device=self._device,
                     logger_disabled=True,
                 )

@@ -23,12 +23,13 @@ class StratLGBLeavesTime(BaseStrategy):
     }
 
     precompute_params = {
-        "FilterSamples_q_up": 0.6,
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_under2000": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.8": True
+        "FilterSamples_cat_highestShareholderEquity_q0.6": False,
+        "FilterSamples_cat_volatility_qdown0.025": False,
+        "FilterSamples_cat_predictability_qup0.9": False,
     }
 
     base_params = {}
@@ -41,26 +42,26 @@ class StratLGBLeavesTime(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["LGB_num_boost_round"]           = 5 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
-        opt_params["LGB_lambda_l1"]                 = 0.001 #trial.suggest_float("LGB_lambda_l1", 1e-5, 2e-0, log=True)
-        opt_params["LGB_lambda_l2"]                 = 0.001 #trial.suggest_float("LGB_lambda_l2", 1e-5, 2e-0, log=True)
-        opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.90, 1.0, log=True)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 1200, 3500, step=25)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 3, 31, step=2)
+        opt_params["LGB_num_boost_round"]           = 2 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
+        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.0004, 1.7, log=True)
+        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.0006, 0.9, log=True)
+        opt_params["LGB_feature_fraction"]          = 1.0 #trial.suggest_float("LGB_feature_fraction", 0.90, 1.0, log=True)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 500, 1000, step=25)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 4, 34, step=2)
         opt_params["LGB_learning_rate"]             = 0.1 #trial.suggest_float("LGB_learning_rate", 1e-3, 1e-1, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 50, 2000, step=50)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-5, 5e-1, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 50, 90, step=1)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-6, 8e-1, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 1e-3, 5e-1, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 50, 950, step=50)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 5e-4, 3e-3, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 200, 800, step=5)
         opt_params["LGB_early_stopping_rounds"]     = 20
 
-        opt_params["t_win"]             = trial.suggest_int("t_win", 3, 22)
+        opt_params["t_win"]             = trial.suggest_int("t_win", 3, 8)
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
-        opt_params["do_transform"]      = False #trial.suggest_categorical("do_transform", [True, False])
+        opt_params["do_transform"]      = True #trial.suggest_categorical("do_transform", [True, False])
         opt_params["tree_n_max"]        = 1 #trial.suggest_int("tree_n_max", 5, 75, step=5)
-        opt_params["min_n_tar"]         = 0
-        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 5, 20)  
+        opt_params["min_n_tar"]         = 100 #trial.suggest_int("min_n_tar", 2, 5)
+        opt_params["top_n_max"]         = 200 #trial.suggest_int("top_n_max", 100, 200)  
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -215,9 +216,9 @@ class StratLGBLeavesTime(BaseStrategy):
         #    params      = params,
         #)
 
-        #if self.base_params["FilterSamples_method"] == "taylor":
+        #if self.precompute_params["FilterSamples_method"] == "taylor":
         #    mask_train, mask_test = fs.taylor_feature_masks()
-        #if self.base_params["FilterSamples_method"] == "lincomb":
+        #if self.precompute_params["FilterSamples_method"] == "lincomb":
         #    mask_train, mask_test = fs.lincomb_masks()
 
         #score_train = fs.evaluate_mask(mask_train, 

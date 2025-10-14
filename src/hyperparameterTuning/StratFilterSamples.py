@@ -19,16 +19,31 @@ class StratFilterSamples(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
     }
 
-    preprocess_params = {
-        "FilterSamples_q_up": 0.6,
+    precompute_params = {
+        "FilterSamples_q_up": 0.975,
         "FilterSamples_cat_over20": True,
         "FilterSamples_cat_under2000": True,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.8": True
+        "FilterSamples_cat_highestShareholderEquity_q0.6": True,
+        "FilterSamples_cat_volatility_qdown0.025": False,
+        "FilterSamples_cat_volatility_qup0.975": False,
+        "FilterSamples_cat_predictability_qup0.9": False,
     }
 
-    base_params = {}
+    base_params = {
+        "FilterSamples_lincomb_probs_noise_std": 0.001,
+        "FilterSamples_lincomb_subsample_ratio": 1.0,
+        "FilterSamples_lincomb_sharpness": 1.0,
+        "FilterSamples_lincomb_init_toprand": 3,
+        "FilterSamples_lincomb_featureratio": 0.8,
+        "FilterSamples_lincomb_itermax": 1,
+        
+        "FilterSamples_days_to_train_end": 300,
+        "FilterSamples_taylor_horizon_days": 105,
+        "FilterSamples_taylor_roll_window_days": 105,
+        "FilterSamples_taylor_weight_slope": 0.0,
+    }
 
     def __init__(self, filter_method: str) -> None:
         if filter_method not in {"lincomb", "taylor"}:
@@ -41,21 +56,21 @@ class StratFilterSamples(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         lincomb_space = {
-            "FilterSamples_days_to_train_end": ("int", 10, 35, {"step": 1}),
-            "FilterSamples_lincomb_lr": ("float", 5e-6, 5e-1, {"log": True}),
-            "FilterSamples_lincomb_epochs": ("int", 8, 50, {"step": 1}),
-            "FilterSamples_lincomb_probs_noise_std": ("float", 0.01, 0.1, {"log": True}),
-            "FilterSamples_lincomb_subsample_ratio": ("float", 0.1, 0.7, {}),
-            "FilterSamples_lincomb_sharpness": ("float", 0.5, 1.5, {}),
+            "FilterSamples_days_to_train_end": ("int", 200, 500, {"step": 100}),
+            "FilterSamples_lincomb_lr": ("float", 5e-6, 1e-1, {"log": False}),
+            "FilterSamples_lincomb_epochs": ("int", 1, 11, {"step": 2}),
+            #"FilterSamples_lincomb_probs_noise_std": ("float", 0.01, 0.025, {"log": True}),
+            #"FilterSamples_lincomb_subsample_ratio": ("float", 0.1, 0.8, {}),
+            #"FilterSamples_lincomb_sharpness": ("float", 0.3, 1.5, {}),
             #"FilterSamples_lincomb_init_toprand": ("int", 1, 4, {}),
             #"FilterSamples_lincomb_featureratio": ("float", 0.15, 0.9, {}),
             #"FilterSamples_lincomb_itermax": ("int", 1, 3, {}),
         }
         taylor_space = {
-            "FilterSamples_days_to_train_end": ("int", 3, 8, {"step": 1}),
-            "FilterSamples_taylor_horizon_days": ("int", 2, 8, {"step": 1}),
-            "FilterSamples_taylor_roll_window_days": ("int", 2, 8, {"step": 1}),
-            "FilterSamples_taylor_weight_slope": ("float", 0.1, 4.5, {"log": True}),
+            #"FilterSamples_days_to_train_end": ("int", 200, 500, {"step": 100}),
+            #"FilterSamples_taylor_horizon_days": ("int", 2, 8, {"step": 1}),
+            "FilterSamples_taylor_roll_window_days": ("int", 200, 400, {"step": 100}),
+            #"FilterSamples_taylor_weight_slope": ("float", 0.1, 4.5, {"log": True}),
         }
 
         params = dict(self.base_params)
@@ -129,7 +144,7 @@ class StratFilterSamples(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
-        params = dict(self.preprocess_params)
+        params = dict(self.precompute_params)
 
         cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)

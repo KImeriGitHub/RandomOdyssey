@@ -113,7 +113,7 @@ class StratLGBMOnFiltered(BaseStrategy):
         logger.debug(f"  After design: tr {Xd_tr.shape}, te {Xd_te.shape}")
         logger.debug(f"   ytr_tree: n={ytr_tree.size}, mean={ytr_tree.mean():.6f}, std={ytr_tree.std():.6f}")
 
-        if not self.base_params.get("LoadupSamples_tree_scaling_standard", False):
+        if not opt_params.get("LoadupSamples_tree_scaling_standard", False):
             scaler = StandardScaler().fit(Xd_tr)
             Xd_tr = scaler.transform(Xd_tr)
             Xd_te = scaler.transform(Xd_te)
