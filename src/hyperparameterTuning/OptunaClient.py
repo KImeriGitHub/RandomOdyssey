@@ -11,6 +11,7 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.predictionModule.LoadupSamples import LoadupSamples
 from src.predictionModule.MachineModels import MachineModels as _MachineModels
+from src.hyperparameterTuning.HelperMetrics import HelperMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,10 @@ class OptunaClient:
         ## PRE-PROCESSING ##
         ####################
         preprocess_masks = [None] * self.n_splits
+        preprocess_sl = [None] * self.n_splits
+        preprocess_tp = [None] * self.n_splits
         scores = [None] * self.n_splits
+        scores_direct = [None] * self.n_splits
         for i, (s_tr, s_te) in enumerate(slices):
             Xtr_tree = self.X_tree[s_tr].copy()
             Xtr_time = self.X_time[s_tr].copy()
@@ -163,14 +167,24 @@ class OptunaClient:
             meta_train_slice = self.meta_train[s_tr] if self.meta_train is not None else None
             meta_test_slice = self.meta_train[s_te] if self.meta_train is not None else None
 
+            def default_res():
+                full_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
+                full_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
+                m_tr, m_te = full_mask_train, full_mask_test
+                sl_tr = 0.88 * np.ones(Xtr_tree.shape[0], dtype=float)
+                sl_te = 0.88 * np.ones(Xte_tree.shape[0], dtype=float)
+                tp_tr = 2 * np.ones(Xtr_tree.shape[0], dtype=float)
+                tp_te = 2 * np.ones(Xte_tree.shape[0], dtype=float)
+
+                return m_tr, m_te, sl_tr, sl_te, tp_tr, tp_te
+
             try:
-                mask_train_pre, mask_test_pre = strategy.mask_precompute(
+                mask_tr_pre, mask_te_pre, sl_tr, sl_te, tp_tr, tp_te = strategy.precompute(
                     Xtr_tree,
                     Xtr_time,
                     ytr_tree,
                     Xte_tree,
                     Xte_time,
-                    yte_tree,
                     treenames=self.treenames,
                     timenames=self.timenames,
                     meta_train=meta_train_slice,
@@ -178,16 +192,20 @@ class OptunaClient:
                 )
             except Exception as exc:  # pragma: no cover - defensive
                 logger.exception("mask_precompute failed: %s", exc)
-                full_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
-                full_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
-                mask_train_pre, mask_test_pre = full_mask_train, full_mask_test
+                mask_tr_pre, mask_te_pre, sl_tr, sl_te, tp_tr, tp_te = default_res()
 
-            preprocess_masks[i] = (mask_train_pre, mask_test_pre)
-            scores[i] = np.exp(np.mean(np.log(yte_tree[mask_test_pre])))
+            preprocess_masks[i] = (mask_tr_pre, mask_te_pre)
+            preprocess_sl[i] = (sl_tr, sl_te)
+            preprocess_tp[i] = (tp_tr, tp_te)
+
+            res_vec = HelperMetrics.collapse_sl_tp(yte_tree,sl_te,tp_te)
+            scores[i] = HelperMetrics.evaluate_mask(mask_te_pre, meta_test_slice, res_vec)
+            scores_direct[i] = HelperMetrics.evaluate_mask(mask_te_pre, meta_test_slice, yte_tree)
             
         scores = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores]
+        scores_direct = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores_direct]
         logger.info("Preprocessing complete.")
-        logger.info("Precomputed scores per split (geometric mean of y_test): %s", scores)
+        logger.info("Precomputed scores per split (geometric mean of y_test with sl and tp): %s", scores)
         logger.info("Precomputed geometric mean of scores: %s", float(np.exp(np.mean(np.log(np.array(scores))))))
         logger.info("Precomputed arithmetic mean of scores: %s", float(np.mean(np.array(scores))))
         logger.info("Precomputed variance of scores: %s", float(np.var(np.array(scores))))
@@ -195,6 +213,16 @@ class OptunaClient:
         logger.info("Precomputed min score: %s", float(np.min(np.array(scores))))
         logger.info("Precomputed max score: %s", float(np.max(np.array(scores))))
         logger.info("Precomputed Sharpe ratio (mean/std): %s", (float(np.mean(np.array(scores))) - 1.0) / np.std(np.array(scores)))
+
+        logger.info("")
+        logger.info("Precomputed scores_direct per split (geometric mean of y_test): %s", scores_direct)
+        logger.info("Precomputed geometric mean of scores_direct: %s", float(np.exp(np.mean(np.log(np.array(scores_direct))))))
+        logger.info("Precomputed arithmetic mean of scores_direct: %s", float(np.mean(np.array(scores_direct))))
+        logger.info("Precomputed variance of scores_direct: %s", float(np.var(np.array(scores_direct))))
+        logger.info("Precomputed standard deviation of scores_direct: %s", float(np.std(np.array(scores_direct))))
+        logger.info("Precomputed min score_direct: %s", float(np.min(np.array(scores_direct))))
+        logger.info("Precomputed max score_direct: %s", float(np.max(np.array(scores_direct))))
+        logger.info("Precomputed Sharpe ratio_direct (mean/std): %s", (float(np.mean(np.array(scores_direct))) - 1.0) / np.std(np.array(scores_direct)))
 
         ######################
         ## Objective function
@@ -204,6 +232,7 @@ class OptunaClient:
             logger.info("Trial %s with params: %s", trial.number, opt_params)
 
             scores = []
+            scores_dir = []
             n_valid = 0
             for i, (s_tr, s_te) in enumerate(slices):
                 mask_train_pre, mask_test_pre = preprocess_masks[i]
@@ -219,30 +248,37 @@ class OptunaClient:
                 meta_te = self.meta_train[s_te].filter(pl.Series(mask_test_pre))
 
                 sc = 1.0
+                sc_dir = 1.0
                 try:
-                    sc = strategy.score(
+                    mask_te_pre, sl_te, tp_te = strategy.run(
                         Xtr_tree,
                         Xtr_time,
                         ytr_tree,
                         Xte_tree,
                         Xte_time,
-                        yte_tree,
                         treenames=self.treenames,
                         timenames=self.timenames,
                         meta_train=meta_tr,
                         meta_test=meta_te,
                         opt_params=opt_params,
                     )
+                    res_vec = HelperMetrics.collapse_sl_tp(yte_tree,sl_te,tp_te)
+                    sc = HelperMetrics.evaluate_mask(mask_te_pre, meta_test_slice, res_vec)
+                    sc_dir = HelperMetrics.evaluate_mask(mask_te_pre, meta_test_slice, yte_tree)
                     if sc is not None and np.isfinite(sc):
                         n_valid = n_valid + 1
                         sc = float(sc)
+                        sc_dir = float(sc_dir)
                     else:
                         sc = 1.0
+                        sc_dir = 1.0
                 except Exception as exc:
                     logger.exception("Score computation failed: %s", exc)
                     sc = 1.0
+                    sc_dir = 1.0
 
                 scores.append(float(sc))
+                scores_dir.append(float(sc_dir))
 
             logger.info("Scores per split: %s", scores)
             logger.info("Number of valid scores: %s", n_valid)
@@ -254,7 +290,17 @@ class OptunaClient:
             logger.info("Max score: %s", float(np.max(np.array(scores))))
             logger.info("Sharpe ratio (mean/std): %s", (float(np.mean(np.array(scores))) - 1.0) / np.std(np.array(scores)))
 
-            if np.any(np.array(scores) <= 1e-4):
+            logger.info("")
+            logger.info("Scores no sl and tp per split: %s", scores_dir)
+            logger.info("Geometric mean of scores_dir: %s", float(np.exp(np.mean(np.log(np.array(scores_dir))))))
+            logger.info("Arithmetic mean of scores_dir: %s", float(np.mean(np.array(scores_dir))))
+            logger.info("Variance of scores_dir: %s", float(np.var(np.array(scores_dir))))
+            logger.info("Standard deviation of scores_dir: %s", float(np.std(np.array(scores_dir))))
+            logger.info("Min score_dir: %s", float(np.min(np.array(scores_dir))))
+            logger.info("Max score_dir: %s", float(np.max(np.array(scores_dir))))
+            logger.info("Sharpe ratio_dir (mean/std): %s", (float(np.mean(np.array(scores_dir))) - 1.0) / np.std(np.array(scores_dir)))
+
+            if np.any(np.array(scores) <= 1e-6):
                 logger.info("Pruning trial %s due to negative scores.", trial.number)
                 logger.info("Num of negative scores: %s", np.sum(np.array(scores) <= 1e-4))
                 raise optuna.TrialPruned()

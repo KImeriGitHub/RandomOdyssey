@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 loadup_params = {
     "idxAfterPrediction": 5,
     'timesteps': 85,
-    'target_option': 'last',
     "LoadupSamples_tree_scaling_standard": False,
     "LoadupSamples_time_scaling_stretch": False,
     "LoadupSamples_time_inc_factor": 1,

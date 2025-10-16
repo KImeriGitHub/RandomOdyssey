@@ -16,6 +16,9 @@ from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.predictionModule.FilterSamples import FilterSamples
 from src.predictionModule.MachineModels import MachineModels
 
+from src.hyperparameterTuning.HelperFunctions import HelperFunctions
+from src.hyperparameterTuning.HelperMetrics import HelperMetrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,25 +84,31 @@ class StratClusteringLSTM(BaseStrategy):
 
         return params
 
-    def score(
+    def run(
         self,
         Xtr_tree: np.ndarray,
         Xtr_time: np.ndarray,
         ytr_tree: np.ndarray,
         Xte_tree: np.ndarray,
         Xte_time: np.ndarray,
-        yte_tree: np.ndarray,
         treenames: list[str] | None,
         timenames: list[str] | None,
         meta_train: pl.DataFrame | None,
         meta_test: pl.DataFrame | None,
         opt_params: dict,
-    ) -> float:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Train the clustering LSTM on the provided split and return a score."""
         del Xtr_tree, Xte_tree, treenames, timenames, meta_train, meta_test  #unused
 
         if Xtr_time.ndim != 3 or Xte_time.ndim != 3:
             raise ValueError("Xtr_time and Xte_time must be 3-dimensional arrays.")
+        
+        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        def default_res():
+            m_te = np.zeros(Xte_tree.shape[0], dtype=bool)
+            sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+            tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
+            return m_te, sl_te, tp_te
 
         t_win = int(opt_params.get("t_win", 5))
         time_factor = opt_params.get("time_inc_factor")
@@ -118,7 +127,7 @@ class StratClusteringLSTM(BaseStrategy):
                 n_clusters,
                 Xd_tr.shape[0],
             )
-            return 1.0
+            return default_res()
 
         n_feat = Xtr_time.shape[-1]
         Xseq_tr = Xd_tr.reshape(-1, t_win, n_feat)
@@ -146,12 +155,11 @@ class StratClusteringLSTM(BaseStrategy):
             n_test = int(mask_te.sum())
             if n_train < min_cluster_train:
                 logger.info(
-                    "[LSTM] cluster %s skipped (train size %s < %s): ytr_mean=%.4f, yte_mean=%.4f",
+                    "[LSTM] cluster %s skipped (train size %s < %s): ytr_mean=%.4f",
                     c,
                     n_train,
                     min_cluster_train,
                     np.mean(ytr_tree[mask_tr]) if mask_tr.sum() > 0 else float("nan"),
-                    np.mean(yte_tree[mask_te]) if mask_te.sum() > 0 else float("nan"),
                 )
                 continue
 
@@ -191,12 +199,12 @@ class StratClusteringLSTM(BaseStrategy):
 
         if best_c is None or best_model is None:
             logger.warning("[LSTM] no cluster produced a valid model.")
-            return 1.0
+            return default_res()
 
         mask_te_best = lab_te == best_c
         if not np.any(mask_te_best):
             logger.warning("[LSTM] best cluster %s has no test members.", best_c)
-            return 1.0
+            return default_res()
 
         preds = mm.predict_LSTM_torch(
             best_model,
@@ -206,44 +214,23 @@ class StratClusteringLSTM(BaseStrategy):
         preds = np.asarray(preds)
         if preds.size == 0 or not np.all(np.isfinite(preds)):
             logger.warning("[LSTM] predictions are empty or non-finite.")
-            return 1.0
+            return default_res()
 
         thr = float(np.quantile(preds, quantile_val))
         selection_mask = preds >= thr
-        y_selected = yte_tree[mask_te_best][selection_mask]
-        y_selected = y_selected[np.isfinite(y_selected)]
 
-        if y_selected.size == 0:
-            logger.warning("[LSTM] no test values selected after thresholding.")
-            return 1.0
+        res_mask, sl_vec, tp_vec = default_res()
+        res_mask[mask_te_best] = selection_mask
 
-        score = self._geometric_mean_safe(y_selected)
-        logger.info(
-            "[LSTM] t_win=%s, clusters=%s -> best_cluster=%s, val_rmse=%.6f, "
-            "selected=%s/%s, quantile=%.3f, score=%.6f",
-            t_win,
-            n_clusters,
-            best_c,
-            best_rmse,
-            y_selected.size,
-            mask_te_best.sum(),
-            quantile_val,
-            score,
-        )
+        return res_mask, sl_vec, tp_vec
 
-        if not np.isfinite(score) or score <= 0:
-            return 1.0
-
-        return float(score)
-
-    def mask_precompute(
+    def precompute(
         self,
         Xtr_tree: np.ndarray,
         Xtr_time: np.ndarray,
         ytr_tree: np.ndarray,
         Xte_tree: np.ndarray,
         Xte_time: np.ndarray,
-        yte_tree: np.ndarray,
         treenames: list[str] | None,
         timenames: list[str] | None,
         meta_train: pl.DataFrame | None,
@@ -262,10 +249,10 @@ class StratClusteringLSTM(BaseStrategy):
 
         fs = FilterSamples(
             Xtree_train=Xtr_tree,
-            ytree_train=ytr_tree,
+            ytree_train=ytr_tree[:,-1],
             treenames=treenames,
             Xtree_test=Xte_tree,
-            ytree_test=yte_tree,
+            ytree_test=None,
             meta_train=meta_train,
             meta_test=meta_test,
             params=params,
@@ -275,49 +262,21 @@ class StratClusteringLSTM(BaseStrategy):
         if cat_test is not None:
             mask_test &= cat_test
 
+        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_tr_vec = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        sl_te_vec = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_tr_vec = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        tp_te_vec = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
+
         logger.info(
-            "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
+            "  Precompute -> train kept: %.2f%% | test kept: %.2f%%",
             100 * mask_train.mean(),
             100 * mask_test.mean(),
         )
+        logger.info(
+            "  Precompute -> sl %.2f%% | tp: %.2f%%",
+            sl_val,
+            tp_val,
+        )
 
-        return mask_train, mask_test
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _geometric_mean_safe(arr: Iterable[float]) -> float:
-        """Compute a numerically stable geometric mean."""
-        arr = np.asarray(list(arr), dtype=float)
-        if arr.size == 0:
-            return float("nan")
-        minv = np.min(arr)
-        shift = -minv + 1e-9 if minv <= 0 else 0.0
-        return float(np.exp(np.mean(np.log(arr + shift))))
-
-    @staticmethod
-    def _resolve_feature_indices(category: str | Sequence[int] | None, n_features: int) -> list[int]:
-        """Translate feature selection descriptors into explicit indices."""
-        if category is None:
-            return list(range(n_features))
-        if isinstance(category, Sequence) and not isinstance(category, str):
-            indices = [int(idx) for idx in category]
-            if not indices:
-                raise ValueError("feature indices cannot be empty.")
-            valid = [idx for idx in indices if 0 <= idx < n_features]
-            if not valid:
-                raise ValueError("feature indices are out of range.")
-            return valid
-
-        if category == "first":
-            return [0]
-        if category == "second":
-            return [1] if n_features > 1 else [0]
-        if category == "first_two":
-            return [idx for idx in range(min(2, n_features))]
-        if category == "all":
-            return list(range(n_features))
-
-        raise ValueError(f"Unknown feature category: {category}")
+        return mask_train, mask_test, sl_tr_vec, sl_te_vec, tp_tr_vec, tp_te_vec

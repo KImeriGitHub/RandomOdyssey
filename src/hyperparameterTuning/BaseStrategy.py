@@ -21,34 +21,32 @@ class BaseStrategy(ABC):
         """Sample hyperparameters using the provided Optuna trial object."""
 
     @abstractmethod
-    def score(
+    def run(
         self,
         Xtr_tree: np.ndarray,
         Xtr_time: np.ndarray,
         ytr_tree: np.ndarray,
         Xte_tree: np.ndarray,
         Xte_time: np.ndarray,
-        yte_tree: np.ndarray,
         treenames: list[str],
         timenames: list[str],
         meta_train: pl.DataFrame,
         meta_test: pl.DataFrame,
         opt_params: dict,
-    ) -> float:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Evaluate the model with the given parameters and return a score."""
 
     @abstractmethod
-    def mask_precompute(
+    def precompute(
         self,
         Xtr_tree: np.ndarray,
         Xtr_time: np.ndarray,
         ytr_tree: np.ndarray,
         Xte_tree: np.ndarray,
         Xte_time: np.ndarray,
-        yte_tree: np.ndarray,
         treenames: list[str],
         timenames: list[str],
         meta_train: pl.DataFrame,
         meta_test: pl.DataFrame,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Pre-compute information required before scoring and return masks."""

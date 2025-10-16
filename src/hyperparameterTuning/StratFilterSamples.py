@@ -6,6 +6,7 @@ import datetime
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.predictionModule.FilterSamples import FilterSamples
 from src.predictionModule.MachineModels import MachineModels
+from src.hyperparameterTuning.HelperFunctions import HelperFunctions
 
 from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
 
@@ -80,14 +81,13 @@ class StratFilterSamples(BaseStrategy):
             params.update(self._parse_params(trial, taylor_space))
         return params
 
-    def score(
+    def run(
         self,
         Xtr_tree,
         Xtr_time,
         ytr_tree,
         Xte_tree,
         Xte_time,
-        yte_tree,
         treenames,
         timenames,
         meta_train,
@@ -98,14 +98,18 @@ class StratFilterSamples(BaseStrategy):
 
         fs = FilterSamples(
             Xtree_train=Xtr_tree,
-            ytree_train=ytr_tree,
+            ytree_train=ytr_tree[:, -1],
             treenames=treenames,
             Xtree_test=Xte_tree,
-            ytree_test=yte_tree,
+            ytree_test=None,
             meta_train=meta_train,
             meta_test=meta_test,
             params=opt_params,
         )
+
+        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
 
         if self.filter_method == "lincomb":
             mask_train, mask_test = fs.lincomb_masks()
@@ -117,25 +121,18 @@ class StratFilterSamples(BaseStrategy):
             meta_train["date"],
             ytr_tree,
         )
-        score_test = fs.evaluate_mask(
-            mask_test,
-            meta_test["date"],
-            yte_tree,
-        )
 
         logger.info("  Score (train) = %s", score_train)
-        logger.info("  Score (test)  = %s", score_test)
 
-        return float(score_test)
+        return mask_test, sl_te, tp_te
 
-    def mask_precompute(
+    def precompute(
         self,
         Xtr_tree,
         Xtr_time,
         ytr_tree,
         Xte_tree,
         Xte_time,
-        yte_tree,
         treenames,
         timenames,
         meta_train,
@@ -146,24 +143,24 @@ class StratFilterSamples(BaseStrategy):
 
         params = dict(self.precompute_params)
 
-        cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
-        cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
+        mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
+        mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
         fs = FilterSamples(
             Xtree_train=Xtr_tree,
-            ytree_train=ytr_tree,
+            ytree_train=ytr_tree[:, -1],
             treenames=treenames,
             Xtree_test=Xte_tree,
-            ytree_test=yte_tree,
+            ytree_test=None,
             meta_train=meta_train,
             meta_test=meta_test,
             params=params,
         )
 
         cat_train, cat_test = fs.categorical_masks()
-        cat_mask_train &= cat_train
+        mask_train &= cat_train
         if cat_test is not None:
-            cat_mask_test &= cat_test
+            mask_test &= cat_test
 
         if self.filter_method == "taylor":
             dates_tr = meta_train["date"].unique().sort()
@@ -172,15 +169,26 @@ class StratFilterSamples(BaseStrategy):
             start_day = last_day - datetime.timedelta(days=n_max_days_to_consider)
             
             filtered_train_mask: pl.Series = (meta_train["date"] >= start_day) & (meta_train["date"] <= last_day)
-            cat_mask_train &= filtered_train_mask.fill_null(False).to_numpy()
+            mask_train &= filtered_train_mask.fill_null(False).to_numpy()
+
+        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_tr_vec = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        sl_te_vec = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_tr_vec = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        tp_te_vec = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
 
         logger.info(
             "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
-            100 * cat_mask_train.mean(),
-            100 * cat_mask_test.mean(),
+            100 * mask_train.mean(),
+            100 * mask_test.mean(),
+        )
+        logger.info(
+            "  Precompute -> sl %.2f%% | tp: %.2f%%",
+            sl_val,
+            tp_val,
         )
 
-        return cat_mask_train, cat_mask_test
+        return mask_train, mask_test, sl_tr_vec, sl_te_vec, tp_tr_vec, tp_te_vec
 
     # ------------------------------------------------------------------
     # Helpers

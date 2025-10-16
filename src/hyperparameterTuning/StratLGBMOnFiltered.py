@@ -9,8 +9,8 @@ from sklearn.preprocessing import StandardScaler
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.predictionModule.FilterSamples import FilterSamples
 from src.predictionModule.MachineModels import MachineModels
-
-from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
+from src.hyperparameterTuning.HelperFunctions import HelperFunctions
+from src.hyperparameterTuning.HelperMetrics import HelperMetrics
 
 import logging
 logger = logging.getLogger(__name__)
@@ -91,14 +91,13 @@ class StratLGBMOnFiltered(BaseStrategy):
         params.update(opt_params)
         return params
 
-    def score(
+    def run(
         self,
         Xtr_tree,
         Xtr_time,
         ytr_tree,
         Xte_tree,
         Xte_time,
-        yte_tree,
         treenames,
         timenames,
         meta_train,
@@ -110,7 +109,10 @@ class StratLGBMOnFiltered(BaseStrategy):
         Xd_tr, ytr_tree = Xtr_tree, ytr_tree
         Xd_te, yte_tree = Xte_tree, yte_tree
 
-        logger.debug(f"  After design: tr {Xd_tr.shape}, te {Xd_te.shape}")
+        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
+
         logger.debug(f"   ytr_tree: n={ytr_tree.size}, mean={ytr_tree.mean():.6f}, std={ytr_tree.std():.6f}")
 
         if not opt_params.get("LoadupSamples_tree_scaling_standard", False):
@@ -150,50 +152,19 @@ class StratLGBMOnFiltered(BaseStrategy):
                 .rank(method="random", descending=True)
                 .over("date")
                 .alias("prediction_rank")
-            ).filter(pl.col("prediction_rank") <= m)
+            )
         )
-        agg_exprs = [
-            pl.col("prediction_ratio").max().alias("max_pred"),  # this is also .first()
-            pl.col("prediction_ratio").log().mean().exp().alias("mean_pred"),
-            pl.col("target_ratio").log().mean().exp().alias("mean_res"),
-            pl.col("target_ratio")
-                .sort_by(pl.col("prediction_ratio"), descending=True)
-                .first()
-                .alias("top_res"),
-            pl.len().alias("n_entries"),
-        ]
-        test_df_perdate = meta_pl_filtered.group_by("date").agg(agg_exprs).sort("date")
-        
-        if test_df_perdate.height == 0:
-            pred_meanlast = pred_toplast = res_meanlast = res_toplast = predmeanmean = 1.0
-        else:
-            predmeanmean  = test_df_perdate["mean_pred"].mean()
-            pred_meanlast = test_df_perdate["mean_pred"].item(-1)
-            pred_toplast  = test_df_perdate["max_pred"].item(-1)
-            res_meanlast  = test_df_perdate["mean_res"].item(-1)
-            res_toplast   = test_df_perdate["top_res"].item(-1)
-        res_sum_n = int(test_df_perdate["n_entries"].sum())
-        
-        score = res_meanlast
+        mask_te = meta_pl_filtered["prediction_rank"].to_numpy() <= m
 
-        # Final  Analysis
-        logger.info(f"  Final top last prediction ratio: {pred_toplast:.4f}")
-        logger.info(f"  Final last mean prediction ratio: {pred_meanlast:.4f}")
-        logger.info(f"  Final top last P/L Ratio: {res_toplast:.4f}")
-        logger.info(f"  Final mean last P/L Ratio: {res_meanlast:.4f}")
-        logger.info(f"  Number of entries: {res_sum_n}")
-        logger.info(f"  Score value: {score:.4f}")
+        return mask_te, sl_te, tp_te
 
-        return float(score) if np.isfinite(score) else 1.0
-
-    def mask_precompute(
+    def precompute(
         self,
         Xtr_tree,
         Xtr_time,
         ytr_tree,
         Xte_tree,
         Xte_time,
-        yte_tree,
         treenames,
         timenames,
         meta_train,
@@ -204,34 +175,34 @@ class StratLGBMOnFiltered(BaseStrategy):
 
         params = self.precompute_params
 
-        cat_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
-        cat_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
+        mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
+        mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
 
         fs_pre = FilterSamples(
             Xtree_train=Xtr_tree,
-            ytree_train=ytr_tree,
+            ytree_train=ytr_tree[:,-1],
             treenames=treenames,
             Xtree_test=Xte_tree,
-            ytree_test=yte_tree,
+            ytree_test=None,
             meta_train=meta_train,
             meta_test=meta_test,
             params=params,
         )
 
         cat_train, cat_test = fs_pre.categorical_masks()
-        cat_mask_train &= cat_train
+        mask_train &= cat_train
         if cat_test is not None:
-            cat_mask_test &= cat_test
+            mask_test &= cat_test
 
         ### MAIN FILTERING
         fs = FilterSamples(
-            Xtree_train = Xtr_tree[cat_mask_train], 
-            ytree_train = ytr_tree[cat_mask_train], 
+            Xtree_train = Xtr_tree[mask_train], 
+            ytree_train = ytr_tree[mask_train], 
             treenames   = treenames,
-            Xtree_test  = Xte_tree[cat_mask_test],
-            ytree_test  = yte_tree[cat_mask_test],
-            meta_train  = meta_train.filter(pl.Series(cat_mask_train)), 
-            meta_test   = meta_test.filter(pl.Series(cat_mask_test)), 
+            Xtree_test  = Xte_tree[mask_test],
+            ytree_test  = None,
+            meta_train  = meta_train.filter(pl.Series(mask_train)), 
+            meta_test   = meta_test.filter(pl.Series(mask_test)), 
             params      = params,
         )
 
@@ -240,24 +211,35 @@ class StratLGBMOnFiltered(BaseStrategy):
         if params["FilterSamples_method"] == "lincomb":
             mask_train, mask_test = fs.lincomb_masks()
 
-        score_train = fs.evaluate_mask(mask_train, 
-            meta_train.filter(pl.Series(cat_mask_train))['date'], ytr_tree[cat_mask_train])
-        score_test  = fs.evaluate_mask(mask_test,  
-            meta_test.filter(pl.Series(cat_mask_test))['date'], yte_tree[cat_mask_test])
+        score_train = fs.evaluate_mask(
+            mask_train, 
+            meta_train.filter(pl.Series(mask_train))['date'], 
+            ytr_tree[mask_train][:, -1]
+        )
         logger.info(f"  Filtering Score (train) = {score_train}")
-        logger.info(f"  Filtering Score (test)  = {score_test}")
 
-        cat_mask_train[cat_mask_train] = mask_train
+        mask_train[mask_train] = mask_train
         if mask_test is not None:
-            cat_mask_test[cat_mask_test] = mask_test
+            mask_test[mask_test] = mask_test
+
+        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_tr_vec = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        sl_te_vec = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_tr_vec = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        tp_te_vec = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
 
         logger.info(
-            "  Pre-masks -> train kept: %.2f%% | test kept: %.2f%%",
-            100 * cat_mask_train.mean(),
-            100 * cat_mask_test.mean(),
+            "  Precompute -> train kept: %.2f%% | test kept: %.2f%%",
+            100 * mask_train.mean(),
+            100 * mask_test.mean(),
+        )
+        logger.info(
+            "  Precompute -> sl %.2f%% | tp: %.2f%%",
+            sl_val,
+            tp_val,
         )
 
-        return cat_mask_train, cat_mask_test
+        return mask_train, mask_test, sl_tr_vec, sl_te_vec, tp_tr_vec, tp_te_vec
 
     # ------------------------------------------------------------------
     # Helpers
