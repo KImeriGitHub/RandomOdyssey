@@ -19,7 +19,6 @@ class LoadupSamples:
         "daysAfterPrediction": None,
         "idxAfterPrediction": 10,
         'timesteps': 20,
-        'target_option': 'last',
         
         "LoadupSamples_time_inc_factor": 10,
         "LoadupSamples_tree_scaling_standard": True,
@@ -48,7 +47,6 @@ class LoadupSamples:
         self.daysAfter = self.params.get('daysAfterPrediction', None)
         self.idxAfter = self.params.get('idxAfterPrediction', None)
         self.timesteps = self.params['timesteps']
-        self.target_option = self.params['target_option']
         
         self.featureTreeNames: list[str] | None = None
         self.featureTimeNames: list[str] | None = None
@@ -69,7 +67,7 @@ class LoadupSamples:
         """
         is_test_env = (
             self.test_ytree is not None 
-            and self.test_ytime is not None
+            or self.test_ytime is not None
         )
         
         # Check for same shape
@@ -128,7 +126,6 @@ class LoadupSamples:
         new.daysAfter = self.daysAfter
         new.idxAfter = self.idxAfter
         new.timesteps = self.timesteps
-        new.target_option = self.target_option
 
         # Helpers
         def _c_arr(a): return None if a is None else (a.copy() if deep else a)
@@ -277,7 +274,9 @@ class LoadupSamples:
             self.test_Xtime = all_Xtime_pre[mask_at_test_dates]
         
         # Assign target
-        tar_all = meta_pl["target_ratio"].to_numpy().flatten()
+        tar_all = meta_pl.select([
+            pl.col(f"target_ratio_at{i}")for i in range(1, self.idxAfter + 1)
+        ]).to_numpy().flatten()
         
         rat_inbetween = tar_all[mask_inbetween_date]
         rat_at_test_date = tar_all[mask_at_test_dates]
@@ -450,41 +449,6 @@ class LoadupSamples:
 
         date_expr = pl.col("date").shift(-idx_after).over("ticker").alias("target_date")
 
-        # get target close price after idx_after days
-        last_expr = (
-            pl.col("AdjClose")
-            .shift(-idx_after)
-            .over("ticker")
-            .alias("target_last_close")
-        )
-
-        # get mean over all future close prices after idx_after days
-        mean_expr = (
-            pl.col("AdjClose")
-            .shift(-idx_after)
-            .rolling_mean(window_size=max(idx_after//2,1))
-            .over("ticker")
-            .alias("target_mean_close")
-        )
-
-        # get max over all future close prices after idx_after days
-        max_expr = (
-            pl.col("AdjClose")
-            .shift(-idx_after)
-            .rolling_max(window_size=idx_after)
-            .over("ticker")
-            .alias("target_max_close")
-        )
-        
-        if self.target_option == 'last':
-            option_expr = last_expr.alias("target_price")
-        elif self.target_option == 'mean':
-            option_expr = mean_expr.alias("target_price")
-        elif self.target_option == 'max':
-            option_expr = max_expr.alias("target_price")
-        else:
-            raise ValueError(f"Unknown target option: {self.target_option}. Choose from 'last', 'mean', or 'max'.")
-        
         # For keeping track of intermediate prices
         allclose_exprs = [
             (
@@ -494,16 +458,18 @@ class LoadupSamples:
             for i in range(1, idx_after + 1)
         ]
 
-        meta_pl = meta_pl.with_columns(
-            [date_expr] + 
-            allclose_exprs + 
-            [last_expr] + [mean_expr] + [max_expr] + 
-            [option_expr]
-        )
+        meta_pl = meta_pl.with_columns([date_expr] + allclose_exprs)
         
-        meta_pl = meta_pl.with_columns((pl.col("Open")*(pl.col("AdjClose")/pl.col("Close"))).alias("AdjOpen"))
-        meta_pl = meta_pl.with_columns(pl.col("AdjOpen").shift(-1).over("ticker").alias("NextDayAdjOpen"))
-        meta_pl = meta_pl.with_columns((pl.col("target_price") / pl.col("NextDayAdjOpen")).alias("target_ratio"))
+        meta_pl = (
+            meta_pl.with_columns(
+                (pl.col("Open")*(pl.col("AdjClose")/pl.col("Close"))).alias("AdjOpen")
+            ).with_columns(
+                pl.col("AdjOpen").shift(-1).over("ticker").alias("NextDayAdjOpen")
+            ).with_columns([
+                pl.col(f"target_close_at{i}") / pl.col("NextDayAdjOpen").alias(f"target_ratio_at{i}")
+                for i in range(1, idx_after + 1)
+            ])
+        )
 
         return meta_pl
     
@@ -534,7 +500,8 @@ class LoadupSamples:
             return self.idxAfter
         
         # Otherwise, only daysAfter is specified
-        return calc_idx_after
+        self.idxAfter = calc_idx_after
+        return self.idxAfter
     
     def __calc_trading_days(self, meta_pl: pl.DataFrame, days_After: int) -> int:
         """
@@ -567,15 +534,16 @@ class LoadupSamples:
             X = self.train_Xtree
             y = self.train_ytree
             bad_train_X = (~np.isfinite(X) | (np.abs(X) > threshold_biggness)).any(axis=1)
-            bad_train_y = ~np.isfinite(y) | (np.abs(y) > threshold_biggness)
-            if bad_train_y.sum():
-                logger.info(f"Non-finite/too-large values in train y tree: {bad_train_y.sum()} samples.")
+            bad_train_y = (~np.isfinite(y) | (np.abs(y) > threshold_biggness)).any(axis=1)
             if bad_train_X.sum():
                 logger.info(f"Non-finite/too-large values in train X tree: {bad_train_X.sum()} samples.")
+            if bad_train_y.sum():
+                logger.info(f"Non-finite/too-large values in train y tree: {bad_train_y.sum()} samples.")
+
             mask_train &= ~(bad_train_X | bad_train_y)
 
         if self.timegroup is not None:
-            bad_ytime = ~np.isfinite(self.train_ytime)
+            bad_ytime = (~np.isfinite(self.train_ytime)).any(axis=1)
             if bad_ytime.sum() > 0:
                 logger.info(f"Non-finite/too-large values in train y time: {bad_ytime.sum()} samples.")
             mask_train &= ~bad_ytime

@@ -155,7 +155,7 @@ def test_strat_filter_samples_mask_precompute_shapes(monkeypatch) -> None:
         "meta_train": ls.meta_pl_train,
     }
 
-    masks = strategy.mask_precompute(
+    masks = strategy.precompute(
         ls.train_Xtree,
         ls.train_Xtime,
         ls.train_ytree,
@@ -183,7 +183,7 @@ def test_strat_filter_samples_score_with_stub(monkeypatch) -> None:
         "treenames": ls.featureTreeNames,
         "meta_train": ls.meta_pl_train,
     }
-    mask_params = strategy.mask_precompute(
+    mask_params = strategy.precompute(
         ls.train_Xtree,
         ls.train_Xtime,
         ls.train_ytree,

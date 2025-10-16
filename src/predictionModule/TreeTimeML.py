@@ -72,13 +72,13 @@ class TreeTimeML:
         
         self.train_Xtree = ls.train_Xtree
         self.train_Xtime = ls.train_Xtime
-        self.train_ytree = ls.train_ytree
-        self.train_ytime = ls.train_ytime
+        self.train_ytree = ls.train_ytree[:,-1] # Working Hack until reworked
+        self.train_ytime = ls.train_ytime[:,-1] # Working Hack until reworked
         
         self.test_Xtree = ls.test_Xtree
         self.test_Xtime = ls.test_Xtime
-        self.test_ytree = ls.test_ytree
-        self.test_ytime = ls.test_ytime
+        self.test_ytree = ls.test_ytree[:,-1] # Working Hack until reworked
+        self.test_ytime = ls.test_ytime[:,-1] # Working Hack until reworked
 
         self.mask_train = np.ones(self.train_Xtree.shape[0], dtype=bool)
         self.mask_test = np.ones(self.test_Xtree.shape[0], dtype=bool)
