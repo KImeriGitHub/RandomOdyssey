@@ -55,6 +55,7 @@ groups_features = {
     "group_finanTo2011": (feature_classes_noFourier, 'Tree'),
     "group_over20Years": ([FMTS, FTATS], 'Time'),
     "group_regOHLCV_over5years": ([FLSTM], 'Time'),
+    "group_mt5": (feature_classes, 'Tree'),
 }
 lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
 month_horizons = [1, 2, 4, 6, 8, 12]
