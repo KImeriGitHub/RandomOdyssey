@@ -1,11 +1,7 @@
 # 18.Oct.2025
 mt5tickers:
   - AAL
-  - ACHC
   - ADBE
-  - ADI
-  - ADP
-  - AKAM
   - AMAT
   - AMD
   - AMGN
@@ -13,123 +9,82 @@ mt5tickers:
   - AMZN
   - APA
   - ARCC
-  - ARWR
   - AVGO
-  - BLDR
-  - BLK
   - BMRN
-  - BRKR
-  - CGNX
-  - CHTR
+  - CINF
   - CMCSA
-  - CME
-  - COLM
   - COST
   - CPRT
-  - CROX
   - CRWD
+  - CSGP
   - CSX
+  - CTAS
   - CTSH
   - DBX
-  - DDOG
-  - DLTR
   - DOCU
-  - DOX
-  - DXCM
   - EA
-  - EBAY
-  - ENPH
-  - ETSY
-  - A
-  - AA
-  - ABBV
+  - EXEL
   - ABT
-  - ACN
   - ADM
   - AEP
   - AES
-  - AFG
   - AFL
   - AIG
   - AL
-  - AMT
-  - ANET
-  - AON
+  - AMP
   - AOS
-  - APH
-  - ARMK
+  - ASH
   - AVTR
+  - AWK
   - BAC
-  - BAH
-  - BAX
-  - BBY
   - BEN
   - BJ
-  - BK
   - BKR
   - BMY
   - BRKb
   - BSX
   - BWA
+  - BYD
   - C
   - CAG
-  - CAH
   - CARR
-  - CB
-  - CCK
+  - CCI
   - CCL
-  - CF
-  - CFG
-  - CHD
-  - CHWY
-  - CIEN
   - CL
   - CLF
   - CLX
-  - CMA
   - CMG
-  - CMI
-  - CMS
   - CNC
   - CNP
   - COF
   - COO
   - COP
-  - CRM
   - CTLT
-  - CTVA
+  - CVNA
   - CVS
   - D
   - DAL
   - DAY
   - DD
-  - DG
+  - DELL
   - DHI
-  - DHR
   - DOV
-  - DT
+  - DPZ
   - DTE
-  - DUK
   - DVN
-  - EHC
-  - EIX
   - EL
   - ELAN
-  - ELV
+  - EMR
   - EOG
   - EQH
-  - EQT
   - ES
   - ESTC
-  - ETR
+  - ETN
   - EVRG
   - EXC
-  - EXPD
   - FAST
   - F
   - FCX
-  - FDS
-  - FDX
   - FE
   - FHN
   - FI
@@ -138,164 +93,151 @@ mt5tickers:
   - FIS
   - FLS
   - FMC
-  - FOX
   - FOXA
-  - FRPT
+  - FSLR
   - FTNT
-  - FTV
   - GAP
   - GGG
+  - GEN
   - GIS
   - GLW
   - GM
-  - GNRC
+  - GMED
   - GILD
-  - GNTX
   - GPC
-  - GPK
+  - GPN
   - GOOG
   - GOOGL
   - GT
   - GTLS
-  - H
   - HALO
-  - HAS
   - HBAN
   - HAL
-  - HIG
+  - HELE
+  - HLT
+  - HOG
+  - HOLX
   - HSIC
   - HON
   - HPE
   - HPQ
   - HUN
+  - IBKR
   - ICE
+  - IFF
   - INGR
+  - IP
   - IPG
-  - ISRG
+  - JKHY
   - KHC
+  - LKQ
+  - LNT
   - LRCX
-  - ITT
+  - LSCC
+  - IR
   - IVZ
   - JCI
-  - JEF
   - K
+  - KBR
   - KDP
   - KEY
-  - KKR
+  - KEYS
   - KMB
   - KMI
-  - KMX
   - KR
-  - L
-  - LEN
-  - LEVI
-  - LLY
-  - LMT
-  - LNC
-  - LOW
+  - LH
   - LUV
-  - LVS
+  - LW
   - LYFT
+  - LYB
   - LYV
-  - M
-  - MA
-  - MAS
-  - MCHP
+  - MAN
   - MDLZ
   - MDT
   - MET
+  - MGM
   - META
   - MNST
   - MMC
   - MO
-  - MODG
   - MOS
   - MRNA
   - MRVL
   - MS
   - MSTR
+  - MTD
   - MU
-  - NBIX
   - NCLH
-  - NDAQ
   - NEE
   - NEM
-  - NI
+  - NFLX
   - NOV
   - NOW
-  - NTRS
-  - NSC
+  - NTAP
+  - NUE
   - NVDA
-  - NWSA
-  - ODFL
   - OKE
   - OLN
-  - OMC
-  - OMF
+  - OMCL
   - ON
   - ORCL
-  - ORI
-  - OTIS
   - ORLY
   - OXY
   - PANW
-  - PAYX
+  - PCAR
   - PEG
   - PENN
   - PEP
-  - PHM
   - PINS
-  - PLD
   - PNFP
   - PM
-  - PNC
   - PPL
   - PRU
+  - PTC
   - PYPL
   - QCOM
   - RF
+  - RGA
+  - RH
   - RHI
-  - RMD
-  - RNG
-  - ROKU
+  - RJF
   - ROL
-  - RPM
-  - RS
-  - RTX
-  - SAIC
+  - ROST
+  - RRR
   - SCHW
-  - SCI
   - SBUX
-  - SHW
-  - SJM
-  - SLM
   - SLB
+  - SNA
   - SNAP
   - SO
-  - SRE
-  - STLD
+  - SPGI
+  - SRPT
   - STT
-  - SWKS
+  - STZ
   - SYF
-  - SYY
   - T
+  - TAP
   - TFC
   - TMUS
-  - TROW
+  - TRMB
+  - TSCO
   - TSLA
-  - TTD
-  - TTEK
-  - TXN
+  - ULTA
+  - UTHR
   - VRSN
   - VRTX
   - VTRS
   - AAPL
+  - AXP
   - BA
+  - CAT
   - CSCO
   - CVX
   - DIS
   - DOW
   - GE
+  - GS
+  - HD
   - IBM
   - INTC
   - JNJ
@@ -307,50 +249,37 @@ mt5tickers:
   - NKE
   - PFE
   - PG
-  - TRV
   - UNH
   - V
   - VZ
   - WMT
   - XOM
   - TGT
-  - TJX
-  - TPR
-  - TREX
+  - TRU
   - TSN
-  - TWLO
-  - TXT
-  - TYL
   - UAL
   - UBER
   - UGI
   - UNP
   - UPS
   - USB
-  - USFD
   - VFC
-  - VLO
-  - VOYA
-  - VST
-  - VVV
-  - WAL
-  - WEC
+  - WAT
   - WFC
-  - WH
   - WM
   - WMB
   - WRB
+  - WSM
   - WTRG
   - WU
   - X
-  - XYL
-  - YUM
-  - ZBH
-  - ZTS
+  - YETI
   - WDAY
   - XEL
-  - ZG
+  - XRAY
+  - ZION
+  - ZM
+  - ZS
   - ZWS
   - COIN
-  - XYZ
-  - SGI
+  - BRSL
