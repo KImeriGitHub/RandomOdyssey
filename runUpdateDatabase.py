@@ -18,6 +18,7 @@ from src.stockGroupsService.GroupDebug import GroupDebug
 from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
 from src.stockGroupsService.GroupFinanTo2016 import GroupFinanTo2016
 from src.stockGroupsService.GroupRegOHLCVOver5Years import GroupOHLCVOver5Years
+from src.stockGroupsService.GroupMT5 import GroupMT5
 
 formatted_date = datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
@@ -38,7 +39,8 @@ groupClasses = [
     GroupDebug(),
     GroupFinanTo2011(),
     GroupFinanTo2016(),
-    GroupOHLCVOver5Years()
+    GroupOHLCVOver5Years(),
+    GroupMT5(),
 ]
 
 def get_apiKey() -> str:
