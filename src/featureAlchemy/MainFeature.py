@@ -100,6 +100,9 @@ class MainFeature():
             ("Close",    "f8"),
             ("AdjClose", "f8"),
             ("Open",     "f8"),
+            ("High",     "f8"),
+            ("Low",      "f8"),
+            
         ]  # Fields: date, ticker, Close, AdjClose, Open
 
         # 2) Allocate the structured array for meta information
@@ -122,10 +125,18 @@ class MainFeature():
             a.shareprice["Open"].gather(self.idxAssets_at[t]).to_numpy()
             for t, a in (self.assets.items())
         ]).transpose()
+        metaarr["High"] = np.array([
+            a.shareprice["High"].gather(self.idxAssets_at[t]).to_numpy()
+            for t, a in (self.assets.items())
+        ]).transpose()
+        metaarr["Low"] = np.array([
+            a.shareprice["Low"].gather(self.idxAssets_at[t]).to_numpy()
+            for t, a in (self.assets.items())
+        ]).transpose()
 
         # 5) Create a mask: True where all price columns are not NaN, False otherwise
         mask = np.ones((nD, nA), dtype=bool)
-        fields_list_containing_nan = ["Close", "AdjClose", "Open"]
+        fields_list_containing_nan = ["Close", "AdjClose", "Open", "High", "Low"]
         for field in fields_list_containing_nan:
             mask &= ~np.isnan(metaarr[field])
 
