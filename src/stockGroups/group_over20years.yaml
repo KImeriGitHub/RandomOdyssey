@@ -79,7 +79,6 @@
 - AMAT
 - AMD
 - AME
-- AMED
 - AMG
 - AMGN
 - AMKR
@@ -103,7 +102,6 @@
 - AP
 - APA
 - APD
-- APDN
 - APH
 - APOG
 - APT
@@ -167,7 +165,6 @@
 - AZO
 - AZTA
 - AZZ
-- B
 - BA
 - BAC
 - BAK
@@ -208,12 +205,10 @@
 - BFS
 - BG
 - BGC
-- BGFV
 - BH
 - BHB
 - BHC
 - BHE
-- BHLB
 - BHP
 - BHRB
 - BIIB
@@ -245,11 +240,9 @@
 - BP
 - BPOP
 - BRC
-- BRFS
 - BRID
 - BRK-A
 - BRK-B
-- BRKL
 - BRKR
 - BRN
 - BRO
@@ -309,6 +302,11 @@
 - CCNE
 - CCOI
 - CCRD
+- CCRN
+- CCU
+- CDE
+- CDNS
+- CDP
 - CDZI
 - CECO
 - CENT
@@ -341,7 +339,6 @@
 - CINF
 - CIVB
 - CIX
-- CKX
 - CL
 - CLAR
 - CLB
@@ -414,7 +411,6 @@
 - CRUS
 - CRVL
 - CRWS
-- CSCI
 - CSCO
 - CSGP
 - CSGS
@@ -472,6 +468,10 @@
 - DE
 - DECK
 - DENN
+- DEO
+- DGICA
+- DGICB
+- DGII
 - DGX
 - DHC
 - DHI
@@ -495,7 +495,6 @@
 - DOX
 - DRD
 - DRI
-- DRRX
 - DSGR
 - DSGX
 - DSS
@@ -503,6 +502,7 @@
 - DTE
 - DUK
 - DVA
+- DVAX
 - DVN
 - DWSN
 - DX
@@ -560,7 +560,6 @@
 - EQT
 - ERIC
 - ERIE
-- ERJ
 - ERNA
 - ES
 - ESCA
@@ -620,7 +619,6 @@
 - FIX
 - FIZZ
 - FKWL
-- FL
 - FLEX
 - FLG
 - FLL
@@ -711,6 +709,7 @@
 - GME
 - GNSS
 - GNTX
+- GOOD
 - GPC
 - GPI
 - GPK
@@ -777,11 +776,11 @@
 - HSBC
 - HSIC
 - HSII
-- HSON
 - HST
 - HSTM
 - HSY
 - HTBK
+- HTH
 - HTLD
 - HTO
 - HUBG
@@ -898,9 +897,6 @@
 - KFY
 - KGC
 - KIM
-- KINS
-- KLAC
-- KLIC
 - KMB
 - KMPR
 - KMT
@@ -984,7 +980,6 @@
 - M
 - MAA
 - MAC
-- MAG
 - MAGN
 - MAN
 - MANH
@@ -1013,7 +1008,6 @@
 - MDU
 - MED
 - MEI
-- MEIP
 - MEOH
 - MERC
 - MET
@@ -1053,7 +1047,6 @@
 - MO
 - MOD
 - MODG
-- MODV
 - MOG-A
 - MOG-B
 - MOH
@@ -1207,7 +1200,6 @@
 - OPCH
 - OPHC
 - OPK
-- OPOF
 - OPY
 - ORCL
 - ORI
@@ -1296,7 +1288,6 @@
 - POOL
 - POWI
 - POWL
-- PPBI
 - PPC
 - PPG
 - PPL
@@ -1461,7 +1452,6 @@
 - SJT
 - SKM
 - SKT
-- SKX
 - SKY
 - SKYW
 - SLAB
@@ -1497,7 +1487,6 @@
 - SPGI
 - SPH
 - SPNS
-- SPTN
 - SPXC
 - SQM
 - SR
@@ -1512,7 +1501,6 @@
 - SSL
 - SSP
 - SSRM
-- SSY
 - SSYS
 - STAA
 - STBA
@@ -1523,7 +1511,7 @@
 - STM
 - STRA
 - STRL
-- STRM
+- STRR
 - STRS
 - STRT
 - STT
@@ -1731,7 +1719,6 @@
 - WAFD
 - WASH
 - WAT
-- WBA
 - WBS
 - WCC
 - WCN
@@ -1780,6 +1767,7 @@
 - WTS
 - WULF
 - WVVI
+- WW
 - WWD
 - WWW
 - WY

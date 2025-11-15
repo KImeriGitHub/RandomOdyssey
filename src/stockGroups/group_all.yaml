@@ -46,7 +46,6 @@
 - ADAP
 - ADBE
 - ADC
-- ADD
 - ADEA
 - ADI
 - ADM
@@ -186,7 +185,6 @@
 - APA
 - APAM
 - APD
-- APDN
 - APEI
 - APH
 - APLD
@@ -305,7 +303,6 @@
 - AZO
 - AZTA
 - AZZ
-- B
 - BA
 - BABA
 - BAC
@@ -372,7 +369,6 @@
 - BHB
 - BHC
 - BHE
-- BHLB
 - BHP
 - BHR
 - BHRB
@@ -541,6 +537,15 @@
 - CCO
 - CCOI
 - CCRD
+- CCRN
+- CCS
+- CCU
+- CCZ
+- CDE
+- CDNA
+- CDNS
+- CDP
+- CDR-P-B
 - CDTX
 - CDW
 - CDXS
@@ -603,7 +608,6 @@
 - CIVB
 - CIVI
 - CIX
-- CKX
 - CL
 - CLAR
 - CLB
@@ -647,7 +651,6 @@
 - CNA
 - CNC
 - CNET
-- CNFR
 - CNH
 - CNI
 - CNK
@@ -786,8 +789,6 @@
 - CXT
 - CXW
 - CYBR
-- CYCC
-- CYCCP
 - CYD
 - CYH
 - CYRX
@@ -823,6 +824,11 @@
 - DECK
 - DEI
 - DENN
+- DEO
+- DG
+- DGICA
+- DGICB
+- DGII
 - DGLY
 - DGX
 - DHC
@@ -895,7 +901,6 @@
 - EBAY
 - EBF
 - EBMT
-- EBR
 - EBR-B
 - EBS
 - EBTC
@@ -975,7 +980,6 @@
 - ERIC
 - ERIE
 - ERII
-- ERJ
 - ERNA
 - ES
 - ESBA
@@ -1246,6 +1250,12 @@
 - GNRC
 - GNSS
 - GNTX
+- GNW
+- GOGL
+- GOGO
+- GOOD
+- GOOG
+- GOOGL
 - GORO
 - GOVX
 - GP
@@ -1461,7 +1471,6 @@
 - INN
 - INO
 - INOD
-- INPX
 - INSG
 - INSM
 - INTC
@@ -1582,11 +1591,6 @@
 - KGEI
 - KHC
 - KIM
-- KINS
-- KIRK
-- KKR
-- KLAC
-- KLIC
 - KMB
 - KMDA
 - KMI
@@ -1781,7 +1785,6 @@
 - MDXG
 - MED
 - MEI
-- MEIP
 - MELI
 - MEOH
 - MER-P-K
@@ -2033,7 +2036,6 @@
 - NVDA
 - NVEC
 - NVEE
-- NVFY
 - NVGS
 - NVMI
 - NVO
@@ -2055,7 +2057,6 @@
 - NXRT
 - NXST
 - NYCB-P-U
-- NYMT
 - NYT
 - O
 - OBLG
@@ -2131,7 +2132,6 @@
 - OSPN
 - OSUR
 - OTEX
-- OTRK
 - OTTR
 - OUT
 - OVBC

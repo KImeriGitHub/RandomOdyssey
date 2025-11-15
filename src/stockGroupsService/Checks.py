@@ -38,6 +38,10 @@ class Checks:
         mask_quar = df['fiscalDateEnding'].apply(lambda ts: pd.to_datetime(ts)) >= start
         df['fiscalDateEnding'] = pd.to_datetime(df['fiscalDateEnding'])
         df['reportedDate'] = pd.to_datetime(df['reportedDate'])
+        if not df["fiscalDateEnding"].is_monotonic_increasing:
+            return False
+        if not df["reportedDate"].is_monotonic_increasing:
+            return False
         last_date = df['reportedDate'].max()
         cutoff = today - pd.Timedelta(days=70) # 2 months + buffer for delayed informations
         if last_date >= cutoff:
@@ -52,6 +56,8 @@ class Checks:
   
         sp: pd.DataFrame = asset.shareprice.copy()
         sp['Date'] = pd.to_datetime(sp['Date'])
+        if not sp["Date"].is_monotonic_increasing:
+            return False
         df = sp[sp['Date'] >= start]
   
         # Check if the shareprice has more than 250*years entries
@@ -78,6 +84,8 @@ class Checks:
         today: pd.Timestamp = pd.to_datetime(datetime.now())
         sp: pd.DataFrame = asset.shareprice.copy()
         sp['Date'] = pd.to_datetime(sp['Date'])
+        if not sp["Date"].is_monotonic_increasing:
+            return False
         df = sp[sp['Date'] >= start]
         
         if df.empty:
@@ -102,6 +110,8 @@ class Checks:
             return False
         
         sp['Date'] = pd.to_datetime(sp['Date'])
+        if not sp["Date"].is_monotonic_increasing:
+            return False
         start: pd.Timestamp = sp['Date'].min()
         end: pd.Timestamp = sp['Date'].max()
 
