@@ -60,6 +60,13 @@ class LoadupSamples:
         self.train_Xtime: np.array | None = None
         self.train_ytree: np.array | None = None
         self.train_ytime: np.array | None = None
+        
+        self.train_ytree_low: np.array | None = None
+        self.train_ytree_open: np.array | None = None
+        self.train_ytree_high: np.array | None = None
+        self.test_ytree_low: np.array | None = None
+        self.test_ytree_open: np.array | None = None
+        self.test_ytree_high: np.array | None = None
 
     def dataset_tests(self) -> None:
         """
@@ -83,6 +90,10 @@ class LoadupSamples:
                 logger.error("Number of features in training data does not match the number of tree feature names.")
             if len(self.meta_pl_train['date']) != self.train_Xtree.shape[0]:
                 logger.error("Number of sample dates does not match the number of training samples.")
+            if np.ndim(self.train_ytree) != 2 or self.train_ytree.shape[1] != self.idxAfter:
+                logger.error("Training time labels do not match expected shape.")
+            if np.ndim(self.test_ytree) != 2 or self.test_ytree.shape[1] != self.idxAfter:
+                logger.error("Test time labels do not match expected shape.")
 
         if self.timegroup is not None:
             if self.train_Xtime.shape[2] != self.test_Xtime.shape[2]:
@@ -96,6 +107,10 @@ class LoadupSamples:
                 logger.error("Number of features in training data does not match the number of time feature names.")
             if len(self.meta_pl_train['date']) != self.train_Xtime.shape[0]:
                 logger.error("Number of sample dates does not match the number of training samples.")
+            if np.ndim(self.train_ytime) != 2 or self.train_ytime.shape[1] != self.idxAfter:
+                logger.error("Training time labels do not match expected shape.")
+            if np.ndim(self.test_ytime) != 2 or self.test_ytime.shape[1] != self.idxAfter:
+                logger.error("Test time labels do not match expected shape.")
         
         if not self.meta_pl_train['date'].is_sorted():
             logger.error("Sample dates are not sorted. Please sort them before proceeding.")
@@ -105,6 +120,14 @@ class LoadupSamples:
             logger.error("Sample dates should be pandas Timestamp objects.")
         if is_test_env and not all(isinstance(date, datetime.date) for date in self.meta_pl_test['date']):
             logger.error("Sample dates for test set should be pandas Timestamp objects.")
+        if not self.meta_pl_train.select(['date', 'ticker']).is_unique().all(ignore_nulls=False):
+            n_unique = self.meta_pl_train.select(['date', 'ticker']).n_unique()
+            len_tr = len(self.meta_pl_train)
+            logger.error("Duplicate entries found in training metadata for the same date and ticker. Unique pairs: %d, Total entries: %d", n_unique, len_tr)
+        if is_test_env and not self.meta_pl_test.select(['date', 'ticker']).is_unique().all(ignore_nulls=False):
+            n_unique = self.meta_pl_test.select(['date', 'ticker']).n_unique()
+            len_te = len(self.meta_pl_test)
+            logger.error("Duplicate entries found in test metadata for the same date and ticker. Unique pairs: %d, Total entries: %d", n_unique, len_te)
 
     def copy(self, *, deep: bool = True) -> "LoadupSamples":
         """Return a copy of this instance.
@@ -147,6 +170,13 @@ class LoadupSamples:
         new.test_Xtime  = _c_arr(self.test_Xtime)
         new.test_ytree  = _c_arr(self.test_ytree)
         new.test_ytime  = _c_arr(self.test_ytime)
+
+        new.train_ytree_low = _c_arr(self.train_ytree_low)
+        new.train_ytree_open = _c_arr(self.train_ytree_open)
+        new.train_ytree_high = _c_arr(self.train_ytree_high)
+        new.test_ytree_low = _c_arr(self.test_ytree_low)
+        new.test_ytree_open = _c_arr(self.test_ytree_open)
+        new.test_ytree_high = _c_arr(self.test_ytree_high)
 
         return new
 
@@ -203,6 +233,9 @@ class LoadupSamples:
                     "Close":    meta_data["Close"],
                     "AdjClose": meta_data["AdjClose"],
                     "Open":     meta_data["Open"],
+                    "Low":      meta_data["Low"],
+                    "High":     meta_data["High"],
+                    "Volume":   meta_data["Volume"],
                 })
 
                 if cat == "Tree":
@@ -222,6 +255,9 @@ class LoadupSamples:
             metatime_pl: pl.DataFrame = pl.concat(meta_alltime_pl_list)
             alltime_X_pre: np.ndarray = np.concatenate(alltime_X_list, axis=0)
 
+        assert metatree_pl.get_column("date").is_sorted() if self.treegroup is not None else True
+        assert metatime_pl.get_column("date").is_sorted() if self.timegroup is not None else True
+
         if self.treegroup is not None and self.timegroup is not None:
             meta_pl, all_Xtree_pre, all_Xtime_pre = self.__combine_tree_and_time(
                 metatree_pl, metatime_pl, alltree_X_pre, alltime_X_pre
@@ -234,6 +270,18 @@ class LoadupSamples:
             meta_pl = metatree_pl
             all_Xtree_pre = alltree_X_pre
             all_Xtime_pre = None
+            
+        # Drop duplicates in meta_pl within column ticker and date  
+        # # TODO: fix feature generation to avoid this step
+        mask_dub_series = meta_pl.select(
+            pl.struct(["date", "ticker"]).is_first_distinct()
+        ).to_series()
+        mask_dub_np = mask_dub_series.to_numpy()
+
+        meta_pl = meta_pl.filter(mask_dub_series)
+        all_Xtree_pre = all_Xtree_pre[mask_dub_np] if all_Xtree_pre is not None else None
+        all_Xtime_pre = all_Xtime_pre[mask_dub_np] if all_Xtime_pre is not None else None
+        assert meta_pl.select(['date', 'ticker']).is_unique().all(ignore_nulls=False)
 
         # Check if test dates are trading dates and modify if necessary
         modified_test_dates = copy.deepcopy(self.test_dates)
@@ -246,9 +294,9 @@ class LoadupSamples:
         self.max_test_date = self.test_dates[-1]
 
         # Add target
-        meta_pl = meta_pl.sort(["date", "ticker"])
+        assert meta_pl.select(["date", "ticker"]).equals(meta_pl.sort(["date", "ticker"]).select(["date", "ticker"]))
         meta_pl = self.__add_target(meta_pl)
-        meta_pl = meta_pl.sort(["date", "ticker"])
+        assert meta_pl.select(["date", "ticker"]).equals(meta_pl.sort(["date", "ticker"]).select(["date", "ticker"]))
         
         # Assign Main Variables
         mask_at_test_dates = (
@@ -275,21 +323,37 @@ class LoadupSamples:
         
         # Assign target
         tar_all = meta_pl.select([
-            pl.col(f"target_ratio_at{i}")for i in range(1, self.idxAfter + 1)
-        ]).to_numpy().flatten()
-        
+            pl.col(f"target_ratio_at{i}") for i in range(1, self.idxAfter + 1)
+        ]).to_numpy().reshape(-1, self.idxAfter)
+        tar_all_low = meta_pl.select([
+            pl.col(f"target_low_ratio_at{i}") for i in range(1, self.idxAfter + 1)
+        ]).to_numpy().reshape(-1, self.idxAfter)    
+        tar_all_high = meta_pl.select([
+            pl.col(f"target_high_ratio_at{i}") for i in range(1, self.idxAfter + 1)
+        ]).to_numpy().reshape(-1, self.idxAfter)
+        tar_all_open = meta_pl.select([
+            pl.col(f"target_open_ratio_at{i}") for i in range(1, self.idxAfter + 1)
+        ]).to_numpy().reshape(-1, self.idxAfter)
+
         rat_inbetween = tar_all[mask_inbetween_date]
         rat_at_test_date = tar_all[mask_at_test_dates]
         
-        if self.treegroup is not None:
-            self.train_ytree = np.clip(rat_inbetween, 1e-2, 1e2)
-            self.test_ytree = np.clip(rat_at_test_date, 1e-2, 1e2)
+        self.train_ytree = np.clip(rat_inbetween, 1e-2, 1e2)
+        self.test_ytree  = np.clip(rat_at_test_date, 1e-2, 1e2)
+        self.train_ytree_low  = np.clip(tar_all_low[mask_inbetween_date], 1e-2, 1e2)
+        self.train_ytree_high = np.clip(tar_all_high[mask_inbetween_date], 1e-2, 1e2)
+        self.train_ytree_open = np.clip(tar_all_open[mask_inbetween_date], 1e-2, 1e2)
+        self.test_ytree_low   = np.clip(tar_all_low[mask_at_test_dates], 1e-2, 1e2)
+        self.test_ytree_high  = np.clip(tar_all_high[mask_at_test_dates], 1e-2, 1e2)
+        self.test_ytree_open  = np.clip(tar_all_open[mask_at_test_dates], 1e-2, 1e2)
         
+        def to_time(x, inc_factor):
+            return np.clip(np.tanh(np.log(np.clip(x, 1e-6, None)) * inc_factor) / 2.0 + 0.5, 1e-6, 1 - 1e-6)
         if self.timegroup is not None:
             inc_factor = self.params["LoadupSamples_time_inc_factor"]
-            self.train_ytime = np.tanh((rat_inbetween - 1.0) * inc_factor) / 2.0 + 0.5
-            self.test_ytime = np.tanh((rat_at_test_date - 1.0) * inc_factor) / 2.0 + 0.5
-        
+            self.train_ytime = to_time(rat_inbetween, inc_factor)
+            self.test_ytime = to_time(rat_at_test_date, inc_factor)
+
         # Clean Data
         self.__remove_nan_samples_train()
         
@@ -317,8 +381,8 @@ class LoadupSamples:
         idx_tree = meta_pl["idx_tree"].to_numpy()
         idx_time = meta_pl["idx_time"].to_numpy()
 
-        alltree_X = all_tree_X[idx_tree]
-        alltime_X = all_time_X[idx_time]
+        all_tree_X_postshape = all_tree_X[idx_tree]
+        all_time_X_postshape = all_time_X[idx_time]
 
         # Assert resulting np length
         assert len(idx_tree) == len(idx_time), "Tree and Time indices must match in length."
@@ -339,7 +403,7 @@ class LoadupSamples:
 
         meta_pl = meta_pl.drop(["idx_tree", "idx_time", "AdjClose_time","Close_time","Open_time"])
 
-        return meta_pl, alltree_X, alltime_X
+        return meta_pl, all_tree_X_postshape, all_time_X_postshape
 
     def split_dataset(self, 
         start_date: datetime.date, 
@@ -384,9 +448,33 @@ class LoadupSamples:
                 ], 
                 axis = 0
             )
+            self.test_ytree_high = np.concatenate(
+                [
+                    self.train_ytree_high[train_split_te_mask], 
+                    self.test_ytree_high[test_split_mask]
+                ], 
+                axis = 0
+            )
+            self.test_ytree_low = np.concatenate(
+                [
+                    self.train_ytree_low[train_split_te_mask], 
+                    self.test_ytree_low[test_split_mask]
+                ], 
+                axis = 0
+            )
+            self.test_ytree_open = np.concatenate(
+                [
+                    self.train_ytree_open[train_split_te_mask], 
+                    self.test_ytree_open[test_split_mask]
+                ], 
+                axis = 0
+            )
 
             self.train_Xtree = self.train_Xtree[train_split_tr_mask]
             self.train_ytree = self.train_ytree[train_split_tr_mask]
+            self.train_ytree_high = self.train_ytree_high[train_split_tr_mask]
+            self.train_ytree_low  = self.train_ytree_low[train_split_tr_mask]
+            self.train_ytree_open = self.train_ytree_open[train_split_tr_mask]
 
         # Time
         if self.timegroup is not None:
@@ -427,7 +515,14 @@ class LoadupSamples:
             self.train_ytree = self.train_ytree[mask_train]
             self.test_Xtree = self.test_Xtree[mask_test]
             self.test_ytree = self.test_ytree[mask_test]
-        
+            
+            self.train_ytree_high = self.train_ytree_high[mask_train]
+            self.train_ytree_low  = self.train_ytree_low[mask_train]
+            self.train_ytree_open = self.train_ytree_open[mask_train]
+            self.test_ytree_high = self.test_ytree_high[mask_test]
+            self.test_ytree_low  = self.test_ytree_low[mask_test]
+            self.test_ytree_open = self.test_ytree_open[mask_test]
+
         if self.timegroup is not None:
             self.train_Xtime = self.train_Xtime[mask_train]
             self.train_ytime = self.train_ytime[mask_train]
@@ -445,28 +540,62 @@ class LoadupSamples:
     def __add_target(self, meta_pl: pl.DataFrame):
         idx_after = self.__determine_idx_after(meta_pl)
         
-        meta_pl = meta_pl.sort(["date", "ticker"])
+        # get adj low, adj high, adj open
+        meta_pl = (
+            meta_pl.with_columns([
+                (pl.col("Low") * (pl.col("AdjClose") / pl.col("Close"))).alias("AdjLow"),
+                (pl.col("High") * (pl.col("AdjClose") / pl.col("Close"))).alias("AdjHigh"),
+                (pl.col("Open") * (pl.col("AdjClose") / pl.col("Close"))).alias("AdjOpen")
+            ])
+        )
 
-        date_expr = pl.col("date").shift(-idx_after).over("ticker").alias("target_date")
+        target_dates = pl.col("date").shift(-idx_after).over("ticker", order_by="date").alias("target_date")
 
         # For keeping track of intermediate prices
-        allclose_exprs = [
-            (
-                pl.col("AdjClose").shift(-i).over("ticker")
-                * (pl.col("Close") / pl.col("AdjClose"))
-            ).alias(f"target_close_at{i}")
+        target_adj_close_exprs = [
+            pl.col("AdjClose").shift(-i).over("ticker", order_by="date").alias(f"target_adj_close_at{i}")
+            for i in range(1, idx_after + 1)
+        ]
+        target_adj_low_exprs = [
+            pl.col("AdjLow").shift(-i).over("ticker", order_by="date").alias(f"target_adj_low_at{i}")
+            for i in range(1, idx_after + 1)
+        ]
+        target_adj_high_exprs = [
+            pl.col("AdjHigh").shift(-i).over("ticker", order_by="date").alias(f"target_adj_high_at{i}")
+            for i in range(1, idx_after + 1)
+        ]
+        target_adj_open_exprs = [
+            pl.col("AdjOpen").shift(-i).over("ticker", order_by="date").alias(f"target_adj_open_at{i}")
             for i in range(1, idx_after + 1)
         ]
 
-        meta_pl = meta_pl.with_columns([date_expr] + allclose_exprs)
+        meta_pl = meta_pl.with_columns(
+            [target_dates] 
+            + target_adj_close_exprs
+            + target_adj_low_exprs
+            + target_adj_high_exprs
+            + target_adj_open_exprs
+        )
         
         meta_pl = (
             meta_pl.with_columns(
-                (pl.col("Open")*(pl.col("AdjClose")/pl.col("Close"))).alias("AdjOpen")
-            ).with_columns(
-                pl.col("AdjOpen").shift(-1).over("ticker").alias("NextDayAdjOpen")
-            ).with_columns([
-                pl.col(f"target_close_at{i}") / pl.col("NextDayAdjOpen").alias(f"target_ratio_at{i}")
+                pl.col("AdjOpen").shift(-1).over("ticker", order_by="date").alias("NextDayAdjOpen")
+            )
+        )
+        
+        # close price ratio to next day's adjusted open
+        meta_pl = (
+            meta_pl.with_columns([
+                (pl.col(f"target_adj_close_at{i}") / pl.col("NextDayAdjOpen")).alias(f"target_ratio_at{i}")
+                for i in range(1, idx_after + 1)
+            ]).with_columns([
+                (pl.col(f"target_adj_low_at{i}") / pl.col("NextDayAdjOpen")).alias(f"target_low_ratio_at{i}")
+                for i in range(1, idx_after + 1)
+            ]).with_columns([
+                (pl.col(f"target_adj_high_at{i}") / pl.col("NextDayAdjOpen")).alias(f"target_high_ratio_at{i}")
+                for i in range(1, idx_after + 1)
+            ]).with_columns([
+                (pl.col(f"target_adj_open_at{i}") / pl.col("NextDayAdjOpen")).alias(f"target_open_ratio_at{i}")
                 for i in range(1, idx_after + 1)
             ])
         )
@@ -554,6 +683,9 @@ class LoadupSamples:
         if self.treegroup is not None:
             self.train_Xtree = self.train_Xtree[mask_train]
             self.train_ytree = self.train_ytree[mask_train]
+            self.train_ytree_low  = self.train_ytree_low[mask_train]
+            self.train_ytree_high = self.train_ytree_high[mask_train]
+            self.train_ytree_open = self.train_ytree_open[mask_train]
         if self.timegroup is not None:
             self.train_Xtime = self.train_Xtime[mask_train]
             self.train_ytime = self.train_ytime[mask_train]
@@ -574,6 +706,9 @@ class LoadupSamples:
         if self.treegroup is not None:
             self.test_Xtree = self.test_Xtree[mask_test]
             self.test_ytree = self.test_ytree[mask_test]
+            self.test_ytree_low  = self.test_ytree_low[mask_test]
+            self.test_ytree_high = self.test_ytree_high[mask_test]
+            self.test_ytree_open = self.test_ytree_open[mask_test]
         if self.timegroup is not None:
             self.test_Xtime = self.test_Xtime[mask_test]
             self.test_ytime = self.test_ytime[mask_test]
