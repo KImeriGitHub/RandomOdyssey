@@ -35,16 +35,17 @@ class FilterSamples:
         "FilterSamples_taylor_roll_window_days": 20,
         "FilterSamples_taylor_weight_slope": 0.2,
 
-        "FilterSamples_cat_over20": True,
+        "FilterSamples_cat_over20": False,
         "FilterSamples_cat_under1700": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_doubleFiveYearReturn": False,
         "FilterSamples_cat_highestShareholderEquity_q0.5": False,
-        "FilterSamples_cat_topVolatility_qup0.5": False,
-        "FilterSamples_cat_topVolatility_qdown0.5": False,
-        "FilterSamples_cat_topPredictability_qup0.5": False,
-        "FilterSamples_cat_topPredictability_qdown0.5": False,
+        "FilterSamples_cat_topVolatility_w20_qup0.5": False,
+        "FilterSamples_cat_topVolatility_w20_qdown0.5": False,
+        "FilterSamples_cat_topPredictability_w20_qup0.5": False,
+        "FilterSamples_cat_topPredictability_w20_qdown0.5": False,
+        "FilterSamples_cat_volumeprice_w20_q0.5": False,
     }
     
     def __init__(self, 
@@ -84,7 +85,10 @@ class FilterSamples:
         else:
             self.samples_dates_test = self.samples_dates_test
             
-        self.params = {**self.default_params, **(params or {})}
+        if params is None:
+            self.params = self.default_params
+        else:
+            self.params = params
         
         self.__simple_tests()
 
@@ -206,20 +210,54 @@ class FilterSamples:
                 mask_train &= mask_equity_tr
                 mask_test &= mask_equity_te
                 
-        # Apply filter according to something like "FilterSamples_cat_volatility_qup0.5"
+        # Apply filter according to something like "FilterSamples_cat_volumeprice_w20_q0.5"
         for k, v in self.params.items():
-            m = re.fullmatch(r'FilterSamples_cat_volatility_qup(\d+(?:\.\d+)?)', k)
+            m = re.fullmatch(r'FilterSamples_cat_volumeprice(?:_w(\d+))?_q(\d+(?:\.\d+)?)', k)
             if v and m:
-                q = float(m.group(1))
-                W = 20  # rolling window (rows) per ticker
+                q = float(m.group(2))
+                W = int(m.group(1)) if m.group(1) else 20  # rolling window (rows) per ticker
 
                 tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
                 te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
 
                 both = pl.concat([tr, te]).sort(["ticker", "date"]).with_columns(
-                    r = pl.col("AdjClose").log().diff().over("ticker"),
+                    vp = pl.col("Volume") * pl.col("Close"),
                 ).with_columns(
-                    vol_Wd = pl.col("r").rolling_std(window_size=W).over("ticker"),
+                    vp_Wd = pl.col("vp").rolling_mean(window_size=W, min_samples=1).over("ticker", order_by='date'),
+                ).with_columns(
+                    thr = pl.col("vp_Wd").quantile(q).over("date"),
+                ).with_columns(
+                    keep = pl.col("vp_Wd").ge(pl.col("thr")).fill_null(False),
+                )
+
+                mask_vp_tr = (
+                    both.filter(pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+                mask_vp_te = (
+                    both.filter(~pl.col("is_train"))
+                        .sort("row_idx")
+                        .select("keep").to_series().to_numpy()
+                )
+
+                mask_train &= mask_vp_tr
+                mask_test  &= mask_vp_te
+                
+        # Apply filter according to something like "FilterSamples_cat_volatility_w20_qup0.5"
+        for k, v in self.params.items():
+            m = re.fullmatch(r'FilterSamples_cat_volatility(?:_w(\d+))?_qup(\d+(?:\.\d+)?)', k)
+            if v and m:
+                q = float(m.group(2))
+                W = int(m.group(1)) if m.group(1) else 20  # rolling window (rows) per ticker
+
+                tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
+                te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
+
+                both = pl.concat([tr, te]).sort(["ticker", "date"]).with_columns(
+                    r = pl.col("AdjClose").log().diff().over("ticker", order_by='date'),
+                ).with_columns(
+                    vol_Wd = pl.col("r").rolling_std(window_size=W, min_samples=1).over("ticker", order_by='date'),
                 ).with_columns(
                     thr = pl.col("vol_Wd").quantile(q).over("date"),
                 ).with_columns(
@@ -240,20 +278,20 @@ class FilterSamples:
                 mask_train &= mask_volat_tr
                 mask_test  &= mask_volat_te
                 
-        # Apply filter according to something like "FilterSamples_cat_volatility_qdown0.5"
+        # Apply filter according to something like "FilterSamples_cat_volatility_w20_qdown0.5"
         for k, v in self.params.items():
-            m = re.fullmatch(r'FilterSamples_cat_volatility_qdown(\d+(?:\.\d+)?)', k)
+            m = re.fullmatch(r'FilterSamples_cat_volatility(?:_w(\d+))?_qdown(\d+(?:\.\d+)?)', k)
             if v and m:
-                q = float(m.group(1))
-                W = 20  # rolling window (rows) per ticker
+                q = float(m.group(2))
+                W = int(m.group(1)) if m.group(1) else 20  # rolling window (rows) per ticker
 
                 tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
                 te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
 
                 both = pl.concat([tr, te]).sort(["ticker", "date"]).with_columns(
-                    r = pl.col("AdjClose").log().diff().over("ticker"),
+                    r = pl.col("AdjClose").log().diff().over("ticker", order_by='date'),
                 ).with_columns(
-                    vol_Wd = pl.col("r").rolling_std(window_size=W).over("ticker"),
+                    vol_Wd = pl.col("r").rolling_std(window_size=W, min_samples=1).over("ticker"),
                 ).with_columns(
                     thr = pl.col("vol_Wd").quantile(q).over("date"),
                 ).with_columns(
@@ -274,12 +312,12 @@ class FilterSamples:
                 mask_train &= mask_volat_tr
                 mask_test  &= mask_volat_te
                 
-        # Apply filter according to something like "FilterSamples_cat_predictability_qup0.5"
+        # Apply filter according to something like "FilterSamples_cat_predictability_w20_qup0.5"
         for k, v in self.params.items():
-            m = re.fullmatch(r'FilterSamples_cat_predictability_qup(\d+(?:\.\d+)?)', k)
+            m = re.fullmatch(r'FilterSamples_cat_predictability(?:_w(\d+))?_qup(\d+(?:\.\d+)?)', k)
             if v and m:
-                q = float(m.group(1))
-                W = 20  # rolling window size
+                q = float(m.group(2))
+                W = int(m.group(1)) if m.group(1) else 20  # rolling window size
 
                 tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
                 te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
@@ -288,14 +326,14 @@ class FilterSamples:
                     pl.concat([tr, te])
                     .sort(["ticker", "date"])
                     .with_columns(
-                        r  = pl.col("AdjClose").log().diff().over("ticker"),
-                        r1 = pl.col("AdjClose").log().diff().shift(1).over("ticker"),
+                        r  = pl.col("AdjClose").log().diff().over("ticker", order_by='date'),
+                        r1 = pl.col("AdjClose").log().diff().shift(1).over("ticker", order_by='date'),
                     )
                     .with_columns(
-                        mu  = pl.col("r").rolling_mean(W).over("ticker"),
-                        mu1 = pl.col("r1").rolling_mean(W).over("ticker"),
-                        mrr = (pl.col("r")**2).rolling_mean(W).over("ticker"),
-                        m11 = (pl.col("r")*pl.col("r1")).rolling_mean(W).over("ticker"),
+                        mu  = pl.col("r").rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
+                        mu1 = pl.col("r1").rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
+                        mrr = (pl.col("r")**2).rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
+                        m11 = (pl.col("r")*pl.col("r1")).rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
                     )
                     .with_columns(
                         v   = pl.col("mrr") - pl.col("mu")**2,
@@ -327,12 +365,12 @@ class FilterSamples:
                 mask_train &= mask_predictability_tr
                 mask_test  &= mask_predictability_te
                 
-        # Apply filter according to something like "FilterSamples_cat_predictability_qdown0.5"
+        # Apply filter according to something like "FilterSamples_cat_predictability_w20_qdown0.5"
         for k, v in self.params.items():
-            m = re.fullmatch(r'FilterSamples_cat_predictability_qdown(\d+(?:\.\d+)?)', k)
+            m = re.fullmatch(r'FilterSamples_cat_predictability(?:_w(\d+))?_qdown(\d+(?:\.\d+)?)', k)
             if v and m:
-                q = float(m.group(1))
-                W = 20  # rolling window size
+                q = float(m.group(2))
+                W = int(m.group(1)) if m.group(1) else 20  # rolling window size
 
                 tr = self.meta_train.with_row_index("row_idx").with_columns(is_train=pl.lit(True))
                 te = self.meta_test.with_row_index("row_idx").with_columns(is_train=pl.lit(False))
@@ -341,14 +379,14 @@ class FilterSamples:
                     pl.concat([tr, te])
                     .sort(["ticker", "date"])
                     .with_columns(
-                        r  = pl.col("AdjClose").log().diff().over("ticker"),
-                        r1 = pl.col("AdjClose").log().diff().shift(1).over("ticker"),
+                        r  = pl.col("AdjClose").log().diff().over("ticker", order_by='date'),
+                        r1 = pl.col("AdjClose").log().diff().shift(1).over("ticker", order_by='date'),
                     )
                     .with_columns(
-                        mu  = pl.col("r").rolling_mean(W).over("ticker"),
-                        mu1 = pl.col("r1").rolling_mean(W).over("ticker"),
-                        mrr = (pl.col("r")**2).rolling_mean(W).over("ticker"),
-                        m11 = (pl.col("r")*pl.col("r1")).rolling_mean(W).over("ticker"),
+                        mu  = pl.col("r").rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
+                        mu1 = pl.col("r1").rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
+                        mrr = (pl.col("r")**2).rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
+                        m11 = (pl.col("r")*pl.col("r1")).rolling_mean(W, min_samples=1).over("ticker", order_by='date'),
                     )
                     .with_columns(
                         v   = pl.col("mrr") - pl.col("mu")**2,
@@ -404,7 +442,7 @@ class FilterSamples:
             y_lincomb = self.ytree_train,
             Atest_lincomb = self.Xtree_test,
             dates_train = self.samples_dates_train,
-            dates_test = self.samples_dates_test if self.doTest else None,
+            dates_test = self.samples_dates_test,
             ytest_lincomb = self.ytree_test if self.doTest else None
         )
         
@@ -424,7 +462,7 @@ class FilterSamples:
             )
             logger.info(f"FilterSamples: Final score (test): {score_test:.4f}")
         
-        return lincomb_mask_train, lincomb_mask_test if self.doTest else None
+        return lincomb_mask_train, lincomb_mask_test 
     
     def get_recent_training_mask(self, days_to_train_end: int | None = None) -> np.ndarray:
         """
@@ -863,7 +901,7 @@ class FilterSamples:
         if best_feat is None:
             logger.warning("FilterSamples/Taylor: No valid feature found. Falling back to selecting all.")
             mask_train = np.ones(self.Xtree_train.shape[0], dtype=bool)
-            mask_test = np.ones(self.Xtree_test.shape[0], dtype=bool) if self.doTest else None
+            mask_test = np.ones(self.Xtree_test.shape[0], dtype=bool)
             return mask_train, mask_test
 
         logger.info(

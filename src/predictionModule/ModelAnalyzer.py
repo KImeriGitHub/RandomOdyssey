@@ -71,7 +71,7 @@ class ModelAnalyzer:
         logger.info("")
     
     @staticmethod
-    def print_feature_importance_LGBM(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
+    def print_feature_importance_LGBMClassifier(lgbModel: lgb.LGBMClassifier, featureColumnNames: list[str], n_feature: int = 20):
         importances = lgbModel.feature_importances_
         
         feature_importances = pd.DataFrame({
