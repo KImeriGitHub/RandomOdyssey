@@ -89,6 +89,9 @@ class StratPCAandLeaves(BaseStrategy):
         Xtr_tree,
         Xtr_time,
         ytr_tree,
+        ytr_tree_low,
+        ytr_tree_high,
+        ytr_tree_open,
         Xte_tree,
         Xte_time,
         treenames,
@@ -129,7 +132,7 @@ class StratPCAandLeaves(BaseStrategy):
 
         tree_n_max = min(model_lgb.num_trees(), tree_n_max)
         labels_top, scores_top = HelperFunctions.top_leaf_labels_per_tree(
-            model_lgb, Xtr_pca, ytr_tree, tree_n_max=tree_n_max, top_n_max=max(1, top_n_max)
+            model_lgb, Xtr_pca, ytr_tree[:, -1], tree_n_max=tree_n_max, top_n_max=max(1, top_n_max)
         )
         n_trees = labels_top.shape[1]
         
@@ -159,7 +162,7 @@ class StratPCAandLeaves(BaseStrategy):
             if mask_sel.sum() >= min_n_tar:
                 break
 
-        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_val, tp_val, _ = HelperFunctions.optimize_sl_tp(ytr_tree, ytr_tree_low, ytr_tree_high, ytr_tree_open)
         sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
         tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
 
@@ -170,6 +173,9 @@ class StratPCAandLeaves(BaseStrategy):
         Xtr_tree,
         Xtr_time,
         ytr_tree,
+        ytr_tree_low,
+        ytr_tree_high,
+        ytr_tree_open,
         Xte_tree,
         Xte_time,
         treenames,
@@ -201,7 +207,7 @@ class StratPCAandLeaves(BaseStrategy):
         if cat_test is not None:
             mask_test &= cat_test
 
-        sl_val, tp_val = HelperFunctions.optimal_sl_tp(ytr_tree)
+        sl_val, tp_val, _ = HelperFunctions.optimize_sl_tp(ytr_tree, ytr_tree_low, ytr_tree_high, ytr_tree_open)
         sl_tr_vec = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
         sl_te_vec = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
         tp_tr_vec = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
@@ -212,11 +218,7 @@ class StratPCAandLeaves(BaseStrategy):
             100 * mask_train.mean(),
             100 * mask_test.mean(),
         )
-        logger.info(
-            "  Precompute -> sl %.2f%% | tp: %.2f%%",
-            sl_val,
-            tp_val,
-        )
+        logger.info(f"  Precompute -> sl {sl_val} | tp: {tp_val}")
 
         return mask_train, mask_test, sl_tr_vec, sl_te_vec, tp_tr_vec, tp_te_vec
 

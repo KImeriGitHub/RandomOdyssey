@@ -3,82 +3,178 @@ import numpy as np
 import polars as pl
 import lightgbm as lgb
 
+from src.hyperparameterTuning.HelperMetrics import HelperMetrics
+
 class HelperFunctions:
     def __init__():
         pass
 
     @staticmethod
-    def optimal_sl_tp(arr: np.ndarray, rounding_digits: int = 3) -> tuple[float, float]:
+    def optimize_sl_tp(
+        arr: np.ndarray, 
+        arr_low: np.ndarray,
+        arr_high: np.ndarray,
+        arr_open: np.ndarray,
+        *,
+        n_grid: int = 15,            # number of quantile points
+        sl_max: float = 0.995,       # SL upper cap
+        tp_min: float = 1.005,       # TP lower cap
+        spread_cost: float = 0.001,
+        commission: float = 0.0000,
+    ) -> tuple[float, float, dict]:
         """
-        PRE:
-            arr: n x d array, values > 0, around 1.0.
-                 arr[i,-1] is latest; arr[i,0] is earliest
-            rounding_digits: accuracy of sl and tp, for speed up
-        POST:
-            (sl_val, tp_val): stop-loss (<≈1) and take-profit (>≈1) that
-            maximize the geometric mean of the realized outcome defined by:
-              - if any arr[i, j] < sl -> out[i] = sl
-              - elif any arr[i, j] > tp -> out[i] = tp
-              - else out[i] = arr[i, -1]
+        Returns (best_sl, best_tp, info) maximizing mean(out) where:
+            out = collapse_sl_tp(..., sl, tp, ...)
+
+        SL candidates: [-inf, quantiles(arr[:,-1]) clipped to <= sl_max, sl_max]
+        TP candidates: [tp_min, quantiles(arr[:,-1]) clipped to >= tp_min, +inf)
+
         Notes:
-            We restrict the search to sl ∈ (0, 1] and tp ∈ [1, max(arr)],
-            and to candidate values at row-wise extrema where regime changes occur.
+        - -inf for SL and +inf for TP are treated as "no stop" (passed as None).
+        - Pairs violating common-sense constraints are skipped:
+            if finite(sl) and sl >= 1.0  -> skip
+            if finite(tp) and tp <= 1.0  -> skip
+            if both finite and sl >= tp  -> skip
         """
-        if arr.ndim != 2 or arr.size == 0:
-            raise ValueError("arr must be a non-empty 2D numpy array")
+        # --- candidate grids from quantiles of the last column ---
+        last = np.concatenate((arr_low[:, -1], arr_high[:, -1]))
+        squish_power = 1.3
+        squish_pwr_inv = 1.0 / squish_power
+        qs_sl = np.linspace(0.001**squish_pwr_inv, 0.495**squish_pwr_inv, n_grid)**squish_power
+        qs_tp = 1.0 - qs_sl[::-1]
 
-        # Row statistics that fully determine regime for any (sl, tp)
-        row_min = arr.min(axis=1)
-        row_max = arr.max(axis=1)
-        row_last = arr[:, -1]
+        qvals_sl = np.quantile(last, qs_sl)
+        # SL: (-inf .. sl_max]
+        stretch_factor = 0.99
+        sl_cands = np.unique(
+            np.concatenate((
+                qvals_sl[qvals_sl <= sl_max]*stretch_factor,
+                np.array([sl_max])
+            ))
+        )
 
-        # Domains (conservative & practical):
-        overall_max = float(row_max.max())
-        # Candidate SL values: unique row minima clipped to <=1, plus 1.0
-        sl_candidates = np.unique(np.clip(
-            np.round(row_min, rounding_digits), a_min=None, a_max=1.0
-        ))
-        if 1.0 not in sl_candidates:
-            sl_candidates = np.sort(np.append(sl_candidates, 1.0))
+        # TP: [tp_min .. +inf)
+        qvals_tp = np.quantile(last, qs_tp)
+        stretch_factor = 1.01
+        tp_cands = np.unique(
+            np.concatenate((
+                np.array([tp_min]),
+                qvals_tp[qvals_tp >= tp_min]*stretch_factor,
+            ))
+        )
 
-        # Candidate TP values: unique row maxima clipped to >=1, plus 1.0
-        tp_candidates = np.unique(np.clip(
-            np.round(row_max, rounding_digits), a_min=1.0, a_max=None
-        ))
-        if 1.0 not in tp_candidates:
-            tp_candidates = np.sort(np.append(tp_candidates, 1.0))
+        def _collapse(sl_val, tp_val):
+            # interpret infinities as "no stop"
+            sl_arg = np.min(last) if not np.isfinite(sl_val) else float(sl_val)
+            tp_arg = np.max(last) if not np.isfinite(tp_val) else float(tp_val)
+            return HelperMetrics.collapse_sl_tp(
+                arr, arr_low, arr_high, arr_open,
+                sl=sl_arg, tp=tp_arg, spread_cost=spread_cost, commission=commission
+            )
 
-        # (Optional) include the "no-TP-trigger" ceiling (overall_max)
-        if overall_max not in tp_candidates:
-            tp_candidates = np.sort(np.append(tp_candidates, overall_max))
+        best = (-np.inf, None, None, None)  # (mean, sl, tp, std)
 
-        best_sl, best_tp = 1.0, overall_max
-        best_obj = -np.inf
+        for sl_val in sl_cands:
+            for tp_val in tp_cands:
+                out = _collapse(sl_val, tp_val)
+                m = float(np.exp(np.mean(np.log(out))))
+                if m > best[0]:
+                    best = (m, float(sl_val), float(tp_val), float(np.std(out)))
 
-        # Vectorized evaluation over candidate grid
-        for sl in sl_candidates:
-            # Precompute SL mask once per sl
-            sl_mask = row_min < sl
-            for tp in tp_candidates:
-                # Enforce sensible band: sl <= 1 <= tp
-                if sl > 1.0 or tp < 1.0:
-                    continue
+        if best[1] is None:
+            # fallback: no valid pair found -> use "no SL/TP"
+            out = _collapse(-np.inf, np.inf)
+            return -np.inf, np.inf, {"mean": float(np.mean(out)), "std": float(np.std(out)), "stage": "fallback"}
 
-                tp_mask = (~sl_mask) & (row_max > tp)
-                # Outcomes per rule
-                out = np.where(sl_mask, sl, np.where(tp_mask, tp, row_last))
+        mean_star, sl_star, tp_star, std_star = best
+        return sl_star, tp_star, {
+            "mean": mean_star,
+            "std": std_star,
+            "params": {
+                "n_grid": n_grid, "sl_max": sl_max, "tp_min": tp_min,
+                "spread_cost": spread_cost, "commission": commission
+            }
+        }
+    
+    @staticmethod
+    def perfect_sl_tp(
+        arr: np.ndarray,
+        tp_min: float = 1.005,
+        tp_buffer_pct: float = 0.1,
+        sl_max: float = 0.995,
+        sl_buffer_pct: float = 0.1,
+        sl_min: float = 0.92,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Vectorized 'perfect' stop-loss and take-profit levels for row-wise time series.
 
-                # Geometric mean ↔ maximize sum(log(out))
-                # (arr > 0 ensures out > 0)
-                obj = float(np.mean(np.log(out)))
-                if obj > best_obj:
-                    best_obj = obj
-                    best_sl, best_tp = float(sl), float(tp)
+        Parameters
+        ----------
+        arr : np.ndarray, shape (N, T)
+            Row-wise time series of (normalized) prices.
+        tp_min : float
+            Minimum TP level to consider.
+        tp_buffer_pct : float
+            Buffer applied to TP: buffer = (tp - 1) * pct.
+        sl_max : float
+            Upper cap for SL (prevents SL > ~1).
+        sl_buffer_pct : float
+            Buffer applied to SL: buffer = (1 - price) * pct.
+        sl_min : float
+            Lower cap for SL (prevents unrealistically deep stops).
 
-        return best_sl, best_tp
+        Returns
+        -------
+        sl : np.ndarray, shape (N,)
+            Stop-loss levels.
+        tp : np.ndarray, shape (N,)
+            Take-profit levels.
+        """
+
+        # --- Helpers
+        def btp(val, pct):  # Buffer for take-profit
+            return (val - 1.0) * pct
+
+        def bsl(val, pct):  # Buffer for stop-loss
+            return (1.0 - val) * pct
+
+        # --- Take-profit
+        arr_max = np.max(arr, axis=1)
+        tp = np.maximum(arr_max, tp_min)
+
+        tp_min_buffer_adj = tp_min + btp(tp_min, tp_buffer_pct)
+        crossed = arr_max >= tp_min_buffer_adj
+
+        # If we crossed the threshold, pull TP down by its buffer
+        tp = np.where(crossed, tp - btp(tp, tp_buffer_pct), tp)
+
+        # --- Stop-loss
+        arr_argmax = np.argmax(arr, axis=1)
+        cummin = np.minimum.accumulate(arr, axis=1)  # (N, T)
+        mins_to_argmax = cummin[np.arange(arr.shape[0]), arr_argmax]  # (N,)
+        last = arr[:, -1]
+
+        # If TP-threshold crossed: set SL below the min up to argmax
+        sl_cross = mins_to_argmax - bsl(mins_to_argmax, sl_buffer_pct)
+
+        # If not crossed: set SL below the last price  (FIX: use minus, not plus)
+        sl_else = last - bsl(last, sl_buffer_pct)
+
+        sl = np.where(crossed, sl_cross, sl_else)
+
+        # --- Safety clamps
+        sl = np.minimum(sl, sl_max)           # never above sl_max
+        if sl_min is not None:
+            sl = np.maximum(sl, sl_min)       # never below floor
+
+        # Optional: ensure SL < TP (small epsilon)
+        eps = 1e-9
+        sl = np.minimum(sl, tp - eps)
+
+        return sl, tp
 
     @staticmethod
-    def top_leaf_labels_per_tree(self,
+    def top_leaf_labels_per_tree(
         model: lgb.Booster,
         X,
         y,

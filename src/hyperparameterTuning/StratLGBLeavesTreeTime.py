@@ -7,6 +7,7 @@ import lightgbm as lgb
 from sklearn.preprocessing import StandardScaler
 
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
+from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.predictionModule.FilterSamples import FilterSamples
 from src.predictionModule.MachineModels import MachineModels
 from src.hyperparameterTuning.HelperFunctions import HelperFunctions
@@ -16,7 +17,7 @@ from src.common.DataFrameTimeOperations import DataFrameTimeOperations as dfta
 import logging
 logger = logging.getLogger(__name__)
 
-class StratLGBLeavesTree(BaseStrategy):
+class StratLGBLeavesTreeTime(BaseStrategy):
     expected_load_params = {
         "LoadupSamples_time_inc_factor": 1,
         "LoadupSamples_tree_scaling_standard": False,
@@ -58,26 +59,26 @@ class StratLGBLeavesTree(BaseStrategy):
         opt_params = {}
         opt_params["LGB_num_boost_round"]           = 1 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
         opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.0001, 0.005, log=True)
-        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.00001, 0.005, log=True)
+        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.00001, 0.0005, log=True)
         opt_params["apply_feature_fraction"]        = True #trial.suggest_categorical("apply_feature_fraction", [True, False])
         if opt_params["apply_feature_fraction"]:
-            opt_params["LGB_feature_fraction"]      = trial.suggest_float("LGB_feature_fraction", 0.96, 0.98, log=False)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 1600, 2750, step=25)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 19, 30, step=1)
+            opt_params["LGB_feature_fraction"]      = trial.suggest_float("LGB_feature_fraction", 0.95, 0.97, log=False)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 745, 1900, step=5)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 17, 27, step=1)
         opt_params["LGB_learning_rate"]             = 0.1 #trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 10, 30, step=1)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-8, 1e-6, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 5, 30, step=1)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-7, 5e-5, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 2e-1, 6e-1, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 260, 310, step=5)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.1, 0.5, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 200, 350, step=10)
         opt_params["LGB_early_stopping_rounds"]     = 20
 
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
         opt_params["do_transform"]      = True #trial.suggest_categorical("do_transform", [True, False])
         opt_params["tree_n_max"]        = 1 #trial.suggest_int("tree_n_max", 5, 75, step=5)
         opt_params["min_n_tar"]         = 25 #trial.suggest_int("min_n_tar", 1, 5)
-        opt_params["top_n_max"]         = 50 #trial.suggest_int("top_n_max", 50, 75, step=25)  
-        
+        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 350, 950, step=25)  
+                
         opt_params["inc_FeatureTA"] = False #trial.suggest_categorical("inc_FeatureTA", [True, False])
         opt_params["inc_GroupDynamics"] = False #trial.suggest_categorical("inc_GroupDynamics", [True, False])
         opt_params["inc_Categorical"] = True #trial.suggest_categorical("inc_Categorical", [True, False])
@@ -87,6 +88,8 @@ class StratLGBLeavesTree(BaseStrategy):
         opt_params["exc_lag"] = True
         
         opt_params["ytree_kind"] = "abslast" #trial.suggest_categorical("ytree_kind", ["last", "abslast"]) #mean and max not very good
+
+        opt_params["t_win"] = trial.suggest_int("t_win", 15, 30, step=1)
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -108,17 +111,26 @@ class StratLGBLeavesTree(BaseStrategy):
         meta_test,
         opt_params: dict,
     ) -> float:
+        t_win =             opt_params["t_win"]
         do_transform =      opt_params["do_transform"]
         tree_n_max =        opt_params["tree_n_max"]
         min_n_tar =         opt_params["min_n_tar"]
         top_n_max =         opt_params["top_n_max"]
-        
         mm: MachineModels = MachineModels(opt_params)
             
-        logger.info(f"  Starting shapes: tr {Xtr_tree.shape}, te {Xte_tree.shape}")
+        logger.info(f"  Before filtering: tr {Xtr_tree.shape}, te {Xte_tree.shape}")
             
         mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
+
+        if opt_params["ytree_kind"] == "last":
+            ytr_tree_opt = ytr_tree[:, -1]
+        elif opt_params["ytree_kind"] == "mean":
+            ytr_tree_opt = np.mean(ytr_tree, axis=1)
+        elif opt_params["ytree_kind"] == "abslast":
+            ytr_tree_opt = np.abs(ytr_tree[:, -1])
+        elif opt_params["ytree_kind"] == "max":
+            ytr_tree_opt = np.max(ytr_tree, axis=1)
 
         tn = np.asarray(treenames, dtype=str)
         mask_treenames = np.zeros(len(treenames), dtype=bool)
@@ -136,19 +148,14 @@ class StratLGBLeavesTree(BaseStrategy):
             mask_treenames |= np.char.find(tn, "Seasonal_") >= 0
         if opt_params.get("exc_lag"):
             mask_treenames &= np.char.find(tn, "_lag") < 0
+            
+        Xdtime_tr, _ = self._make_design(Xtr_time[mask_train], t_win)
+        Xdtime_te, _ = self._make_design(Xte_time[mask_test], t_win)
 
-        Xd_tr, ytr_tree = Xtr_tree[mask_train][:, mask_treenames], ytr_tree[mask_train]
-        Xd_te = Xte_tree[mask_test][:, mask_treenames]
-
-        if opt_params["ytree_kind"] == "last":
-            ytr_tree_opt = ytr_tree[:, -1]
-        elif opt_params["ytree_kind"] == "mean":
-            ytr_tree_opt = np.mean(ytr_tree, axis=1)
-        elif opt_params["ytree_kind"] == "abslast":
-            ytr_tree_opt = np.abs(ytr_tree[:, -1])
-        elif opt_params["ytree_kind"] == "max":
-            ytr_tree_opt = np.max(ytr_tree, axis=1)
-
+        Xd_tr = np.hstack((Xtr_tree[mask_train][:, mask_treenames], Xdtime_tr))
+        ytr_tree_opt = ytr_tree_opt[mask_train]
+        Xd_te = np.hstack((Xte_tree[mask_test][:, mask_treenames], Xdtime_te))
+        
         logger.info(f"  After design: tr {Xd_tr.shape}, te {Xd_te.shape}")
         logger.info(f"   ytr_tree: n={ytr_tree_opt.size}, mean={ytr_tree_opt.mean():.6f}, std={ytr_tree_opt.std():.6f}")
 
@@ -171,6 +178,16 @@ class StratLGBLeavesTree(BaseStrategy):
             return 1.0
         finally:
             logger.disabled = False
+
+        # Log feature importance
+        base = list(timenames[:5])
+        T = t_win + 1
+        t_feat_names = [
+            (f"{base[f]}_t-{t_win - t}" if t_win - t else f"{base[f]}_t")
+            for t in range(T) for f in range(5)
+        ]
+        colnames = tn[mask_treenames].tolist() + t_feat_names
+        ModelAnalyzer.print_feature_importance_LGBM(lgbModel=model_lgb, featureColumnNames=colnames, n_feature=5)
 
         tree_n_max = min(model_lgb.num_trees(), tree_n_max)
         labels_top, scores_top = HelperFunctions.top_leaf_labels_per_tree(
@@ -213,11 +230,11 @@ class StratLGBLeavesTree(BaseStrategy):
         res_mask[mask_test] = mask_sel
         
         sl_val, tp_val, _ = HelperFunctions.optimize_sl_tp(
-            ytr_tree[mask_tr], 
+            ytr_tree[mask_train][mask_tr], 
             ytr_tree_low[mask_train][mask_tr], 
             ytr_tree_high[mask_train][mask_tr], 
             ytr_tree_open[mask_train][mask_tr],
-            n_grid=7
+            n_grid=10
         )
         sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
         tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
@@ -344,3 +361,15 @@ class StratLGBLeavesTree(BaseStrategy):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _make_design(self, X, t_win):
+        Xw: np.ndarray = X[:, -(t_win+1):, 0:5].copy()
+        Xw = (Xw-0.5)*2.0
+        
+        mask_bad = np.zeros(Xw.shape[0], dtype=bool)
+        bound_bad = 1 - np.tanh(1 - 1e-4)
+        mask_bad = np.any((Xw[:,:,0:4] <= (-1+bound_bad)) | (Xw[:,:,0:4] >= (1-bound_bad)), axis=(1,2))
+        Xw[:,:,0:4] = np.clip(Xw[:,:,0:4], -1+bound_bad, 1-bound_bad)
+        
+        Xw[:,:,0:4] = np.arctanh(Xw[:,:,0:4]) + 1.0
+        
+        return Xw.reshape(Xw.shape[0], -1), mask_bad
