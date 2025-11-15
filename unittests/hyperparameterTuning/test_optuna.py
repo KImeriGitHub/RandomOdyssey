@@ -108,8 +108,8 @@ def test_optuna_client_get_slices() -> None:
     client = OptunaClient(
         ls=ls,
         n_splits=5,
-        n_test_days=3,
-        n_training_days=10,
+        n_test_idxdays=3,
+        n_training_idxdays=10,
         rng=random.Random(0),
         model_cls=_DummyModel,
     )
@@ -127,8 +127,8 @@ def test_optuna_client_objective_uses_strategy() -> None:
     client = OptunaClient(
         ls=ls,
         n_splits=3,
-        n_test_days=2,
-        n_training_days=8,
+        n_test_idxdays=2,
+        n_training_idxdays=8,
         rng=random.Random(1),
         model_cls=_DummyModel,
     )
