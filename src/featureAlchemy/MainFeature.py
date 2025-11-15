@@ -59,7 +59,6 @@ class MainFeature():
         self.startTDate = self.trading_days[0]
         self.endTDate = self.trading_days[-1]
         
-        self.idxAssets = {ticker: DOps(self.assets[ticker].shareprice).getNextLowerOrEqualIndices(self.trading_days) for ticker in self.assets.keys()}
         self.idxAssets_at = {ticker: DOps(self.assets[ticker].shareprice).getIndices(self.trading_days) for ticker in self.assets.keys()}
         
         logger.info(f"  FeatureMain initialized with {self.nAssets} assets and {self.nDates} dates.")
@@ -69,21 +68,16 @@ class MainFeature():
         Returns the actual trading days from asset data that correspond to a 
         given list of business days.
         """
-        # For each ticker, find the indices of the last available share price date 
-        # for each requested business day.
-        indices_by_ticker: Dict[str, List[int]] = {
-            ticker: DOps(self.assets[ticker].shareprice).getNextLowerOrEqualIndices(business_days) 
-            for ticker in self.tickers
-        }
+        # For each ticker, find the indices of the last available share price date for each requested business day.
+        # Then take the union of these indices across all tickers to get all trading days.
+        all_trading_dates_flattened = [
+            self.assets[ticker].shareprice.get_column("Date")[idx_ele]
+            for ticker in self.tickers 
+                for idx_ele in DOps(self.assets[ticker].shareprice).getIndices(business_days) if idx_ele is not None
+        ]
 
-        # Create a generator of all trading date lists from all assets.
-        all_trading_dates_nested = (
-            self.assets[ticker].shareprice['Date'].gather(indices_by_ticker[ticker]).to_list()
-            for ticker in self.tickers
-        )
-        
-        # Flatten the nested lists, find the unique dates, and return them sorted.
-        unique_dates = {d for d in chain.from_iterable(all_trading_dates_nested)}
+        # Get the unique set
+        unique_dates = set(all_trading_dates_flattened)
         
         return sorted(unique_dates)
     
@@ -102,8 +96,8 @@ class MainFeature():
             ("Open",     "f8"),
             ("High",     "f8"),
             ("Low",      "f8"),
-            
-        ]  # Fields: date, ticker, Close, AdjClose, Open
+            ("Volume",   "f8"),
+        ]  # Fields: date, ticker, Close, AdjClose, Open, High, Low, Volume
 
         # 2) Allocate the structured array for meta information
         metaarr = np.zeros((nD, nA), dtype=dtype)
@@ -114,7 +108,7 @@ class MainFeature():
 
         # 4) Assign price columns by gathering from each asset's shareprice DataFrame
         metaarr["Close"] = np.array([
-            a.shareprice["Close"].gather(self.idxAssets_at[t]).to_numpy()
+            a.shareprice["Close"].gather(self.idxAssets_at[t]).to_numpy()    # gather([1, None]) return list with val at idx 1 and None. With to_numpy then it turns into [val, nan]
             for t, a in (self.assets.items())
         ]).transpose()
         metaarr["AdjClose"] = np.array([
@@ -133,10 +127,14 @@ class MainFeature():
             a.shareprice["Low"].gather(self.idxAssets_at[t]).to_numpy()
             for t, a in (self.assets.items())
         ]).transpose()
+        metaarr["Volume"] = np.array([
+            a.shareprice["Volume"].gather(self.idxAssets_at[t]).to_numpy()
+            for t, a in (self.assets.items())
+        ]).transpose()
 
         # 5) Create a mask: True where all price columns are not NaN, False otherwise
         mask = np.ones((nD, nA), dtype=bool)
-        fields_list_containing_nan = ["Close", "AdjClose", "Open", "High", "Low"]
+        fields_list_containing_nan = ["Close", "AdjClose", "Open", "High", "Low", "Volume"]
         for field in fields_list_containing_nan:
             mask &= ~np.isnan(metaarr[field])
 

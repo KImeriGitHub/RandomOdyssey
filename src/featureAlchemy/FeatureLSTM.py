@@ -84,10 +84,10 @@ class FeatureLSTM(IFeature):
         featuresMat.fill(np.nan)
 
         # compute the “price‐level” feature
-        price_lvl = np.tanh(prices[baseIdx]*factor[:,None] - 1)/2 + .5
-        opens_lvl = np.tanh(opens[baseIdx] *factor[:,None] - 1)/2 + .5
-        highs_lvl = np.tanh(highs[baseIdx] *factor[:,None] - 1)/2 + .5
-        lows_lvl  = np.tanh(lows[baseIdx]  *factor[:,None] - 1)/2 + .5
+        price_lvl = np.tanh(prices[baseIdx]* factor[:,None] - 1)/2 + .5
+        opens_lvl = np.tanh(opens[baseIdx] * factor[:,None] - 1)/2 + .5
+        highs_lvl = np.tanh(highs[baseIdx] * factor[:,None] - 1)/2 + .5
+        lows_lvl  = np.tanh(lows[baseIdx]  * factor[:,None] - 1)/2 + .5
         featuresMat[-nI:,:,0] = price_lvl
         featuresMat[-nI:,:,1] = opens_lvl
         featuresMat[-nI:,:,2] = highs_lvl
