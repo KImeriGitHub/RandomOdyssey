@@ -50,12 +50,14 @@ logger = logging.getLogger(__name__)
 
 ## VARIABLES
 groups_features = {
-    "group_debug": (feature_classes, 'Tree'),
-    "group_snp500_finanTo2011": (feature_classes, 'Tree'),
+    "group_debug": (feature_classes_noFourier, 'Tree'),
+    "group_snp500_finanTo2011": (feature_classes_noFourier, 'Tree'),
     "group_finanTo2011": (feature_classes_noFourier, 'Tree'),
     "group_over20Years": ([FMTS, FTATS], 'Time'),
-    "group_regOHLCV_over5years": ([FLSTM], 'Time'),
-    "group_mt5": (feature_classes, 'Tree'),
+    #"group_regOHLCV_over5years": ([FLSTM], 'Time'),
+    "group_regOHLCV_to2014": ([FLSTM], 'Time'),
+    "group_mt5": (feature_classes_noFourier, 'Tree'),
+    "group_dez_lowspread": (feature_classes_noFourier, 'Tree'),
 }
 lag_list = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500]
 month_horizons = [1, 2, 4, 6, 8, 12]
@@ -118,16 +120,18 @@ def process_year(year: int):
     label = str(year)
     for group, (feature_classes, group_type) in groups_features.items():
         assets_pl = load_assets(group)
-        start_date = pd.Timestamp(year, 1, 1).date()
+        start_date = pd.Timestamp(year=year, month=1, day=1).date()
+        max_end_date = pd.Timestamp(year=year, month=12, day=31).date()
 
         if year < dt.now().year:
-            end_date = pd.Timestamp(year, 12, 31).date()
+            end_date = max_end_date
         else:
             last_dates = {
                 ticker: df.shareprice["Date"].item(-1)
                 for ticker, df in assets_pl.items()
             }
             end_date = max(last_dates.values())
+            end_date = min(end_date, max_end_date)
 
         logger.info("Processing %s for group %s", label, group)
         t0 = dt.now()
@@ -145,8 +149,8 @@ def process_year(year: int):
         except Exception as e:
             logger.error("Error processing %s for group %s: %s", label, group, e)
             continue
-        logger.info("Processed %s in %.1f s",
-                    label, (dt.now() - t0).total_seconds())
+        logger.info("Processed %s for group %s in %.1f s",
+                    label, group, (dt.now() - t0).total_seconds())
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Year to form features")
@@ -170,3 +174,7 @@ if __name__ == "__main__":
     logger.info("Starting feature generation for years: %s", years)
     with Pool(processes=n_workers) as pool:
         pool.map(process_year, years)
+        
+    # Single core processing
+    #for year in years:
+    #    process_year(year)

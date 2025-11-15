@@ -4,25 +4,28 @@ from pathlib import Path
 
 from src.hyperparameterTuning.OptunaClient import OptunaClient
 from src.hyperparameterTuning.OptunaTuning import OptunaTuning
+from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
 from src.hyperparameterTuning.StratLGBLeavesTime import StratLGBLeavesTime
 from src.hyperparameterTuning.StratLGBLeavesTree import StratLGBLeavesTree
+from src.hyperparameterTuning.StratLGBLeavesTreeTime import StratLGBLeavesTreeTime
 from src.hyperparameterTuning.StratLGBMOnFiltered import StratLGBMOnFiltered
 from src.hyperparameterTuning.StratPCAandLeaves import StratPCAandLeaves
 from src.hyperparameterTuning.StratClusteringLSTM import StratClusteringLSTM
-from src.hyperparameterTuning.StratRidgeRegression import StratRidgeRegression
+from src.hyperparameterTuning.StratClusterinAnomalies import StratClusteringAnomalies
+from src.hyperparameterTuning.StratTripleLSTM import StratTripleLSTM
+from src.hyperparameterTuning.StratSingleLSTM import StratSingleLSTM
+from src.hyperparameterTuning.StratCatSamplingSequentially import StratCatSamplingSequentially
 from src.predictionModule.LoadupSamples import LoadupSamples
 
-import treetimeParams
-
-timegroup = "group_regOHLCV_over5years"
-stock_group = "group_debug"
+timegroup = "group_regOHLCV_to2014"
+stock_group = "group_dez_lowspread"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
     filename=f"logs/output_optuna_{stock_group_short}_{formatted_date}.log",
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M",
 )
@@ -35,21 +38,21 @@ loadup_params = {
     "LoadupSamples_time_scaling_stretch": False,
     "LoadupSamples_time_inc_factor": 1,
 }
-logger.info("Params: %s", loadup_params)
 
-strategy = StratLGBLeavesTime()
-logger.info("Using strategy: %s", StratLGBLeavesTime.__name__)
+strategy = StratCatSamplingSequentially()
+logger.info("Using strategy: %s", strategy.__class__.__name__)
 
-logger.setLevel(logging.DEBUG)
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-optuna_duration = 60 * 60
-global_start_date = datetime.date(2016, 1, 1)
-final_eval_date = datetime.date(2025, 7, 15)
-n_test_days = 7
+optuna_duration = 60 * 60 * 7
+global_start_date = datetime.date(2014, 1, 1)
+final_eval_date = datetime.date(2025, 11, 3)
+n_test_idxdays = 5
 n_splits = 200
-n_startup_trials = 3
-n_training_days_reserved = 1500
+n_startup_trials = 10
+n_training_idxdays_reserved = 255 * 3
 direction = "maximize"
+spread_cost = 0.0000
+commission = 0.0000
 
 logger.info("Loadup params:")
 for k, v in loadup_params.items():
@@ -69,14 +72,16 @@ logger.info("Optuna study name: %s", optuna_study_name)
 logger.info("Optuna duration (seconds): %s", optuna_duration)
 logger.info("Global start date: %s", global_start_date)
 logger.info("Final evaluation date: %s", final_eval_date)
-logger.info("Test days: %s", n_test_days)
+logger.info("Test idx-days: %s", n_test_idxdays)
 logger.info("Number of splits: %s", n_splits)
 logger.info("Number of startup trials: %s", n_startup_trials)
-logger.info("Training days reserved: %s", n_training_days_reserved)
+logger.info("Training days reserved: %s", n_training_idxdays_reserved)
 logger.info("Optimization direction: %s", direction)
+logger.info("Spread cost: %s", spread_cost)
+logger.info("Commission: %s", commission)
 
 if __name__ == "__main__":
-    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(n_test_days)][::-1]
+    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(int(n_test_idxdays*7/5))][::-1]
 
     ls = LoadupSamples(
         train_start_date=global_start_date,
@@ -90,8 +95,10 @@ if __name__ == "__main__":
     optuna_client = OptunaClient(
         ls=ls,
         n_splits=n_splits,
-        n_test_days=n_test_days,
-        n_training_days=n_training_days_reserved,
+        n_test_idxdays=n_test_idxdays,
+        n_training_idxdays=n_training_idxdays_reserved,
+        spread_cost=spread_cost,
+        commission=commission,
     )
 
     objective = optuna_client.make_objective(

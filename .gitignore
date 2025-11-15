@@ -24,6 +24,8 @@ src/featureAlchemy/bin/*
 src/predictionmodule/bin/*
 !src/predictionmodule/bin/__init__.py
 
+outputArchive/*
+
 *.lprof
 output_*
 

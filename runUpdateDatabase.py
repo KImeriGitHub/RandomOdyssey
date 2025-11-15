@@ -19,6 +19,8 @@ from src.stockGroupsService.GroupFinanTo2011 import GroupFinanTo2011
 from src.stockGroupsService.GroupFinanTo2016 import GroupFinanTo2016
 from src.stockGroupsService.GroupRegOHLCVOver5Years import GroupOHLCVOver5Years
 from src.stockGroupsService.GroupMT5 import GroupMT5
+from src.stockGroupsService.GroupDarwinExZeroLowSpread import GroupDarwinExZeroLowSpread
+from src.stockGroupsService.GroupRegOHLCVTo2014 import GroupOHLCVTo2014
 
 formatted_date = datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
@@ -41,6 +43,8 @@ groupClasses = [
     GroupFinanTo2016(),
     GroupOHLCVOver5Years(),
     GroupMT5(),
+    GroupDarwinExZeroLowSpread(),
+    GroupOHLCVTo2014(),
 ]
 
 def get_apiKey() -> str:
