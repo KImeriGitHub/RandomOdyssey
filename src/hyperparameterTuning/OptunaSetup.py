@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 SlicePair = Tuple[slice, slice]
 
-class OptunaClient:
+class OptunaSetup:
     """Utility orchestrating Optuna optimisation on top of LoadupSamples."""
 
     def __init__(

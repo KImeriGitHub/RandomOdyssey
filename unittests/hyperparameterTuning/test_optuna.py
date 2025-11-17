@@ -9,7 +9,7 @@ import optuna
 import polars as pl
 import pytest
 
-from src.hyperparameterTuning.OptunaClient import OptunaClient
+from src.hyperparameterTuning.OptunaSetup import OptunaSetup
 from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
 
 
@@ -105,7 +105,7 @@ class _FakeFilterSamples:
 
 def test_optuna_client_get_slices() -> None:
     ls = _dummy_loadup_samples()
-    client = OptunaClient(
+    client = OptunaSetup(
         ls=ls,
         n_splits=5,
         n_test_idxdays=3,
@@ -124,7 +124,7 @@ def test_optuna_client_get_slices() -> None:
 
 def test_optuna_client_objective_uses_strategy() -> None:
     ls = _dummy_loadup_samples()
-    client = OptunaClient(
+    client = OptunaSetup(
         ls=ls,
         n_splits=3,
         n_test_idxdays=2,

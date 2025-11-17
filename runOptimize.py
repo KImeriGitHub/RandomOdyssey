@@ -2,7 +2,7 @@ import datetime
 import logging
 from pathlib import Path
 
-from src.hyperparameterTuning.OptunaClient import OptunaClient
+from src.hyperparameterTuning.OptunaSetup import OptunaSetup
 from src.hyperparameterTuning.OptunaTuning import OptunaTuning
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.hyperparameterTuning.StratFilterSamples import StratFilterSamples
@@ -39,17 +39,17 @@ loadup_params = {
     "LoadupSamples_time_inc_factor": 1,
 }
 
-strategy = StratCatSamplingSequentially()
+strategy = StratLGBMOnFiltered()
 logger.info("Using strategy: %s", strategy.__class__.__name__)
 
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-optuna_duration = 60 * 60 * 7
+optuna_duration = 60 * 60 * 3
 global_start_date = datetime.date(2014, 1, 1)
 final_eval_date = datetime.date(2025, 11, 3)
 n_test_idxdays = 5
-n_splits = 200
-n_startup_trials = 10
-n_training_idxdays_reserved = 255 * 3
+n_splits = 100
+n_startup_trials = 5
+n_training_idxdays_reserved = 255 * 4
 direction = "maximize"
 spread_cost = 0.0000
 commission = 0.0000
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     )
     ls.load_samples()
 
-    optuna_client = OptunaClient(
+    optuna_client = OptunaSetup(
         ls=ls,
         n_splits=n_splits,
         n_test_idxdays=n_test_idxdays,
