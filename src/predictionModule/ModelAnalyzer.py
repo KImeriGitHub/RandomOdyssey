@@ -105,26 +105,27 @@ class ModelAnalyzer:
         logger.info(top_features.to_string())
         
     @staticmethod
-    def log_test_result_perdate(test_df: pl.DataFrame, test_dates: list[str], last_col: str | None = None):
+    def log_test_result_perdate(test_df: pl.DataFrame, test_dates: list[str], score_col: str, tar_col: str | None = None):
         """Log test results for each date in the test_dates list.
 
-        The dataframe needs the columns ['date', 'ticker', 'Close', 'prediction_ratio', last_col].
-        Is last_col is None we assume it is for prediction.
+        The dataframe needs the columns ['date', 'ticker', 'Close', score_col, tar_col].
+        Is tar_col is None we assume it is for scores.
 
         Args:
             test_df (pl.DataFrame): The DataFrame containing test results.
             test_dates (list[str]): The list of test dates to analyze.
         """
-        if last_col not in test_df.columns:
-            logger.warning(f"Last column '{last_col}' not found in test_df.")
-            last_col = None
-
+        if score_col not in test_df.columns:
+            raise ValueError(f"Score column '{score_col}' not found in test_df.")
+        if tar_col is not None and tar_col not in test_df.columns:
+            raise ValueError(f"Target column '{tar_col}' not found in test_df.")
+            
         for test_date in test_dates:
             logger.info(f"Analyzing test date: {test_date}")
 
             # Filter meta dataframe on test date
-            select_cols = ['date', 'ticker', 'Close','prediction_ratio']
-            select_cols = select_cols + [last_col] if last_col else select_cols
+            select_cols = ['date', 'ticker', 'Open', 'Close', score_col]
+            select_cols = select_cols + [tar_col] if tar_col else select_cols
             res_df_ondate: pl.DataFrame = (
                 test_df
                 .filter(pl.col("date") == test_date)
@@ -138,15 +139,16 @@ class ModelAnalyzer:
             with pl.Config(ascii_tables=True, tbl_rows=20, tbl_cols=20):
                 logger.info(f"DataFrame:\n{res_df_ondate}")
                 
-            if last_col is not None:
-                logger.info(f"  P/L Ratio: {res_df_ondate[last_col].mean():.4f}")
-            logger.info(f"  Mean Prediction Ratio: {res_df_ondate['prediction_ratio'].mean():.4f}")
+            if tar_col is not None:
+                logger.info(f"  P/L Ratio: {res_df_ondate[tar_col].mean():.4f}")
+            if score_col is not None:
+                logger.info(f"  Mean Scores Ratio: {res_df_ondate[score_col].mean():.4f}")
             
     @staticmethod
-    def log_test_result_overall(test_df: pl.DataFrame, last_col: str | None = None):
+    def log_test_result_overall(test_df: pl.DataFrame, score_col: str, last_col: str | None = None):
         agg_exprs = [
-            pl.col("prediction_ratio").max().alias("max_pred"),  # this is also .first()
-            pl.col("prediction_ratio").log().mean().exp().alias("mean_pred"),
+            pl.col(score_col).max().alias("max_score"),  # this is also .first()
+            pl.col(score_col).log().mean().exp().alias("mean_score"),
         ]
         if last_col is not None:
             agg_exprs.extend([
@@ -161,19 +163,19 @@ class ModelAnalyzer:
         )
 
         last_idx = test_df_perdate["date"].arg_max()
-        pred_meanmean = np.e ** test_df_perdate["mean_pred"].log().mean()
-        pred_meanlast = test_df_perdate["mean_pred"].gather(last_idx).item()
-        pred_toplast  = test_df_perdate["max_pred"].gather(last_idx).item()
-        logger.info(f"Over all mean prediction ratio: {pred_meanmean:.4f}")
-        logger.info(f"Over all top last prediction ratio: {pred_toplast:.4f}")
-        logger.info(f"Over all last mean prediction ratio: {pred_meanlast:.4f}")
+        score_meanmean = float(np.e ** test_df_perdate["mean_score"].log().mean())
+        score_meanlast = float(test_df_perdate["mean_score"].gather(last_idx).item())
+        score_toplast  = float(test_df_perdate["max_score"].gather(last_idx).item())
+        logger.info(f"Over all mean score: {score_meanmean:.4f}")
+        logger.info(f"Over all top last score: {score_toplast:.4f}")
+        logger.info(f"Over all last mean score: {score_meanlast:.4f}")
         
         if last_col is not None:
-            res_meanmean = np.e ** test_df_perdate['mean_res'].log().mean()
-            res_meanlast = test_df_perdate['mean_res'].last()
-            res_topmean = np.e ** test_df_perdate['top_res'].log().mean()
-            res_toplast = test_df_perdate['top_res'].last()
-            res_sum_n = test_df_perdate['n_entries'].sum()
+            res_meanmean = float(np.e ** test_df_perdate['mean_res'].log().mean())
+            res_meanlast = float(test_df_perdate['mean_res'].last())
+            res_topmean = float(np.e ** test_df_perdate['top_res'].log().mean())
+            res_toplast = float(test_df_perdate['top_res'].last())
+            res_sum_n = int(test_df_perdate['n_entries'].sum())
             
             logger.info(f"Over all mean P/L Ratio: {res_meanmean:.4f}")
             logger.info(f"Over all top mean P/L Ratio: {res_topmean:.4f}")
@@ -182,7 +184,7 @@ class ModelAnalyzer:
             logger.info(f"Over all number of entries: {res_sum_n}")
             
     @staticmethod
-    def log_test_result_multiple(df_list: list[pl.DataFrame], last_col: str) -> pl.DataFrame:
+    def log_test_result_multiple(df_list: list[pl.DataFrame], score_col: str, last_col: str) -> pl.DataFrame:
         results = []
         for df in df_list:
             end_train_date = df.select('date').min().item()
@@ -191,8 +193,8 @@ class ModelAnalyzer:
                 pl.col(last_col).log().mean().exp().alias("mean_res"),
                 pl.col(last_col).first().alias("top_res"),
                 pl.col(last_col).count().alias("n_entries"),
-                pl.col("prediction_ratio").max().alias("max_pred"),
-                pl.col("prediction_ratio").log().mean().exp().alias("mean_pred"),
+                pl.col(score_col).max().alias("max_score"),
+                pl.col(score_col).log().mean().exp().alias("mean_score"),
             ]).sort("date")
             results.append(
                 {
@@ -202,9 +204,9 @@ class ModelAnalyzer:
                     "res_toplast": df_perdate['top_res'].last(),
                     "res_meanlast": df_perdate['mean_res'].last(),
                     "n_entries": df_perdate['n_entries'].sum(),
-                    "pred_toplast": df_perdate['max_pred'].last(),
-                    "pred_meanmean": np.e ** df_perdate['mean_pred'].log().mean(),
-                    "pred_meanlast": df_perdate['mean_pred'].last(),
+                    "score_toplast": df_perdate['max_score'].last(),
+                    "score_meanmean": np.e ** df_perdate['mean_score'].log().mean(),
+                    "score_meanlast": df_perdate['mean_score'].last(),
                 }
             )
 
@@ -215,43 +217,42 @@ class ModelAnalyzer:
         logger.info(f"Mean over meanmean returns over all cutoffs: {np.e ** results_df['res_meanmean'].log().mean()}")
         logger.info(f"Mean over toplast returns over all cutoffs: {np.e ** results_df['res_toplast'].log().mean()}")
         logger.info(f"Mean over meanlast returns over all cutoffs: {np.e ** results_df['res_meanlast'].log().mean()}")
-        logger.info(f"Mean over meanmean predictions over all cutoffs: {np.e ** results_df['pred_meanmean'].log().mean()}")
-        logger.info(f"Mean over toplast predictions over all cutoffs: {np.e ** results_df['pred_toplast'].log().mean()}")
-        logger.info(f"Mean over meanlast predictions over all cutoffs: {np.e ** results_df['pred_meanlast'].log().mean()}")
+        logger.info(f"Mean over meanmean scores over all cutoffs: {np.e ** results_df['score_meanmean'].log().mean()}")
+        logger.info(f"Mean over toplast scores over all cutoffs: {np.e ** results_df['score_toplast'].log().mean()}")
+        logger.info(f"Mean over meanlast scores over all cutoffs: {np.e ** results_df['score_meanlast'].log().mean()}")
         logger.info(f"Total entries over all cutoffs: {results_df['n_entries'].sum()}")
 
         if len(results_df) > 3:
             # Quantiles
             for q in [0.1, 0.25, 0.5, 0.75, 0.9]:
-                pred_meanmean = np.quantile(results_df['pred_meanmean'].to_numpy(), q)
-                pred_meanlast = np.quantile(results_df['pred_meanlast'].to_numpy(), q)
-                pred_toplast = np.quantile(results_df['pred_toplast'].to_numpy(), q)
+                score_meanmean = np.quantile(results_df['score_meanmean'].to_numpy(), q)
+                score_meanlast = np.quantile(results_df['score_meanlast'].to_numpy(), q)
+                score_toplast = np.quantile(results_df['score_toplast'].to_numpy(), q)
                 logger.info(f"Quantile {q:.1f}:")
-                logger.info(f"  Pred meanmean: {pred_meanmean:.4f}")
-                logger.info(f"  Pred meanlast: {pred_meanlast:.4f}")
-                logger.info(f"  Pred toplast: {pred_toplast:.4f}")
-
+                logger.info(f"  Score meanmean: {score_meanmean:.4f}")
+                logger.info(f"  Score meanlast: {score_meanlast:.4f}")
+                logger.info(f"  Score toplast: {score_toplast:.4f}")
 
             # Conditional Means
             with pl.Config(ascii_tables=True, tbl_rows=-1, tbl_cols=-1):
-                cols = ["res_meanmean", "res_toplast", "res_meanlast", "pred_toplast", "pred_meanmean", "pred_meanlast"]
+                cols = ["res_meanmean", "res_toplast", "res_meanlast", "score_toplast", "score_meanmean", "score_meanlast"]
                 logger.info(
-                    "Mean over results filtered by 0.5 quantile prediction meanmean: "
-                    f"{results_df.filter(pl.col('pred_meanmean') > np.quantile(results_df['pred_meanmean'].to_numpy(), 0.5)).select([
+                    "Mean over results filtered by 0.5 quantile scores meanmean: "
+                    f"{results_df.filter(pl.col('score_meanmean') > np.quantile(results_df['score_meanmean'].to_numpy(), 0.5)).select([
                         (pl.col(c).log().mean().exp()).alias(c)
                         for c in cols
                     ])}"
                 )
                 logger.info(
-                    f"Mean over results filtered by 0.5 quantile prediction meanlast: "
-                    f"{results_df.filter(pl.col('pred_meanlast') > np.quantile(results_df['pred_meanlast'].to_numpy(), 0.5)).select([
+                    f"Mean over results filtered by 0.5 quantile scores meanlast: "
+                    f"{results_df.filter(pl.col('score_meanlast') > np.quantile(results_df['score_meanlast'].to_numpy(), 0.5)).select([
                         (pl.col(c).log().mean().exp()).alias(c)
                         for c in cols
                     ])}"
                 )
                 logger.info(
-                    f"Mean over results filtered by 0.5 quantile prediction toplast: "
-                    f"{results_df.filter(pl.col('pred_toplast') > np.quantile(results_df['pred_toplast'].to_numpy(), 0.5)).select([
+                    f"Mean over results filtered by 0.5 quantile scores toplast: "
+                    f"{results_df.filter(pl.col('score_toplast') > np.quantile(results_df['score_toplast'].to_numpy(), 0.5)).select([
                         (pl.col(c).log().mean().exp()).alias(c)
                         for c in cols
                     ])}"
