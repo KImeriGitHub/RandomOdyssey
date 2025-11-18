@@ -22,8 +22,8 @@ class StratLGBMOnFiltered(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
     }
     precompute_params = {
-        "FilterSamples_cat_over10": True,
-        "FilterSamples_cat_under5000": True,
+        "FilterSamples_cat_over10": False,
+        "FilterSamples_cat_under5000": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_highestShareholderEquity_q0.2": False,
@@ -31,6 +31,17 @@ class StratLGBMOnFiltered(BaseStrategy):
         "FilterSamples_cat_volatility_qup0.975": False,
         "FilterSamples_cat_predictability_qup0.9": False,
         "FilterSamples_cat_predictability_qdown0.1": False,
+        
+        "volatility_w": 7,
+        "volatility_dir": "qup",
+        "volatility_q": 0.890885,
+        
+        "volprice_q": 0.586046,
+        "volprice_w": 55,
+        
+        "predictability_w": 48,
+        "predictability_dir": "qdown",
+        "predictability_q": 0.314148,
     }
 
     base_params = {
@@ -62,13 +73,13 @@ class StratLGBMOnFiltered(BaseStrategy):
         opt_params["inc_Financials"] = trial.suggest_categorical("inc_Financials", [True, False])
         opt_params["inc_Mathematical"] = trial.suggest_categorical("inc_Mathematical", [True, False])
         opt_params["inc_Seasonal"] = trial.suggest_categorical("inc_Seasonal", [True, False])
-        opt_params["exc_lag"] = trial.suggest_categorical("exc_lag", [True, False])
+        opt_params["exc_lag"] = True #trial.suggest_categorical("exc_lag", [True, False])
         
         opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 25, 300, step=25)
         opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.00001, 0.05, log=True)
         opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.0001, 0.02, log=True)
         if opt_params.get("exc_lag"):
-            opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.7, 0.9, log=True)
+            opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.8, 0.99, log=True)
         else:
             opt_params["LGB_feature_fraction"]          = trial.suggest_float("LGB_feature_fraction", 0.01, 0.1, log=True)
         opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 700, 1200, step=25)
@@ -84,7 +95,7 @@ class StratLGBMOnFiltered(BaseStrategy):
         opt_params["do_transform"] = trial.suggest_categorical("do_transform", [True, False])
         opt_params["val_split"] = trial.suggest_float("val_split", 0.01, 0.05, log=True)
 
-        opt_params["ytree_kind"] = trial.suggest_categorical("ytree_kind", ["last", "abslast", "mean", "max"])
+        opt_params["ytree_kind"] = trial.suggest_categorical("ytree_kind", ["last", "abslast"]) #, "mean", "max"])
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -219,161 +230,101 @@ class StratLGBMOnFiltered(BaseStrategy):
 
         mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
-
-        fs_pre = FilterSamples(
-            Xtree_train=Xtr_tree,
-            ytree_train=ytr_tree[:,-1],
-            treenames=treenames,
-            Xtree_test=Xte_tree,
-            ytree_test=None,
-            meta_train=meta_train,
-            meta_test=meta_test,
-            params=params,
-        )
-
-        cat_train, cat_test = fs_pre.categorical_masks()
-        mask_train &= cat_train
-        if cat_test is not None:
-            mask_test &= cat_test
-
-        do_transform =      True
-        tree_n_max =        1
-        min_n_tar =         75
-        top_n_max =         375
         
-        cat_ratio =         0.05
-        params[f"FilterSamples_cat_volatility_qdown{cat_ratio:.2f}"] = False
-        params[f"FilterSamples_cat_volatility_qup{(1-cat_ratio):.2f}"] = True
-        params["LGB_num_boost_round"]           = 1 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
-        params["LGB_lambda_l1"]                 = 0.169225
-        params["LGB_lambda_l2"]                 = 0.000651
-        params["apply_feature_fraction"]        = True
-        if params["apply_feature_fraction"]:
-            params["LGB_feature_fraction"]      = 0.950331
-        params["LGB_num_leaves"]                = 1525
-        params["LGB_max_depth"]                 = 22
-        params["LGB_learning_rate"]             = 0.1 #trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
-        params["LGB_min_data_in_leaf"]          = 270
-        params["LGB_min_gain_to_split"]         = 5.337715e-07
-        params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        params["LGB_min_sum_hessian_in_leaf"]   = 0.207050
-        params["LGB_max_bin"]                   = 290
-
-        mm: MachineModels = MachineModels(params)
-            
-        logger.info(f"  Before filtering: tr {Xtr_tree.shape}, te {Xte_tree.shape}")
-            
-        mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
-        mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
-
-        fs_pre = FilterSamples(
-            Xtree_train=Xtr_tree,
-            ytree_train=np.max(ytr_tree, axis=1),
-            treenames=treenames,
-            Xtree_test=Xte_tree,
-            ytree_test=None,
-            meta_train=meta_train,
-            meta_test=meta_test,
-            params=params,
-        )
-
-        cat_train, cat_test = fs_pre.categorical_masks()
-        mask_train &= cat_train
-        if cat_test is not None:
-            mask_test &= cat_test
-
-        logger.info(f"  After filtering: tr {(int(mask_train.sum()), Xtr_tree.shape[1])}, te {(int(mask_test.sum()), Xte_tree.shape[1])}")
-
-        tn = np.asarray(treenames, dtype=str)
-        mask_treenames = np.zeros(len(treenames), dtype=bool)
-        mask_treenames |= np.char.find(tn, "FeatureGroup_") >= 0
-        mask_treenames |= np.char.find(tn, "Seasonal_") >= 0
-
-        Xd_tr, ytr_tree = Xtr_tree[mask_train][:, mask_treenames], ytr_tree[mask_train]
-        Xd_te = Xte_tree[mask_test][:, mask_treenames]
-
-        ytr_tree_opt = np.abs(ytr_tree[:, -1])
-
-        logger.info(f"  After design: tr {Xd_tr.shape}, te {Xd_te.shape}")
-        logger.info(f"   ytr_tree: n={ytr_tree_opt.size}, mean={ytr_tree_opt.mean():.6f}, std={ytr_tree_opt.std():.6f}")
-
-        if do_transform:
-            scaler = StandardScaler().fit(Xd_tr)
-            Xd_tr = scaler.transform(Xd_tr)
-            Xd_te = scaler.transform(Xd_te)
-
-        try:
-            logger.disabled = True
-            model_lgb, info = mm.run_LGB(
-                X_train=Xd_tr,
-                y_train=ytr_tree_opt,
-                X_test=None,
-                y_test=None,
+        def apply_step(
+            mask_train: np.ndarray,
+            mask_test: np.ndarray,
+            params: dict
+        ):
+            fs = FilterSamples(
+                Xtree_train=Xtr_tree[mask_train],
+                ytree_train=ytr_tree[mask_train][:, -1],
+                treenames=treenames,
+                Xtree_test=Xte_tree[mask_test],
+                ytree_test=None,
+                meta_train=meta_train.filter(mask_train),
+                meta_test=meta_test.filter(mask_test),
+                params=params,
             )
-        except Exception as e:
-            logger.disabled = False
-            logger.warning(f"  LGB failed: {e}")
-            return 1.0
-        finally:
-            logger.disabled = False
 
-        tree_n_max = min(model_lgb.num_trees(), tree_n_max)
-        labels_top, scores_top = HelperFunctions.top_leaf_labels_per_tree(
-            model_lgb, Xd_tr, ytr_tree_opt, tree_n_max=tree_n_max, top_n_max=max(1, top_n_max or 1)
-        )
-        n_trees = labels_top.shape[1]
+            cat_train, cat_test = fs.categorical_masks()
+
+            # Update masks in-place while preserving alignment
+            mask_train[mask_train] &= cat_train
+            if cat_test is not None:
+                mask_test[mask_test] &= cat_test
+
+            return fs, mask_train, mask_test
         
-        # Top labels by score
-        leaf_tr = model_lgb.predict(Xd_tr, pred_leaf=True)
-        leaf_tr = leaf_tr.reshape(-1, 1) if leaf_tr.ndim == 1 else leaf_tr  # shape (n_samples, n_trees)
-        leaf_tr = leaf_tr[:, :n_trees]  # restrict to used trees
-        leaf_te = model_lgb.predict(Xd_te, pred_leaf=True)
-        leaf_te = leaf_te.reshape(-1, 1) if leaf_te.ndim == 1 else leaf_te  # shape (n_samples, n_trees)
-        leaf_te = leaf_te[:, :n_trees]  # restrict to used trees
-
-        # If everything is -1 across all ranks, bail out
-        if labels_top.size == 0 or np.all(labels_top == -1):
-            logger.warning("  LGB failed to generate predictions.")
-            return 1.0
+        volat_w = params["volatility_w"]
+        volat_dir = params["volatility_dir"]
+        volat_q = params["volatility_q"]
         
-        # Rank every (rank, tree) pair by descending score
-        r_idx, t_idx = np.unravel_index(np.argsort(scores_top.ravel())[::-1], scores_top.shape)
+        volprice_q = params["volprice_q"]
+        volprice_w = params["volprice_w"]
         
-        sel_pairs = []  # (tree_idx, rank_idx)
-        mask_sel = np.zeros(leaf_te.shape[0], dtype=bool)
-        mask_tr = np.zeros(Xd_tr.shape[0], dtype=bool)        
-        for i in range(len(r_idx)):
-            r = r_idx[i]
-            t = t_idx[i]
-            lbl = labels_top[r, t]
-            if lbl == -1:
-                continue
-            mask_sel |= (leaf_te[:, t] == lbl)
-            mask_tr |= (leaf_tr[:, t] == lbl)
-            sel_pairs.append((int(lbl), int(t), int(r)))
-            if mask_sel.sum() >= min_n_tar:
-                break
+        predic_w = params["predictability_w"]
+        predic_dir = params["predictability_dir"]
+        predic_q = params["predictability_q"]
+        
+        def q_limit(mask_test):
+            min_n_tar_daily = 30
+            n_dates_test = meta_test.get_column("date").n_unique()
+            return min(n_dates_test * min_n_tar_daily / mask_test.sum(), 1.0)
+        
+        q_l = q_limit(mask_test)
+        q = min(volprice_q, 1-q_l)
+        key = f"FilterSamples_cat_volumeprice_w{volprice_w}_q{q:.2f}"
+        step_params = dict(params)
+        step_params[key] = True
+        logger.debug("Applying second category filter: %s", key)
+        _, mask_train, mask_test = apply_step(mask_train, mask_test, step_params)
+        logger.debug(f"  After second cat filter -> train kept: {100 * mask_train.mean():.2f}% | test kept: {100 * mask_test.mean():.2f}%")
 
-        res_tr_mask = np.zeros(Xtr_tree.shape[0], dtype=bool)
-        res_tr_mask[mask_train] = mask_tr
-        res_te_mask = np.zeros(Xte_tree.shape[0], dtype=bool)
-        res_te_mask[mask_test] = mask_sel
+        
+        q_l = q_limit(mask_test)
+        q = min(volat_q, 1-q_l)
+        key = f"FilterSamples_cat_volatility_w{volat_w}_{volat_dir}{q:.2f}"
+        step_params = dict(params)
+        step_params[key] = True
+        logger.debug("Applying third category filter: %s", key)
+        _, mask_train, mask_test = apply_step(mask_train, mask_test, step_params)
+        logger.debug(f"  After third cat filter -> train kept: {100 * mask_train.mean():.2f}% | test kept: {100 * mask_test.mean():.2f}%")
+        
+        q_l = q_limit(mask_test)
+        q = max(predic_q, q_l)
+        key = f"FilterSamples_cat_predictability_w{predic_w}_{predic_dir}{q:.2f}"
+        step_params = dict(params)
+        step_params[key] = True
+        logger.debug("Applying first category filter: %s", key)
+        _, mask_train, mask_test = apply_step(mask_train, mask_test, step_params)
+        logger.debug(f"  After first cat filter -> train kept: {100 * mask_train.mean():.2f}% | test kept: {100 * mask_test.mean():.2f}%")
 
-        logger.info(f"  Precompute selected: {res_tr_mask.sum()} train samples and {res_te_mask.sum()} test samples.")
+                    
+        unique_tickers = meta_test.filter(mask_test).get_column("ticker").unique().to_numpy()
+        logger.debug(f"  Precompute -> test unique tickers kept: {unique_tickers.size} | total: {len(meta_test.get_column('ticker').unique())}")
+        logger.debug(f"    Tickers: {unique_tickers}")
 
         sl_val, tp_val, _ = HelperFunctions.optimize_sl_tp(
-            ytr_tree[mask_tr], 
-            ytr_tree_low[mask_train][mask_tr], 
-            ytr_tree_high[mask_train][mask_tr], 
-            ytr_tree_open[mask_train][mask_tr],
-            n_grid=7
+            ytr_tree[mask_train], 
+            ytr_tree_low[mask_train], 
+            ytr_tree_high[mask_train], 
+            ytr_tree_open[mask_train],
+            n_grid = 5
         )
-        sl_tr = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
-        tp_tr = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
-        sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
-        tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
+        sl_tr_vec = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        sl_te_vec = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_tr_vec = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
+        tp_te_vec = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
 
-        return res_tr_mask, res_te_mask, sl_tr, sl_te, tp_tr, tp_te
+        logger.info(
+            "  Precompute -> train kept: %.2f%% | test kept: %.2f%%",
+            100 * mask_train.mean(),
+            100 * mask_test.mean(),
+        )
+        logger.info(f"  Precompute -> sl {sl_val} | tp: {tp_val}")
+
+        return mask_train, mask_test, sl_tr_vec, sl_te_vec, tp_tr_vec, tp_te_vec
 
     # ------------------------------------------------------------------
     # Helpers

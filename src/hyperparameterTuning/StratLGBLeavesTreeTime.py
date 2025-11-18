@@ -35,16 +35,16 @@ class StratLGBLeavesTreeTime(BaseStrategy):
         "FilterSamples_cat_predictability_qup0.9": False,
         "FilterSamples_cat_predictability_qdown0.1": False,
         
-        "volatility_w": 56,
+        "volatility_w": 7,
         "volatility_dir": "qup",
-        "volatility_q": 0.533757,
+        "volatility_q": 0.0, #0.890885,
         
-        "volprice_q": 0.189539,
-        "volprice_w": 19,
+        "volprice_q": 0.0, #0.586046,
+        "volprice_w": 55,
         
-        "predictability_w": 52,
+        "predictability_w": 48,
         "predictability_dir": "qdown",
-        "predictability_q": 0.209829,
+        "predictability_q": 1.0, #0.314148,
     }
     
     base_params = {}
@@ -58,38 +58,38 @@ class StratLGBLeavesTreeTime(BaseStrategy):
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
         opt_params["LGB_num_boost_round"]           = 1 #trial.suggest_int("LGB_num_boost_round", 40, 60, step=1)
-        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.0001, 0.005, log=True)
-        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.00001, 0.0005, log=True)
+        opt_params["LGB_lambda_l1"]                 = trial.suggest_float("LGB_lambda_l1", 0.00001, 0.0003, log=True)
+        opt_params["LGB_lambda_l2"]                 = trial.suggest_float("LGB_lambda_l2", 0.000001, 0.00002, log=True)
         opt_params["apply_feature_fraction"]        = True #trial.suggest_categorical("apply_feature_fraction", [True, False])
         if opt_params["apply_feature_fraction"]:
-            opt_params["LGB_feature_fraction"]      = trial.suggest_float("LGB_feature_fraction", 0.95, 0.97, log=False)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 745, 1900, step=5)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 17, 27, step=1)
-        opt_params["LGB_learning_rate"]             = 0.1 #trial.suggest_float("LGB_learning_rate", 1e-4, 2e-0, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 5, 30, step=1)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-7, 5e-5, log=True)
+            opt_params["LGB_feature_fraction"]      = trial.suggest_float("LGB_feature_fraction", 0.95, 0.96, log=False)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 500, 2000, step=5)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 11, 25, step=1)
+        opt_params["LGB_learning_rate"]             = 0.0001 #trial.suggest_float("LGB_learning_rate", 1e-5, 2e-0, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 70, 150, step=1)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 1e-6, 5e-5, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 1e-2, 5e-1, log=True)
-        opt_params["LGB_min_sum_hessian_in_leaf"]   = trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.1, 0.5, log=True)
-        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 200, 350, step=10)
+        opt_params["LGB_min_sum_hessian_in_leaf"]   = 0.25 #trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.2, 0.3, log=True)
+        opt_params["LGB_max_bin"]                   = trial.suggest_int("LGB_max_bin", 200, 500, step=10)
         opt_params["LGB_early_stopping_rounds"]     = 20
 
         #opt_params["n_training_days"]   = trial.suggest_int("n_training_days", 400, 900, step=100)
         opt_params["do_transform"]      = True #trial.suggest_categorical("do_transform", [True, False])
         opt_params["tree_n_max"]        = 1 #trial.suggest_int("tree_n_max", 5, 75, step=5)
-        opt_params["min_n_tar"]         = 25 #trial.suggest_int("min_n_tar", 1, 5)
-        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 350, 950, step=25)  
+        opt_params["min_n_tar_daily"]   = 3
+        opt_params["top_n_max"]         = trial.suggest_int("top_n_max", 250, 650, step=25)  
                 
-        opt_params["inc_FeatureTA"] = False #trial.suggest_categorical("inc_FeatureTA", [True, False])
+        opt_params["inc_FeatureTA"] = trial.suggest_categorical("inc_FeatureTA", [True, False])
         opt_params["inc_GroupDynamics"] = False #trial.suggest_categorical("inc_GroupDynamics", [True, False])
-        opt_params["inc_Categorical"] = True #trial.suggest_categorical("inc_Categorical", [True, False])
+        opt_params["inc_Categorical"] = trial.suggest_categorical("inc_Categorical", [True, False])
         opt_params["inc_Financials"] = True #trial.suggest_categorical("inc_Financials", [True, False])
-        opt_params["inc_Mathematical"] = True #trial.suggest_categorical("inc_Mathematical", [True, False])
-        opt_params["inc_Seasonal"] = True #trial.suggest_categorical("inc_Seasonal", [True, False])
+        opt_params["inc_Mathematical"] = False #trial.suggest_categorical("inc_Mathematical", [True, False])
+        opt_params["inc_Seasonal"] = False #trial.suggest_categorical("inc_Seasonal", [True, False])
         opt_params["exc_lag"] = True
         
         opt_params["ytree_kind"] = "abslast" #trial.suggest_categorical("ytree_kind", ["last", "abslast"]) #mean and max not very good
 
-        opt_params["t_win"] = trial.suggest_int("t_win", 15, 30, step=1)
+        opt_params["t_win"] = trial.suggest_int("t_win", 45, 70, step=1)
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -114,8 +114,12 @@ class StratLGBLeavesTreeTime(BaseStrategy):
         t_win =             opt_params["t_win"]
         do_transform =      opt_params["do_transform"]
         tree_n_max =        opt_params["tree_n_max"]
-        min_n_tar =         opt_params["min_n_tar"]
         top_n_max =         opt_params["top_n_max"]
+        min_n_tar_daily =   opt_params["min_n_tar_daily"]
+        n_dates_test =      meta_test.get_column("date").n_unique()
+        min_n_tar =         min_n_tar_daily * n_dates_test
+        
+        last_day_mask = meta_test["date"] == meta_test["date"].max()
         mm: MachineModels = MachineModels(opt_params)
             
         logger.info(f"  Before filtering: tr {Xtr_tree.shape}, te {Xte_tree.shape}")
@@ -229,6 +233,8 @@ class StratLGBLeavesTreeTime(BaseStrategy):
         res_mask = np.zeros(Xte_tree.shape[0], dtype=bool)
         res_mask[mask_test] = mask_sel
         
+        res_mask = res_mask & last_day_mask.to_numpy()
+        
         sl_val, tp_val, _ = HelperFunctions.optimize_sl_tp(
             ytr_tree[mask_train][mask_tr], 
             ytr_tree_low[mask_train][mask_tr], 
@@ -306,17 +312,8 @@ class StratLGBLeavesTreeTime(BaseStrategy):
             return min(n_dates_test * min_n_tar_daily / mask_test.sum(), 1.0)
         
         q_l = q_limit(mask_test)
-        q = max(predic_q, q_l)
-        key = f"FilterSamples_cat_predictability_w{predic_w}_{predic_dir}{q:.2f}"
-        step_params = dict(params)
-        step_params[key] = True
-        logger.debug("Applying first category filter: %s", key)
-        _, mask_train, mask_test = apply_step(mask_train, mask_test, step_params)
-        logger.debug(f"  After first cat filter -> train kept: {100 * mask_train.mean():.2f}% | test kept: {100 * mask_test.mean():.2f}%")
-
-        q_l = q_limit(mask_test)
         q = min(volprice_q, 1-q_l)
-        key = f"FilterSamples_cat_volumeprice_w{volprice_w}_{q:.2f}"
+        key = f"FilterSamples_cat_volumeprice_w{volprice_w}_q{q:.2f}"
         step_params = dict(params)
         step_params[key] = True
         logger.debug("Applying second category filter: %s", key)
@@ -332,6 +329,16 @@ class StratLGBLeavesTreeTime(BaseStrategy):
         logger.debug("Applying third category filter: %s", key)
         _, mask_train, mask_test = apply_step(mask_train, mask_test, step_params)
         logger.debug(f"  After third cat filter -> train kept: {100 * mask_train.mean():.2f}% | test kept: {100 * mask_test.mean():.2f}%")
+        
+        q_l = q_limit(mask_test)
+        q = max(predic_q, q_l)
+        key = f"FilterSamples_cat_predictability_w{predic_w}_{predic_dir}{q:.2f}"
+        step_params = dict(params)
+        step_params[key] = True
+        logger.debug("Applying first category filter: %s", key)
+        _, mask_train, mask_test = apply_step(mask_train, mask_test, step_params)
+        logger.debug(f"  After first cat filter -> train kept: {100 * mask_train.mean():.2f}% | test kept: {100 * mask_test.mean():.2f}%")
+
                     
         unique_tickers = meta_test.filter(mask_test).get_column("ticker").unique().to_numpy()
         logger.debug(f"  Precompute -> test unique tickers kept: {unique_tickers.size} | total: {len(meta_test.get_column('ticker').unique())}")

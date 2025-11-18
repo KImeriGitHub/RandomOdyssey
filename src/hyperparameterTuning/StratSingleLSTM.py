@@ -24,15 +24,15 @@ logger = logging.getLogger(__name__)
 class StratSingleLSTM(BaseStrategy):
 
     expected_load_params = {
-        "idxAfterPrediction": 1,
+        "idxAfterPrediction": 5,
         "LoadupSamples_time_inc_factor": 1,
         "LoadupSamples_tree_scaling_standard": False,
         "LoadupSamples_time_scaling_stretch": False,
     }
 
     precompute_params = {
-        "FilterSamples_cat_over10": True,
-        "FilterSamples_cat_under5000": True,
+        "FilterSamples_cat_over10": False,
+        "FilterSamples_cat_under5000": False,
         "FilterSamples_cat_posOneYearReturn": False,
         "FilterSamples_cat_posFiveYearReturn": False,
         "FilterSamples_cat_highestShareholderEquity_q0.2": False,
@@ -69,7 +69,7 @@ class StratSingleLSTM(BaseStrategy):
             "LSTM_l1":                  0.001,
             "LSTM_l2":                  0.001,
             "LSTM_conv1d_kernel_size":  trial.suggest_int("LSTM_conv1d_kernel_size", 5, 15),
-            "min_n_tar":                25,
+            "min_n_tar":                5,
             
             "ytree_kind":               "abslast", #trial.suggest_categorical("ytree_kind", ["last", "abslast"]),
             "vol_window":               24, #trial.suggest_int("vol_window", 4, 40, step=2),
@@ -147,8 +147,8 @@ class StratSingleLSTM(BaseStrategy):
 
         def default_res():
             m_te = mask_test
-            sl_te = 0.92 * np.ones(Xte_time.shape[0], dtype=float)
-            tp_te = 1.11 * np.ones(Xte_time.shape[0], dtype=float)
+            sl_te = 0.88 * np.ones(Xte_time.shape[0], dtype=float)
+            tp_te = 1.21 * np.ones(Xte_time.shape[0], dtype=float)
             return m_te, sl_te, tp_te
 
         mm = MachineModels(params=loc_params)
@@ -197,7 +197,7 @@ class StratSingleLSTM(BaseStrategy):
             spread_cost=0.0000,
             commission=0.0,
         )
-        sl_te = 0.995 * np.ones(Xte_time.shape[0], dtype=float)
+        sl_te = sl_val * np.ones(Xte_time.shape[0], dtype=float)
         tp_te = tp_val * np.ones(Xte_time.shape[0], dtype=float)
 
         return mask_test, sl_te, tp_te
