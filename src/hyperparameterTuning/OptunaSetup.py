@@ -262,8 +262,8 @@ class OptunaSetup:
             logger.info(f"ratio sl hits test split {i}: {np.sum(sl_hits)/len(sl_te):.4f}, n_test_samples = {len(sl_te)}")
             logger.info(f"ratio tp hits test split {i}: {np.sum(tp_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
             logger.info(f"ratio tp no sl hits test split {i}: {np.sum(tp_nosl_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
-            scores[i] = HelperMetrics.evaluate_mask_fast(mask_te_pre, meta_test_slice['date'], res_vec)
-            scores_direct[i] = HelperMetrics.evaluate_mask_fast(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
+            scores[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], res_vec)
+            scores_direct[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
 
         scores = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores]
         scores_direct = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores_direct]
@@ -334,8 +334,8 @@ class OptunaSetup:
                         commission=self.commission
                     )
                     if not mask_te_pre.sum() == 0:
-                        sc = HelperMetrics.evaluate_mask_fast(mask_te_pre, meta_te['date'], res_vec)
-                        sc_dir = HelperMetrics.evaluate_mask_fast(mask_te_pre, meta_te['date'], yte_tree[:, idx_tar-1])
+                        sc = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_te['date'], res_vec)
+                        sc_dir = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_te['date'], yte_tree[:, idx_tar-1])
                     if sc is not None and np.isfinite(sc):
                         n_valid = n_valid + 1
                         sc = float(sc)

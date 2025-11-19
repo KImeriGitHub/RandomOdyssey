@@ -210,6 +210,7 @@ class HelperMetrics:
         return M
 
     @staticmethod
+    @DeprecationWarning
     def evaluate_mask(mask: np.ndarray, dates: pl.Series, y: np.ndarray) -> float:
         """
         Compute the (equal-weight-per-date) geometric mean of y over the columns selected by mask.
@@ -244,11 +245,11 @@ class HelperMetrics:
         return float(np.exp(perdate_logmean.mean()))
 
     @staticmethod
-    def evaluate_mask_fast(mask: np.ndarray, dates: pl.Series, y: np.ndarray) -> float:
+    def evaluate_mask_nullonempty(mask: np.ndarray, dates: pl.Series, y: np.ndarray) -> float:
         """
-        Compute the (equal-weight-per-date) geometric mean of y over the columns selected by mask.
-        If a date has no selected columns, it is ignored. If no dates remain, returns 1.0.
-        If mask selects nothing, returns 1.0.
+        Compute the geometric mean across dates of the *arithmetic* mean of y within each date,
+        using equal weight per date. If a date has no selected columns, it is ignored.
+        If no dates remain, returns 1.0. If mask selects nothing, returns 1.0.
 
         Parameters
         ----------
@@ -259,7 +260,7 @@ class HelperMetrics:
         Returns
         -------
         float
-            Geometric mean with equal weight per date (across dates that have ≥1 selected sample).
+            Geometric mean (equal weight per date) across dates that have ≥1 selected sample.
         """
         mask = np.asarray(mask, dtype=bool)
         if not mask.any():
@@ -275,17 +276,64 @@ class HelperMetrics:
         if codes_sel.size == 0:
             return 1.0
 
-        # Work in log space, clipping to avoid log(0)
-        logy = np.log(np.clip(y_sel, 1e-8, None))
-
-        # Aggregate per date using bincount
-        counts_per_date = np.bincount(codes_sel)                       # number of selected samples per date
-        sum_logy_per_date = np.bincount(codes_sel, weights=logy)       # sum of log(y) per date
+        # Aggregate per date using arithmetic mean intraday
+        counts_per_date = np.bincount(codes_sel)                         # number of selected samples per date
+        sum_y_per_date = np.bincount(codes_sel, weights=y_sel)           # sum of y per date
 
         valid = counts_per_date > 0
         if not valid.any():
             return 1.0
 
-        # Mean log(y) per date, then mean across dates, then exp to get geom. mean
-        perdate_logmean = sum_logy_per_date[valid] / counts_per_date[valid]
-        return float(np.exp(perdate_logmean.mean()))
+        # Arithmetic mean per date
+        perdate_mean = sum_y_per_date[valid] / counts_per_date[valid]
+
+        # Geometric mean across dates of these per-date arithmetic means
+        perdate_mean_clipped = np.clip(perdate_mean, 1e-8, None)
+        log_means = np.log(perdate_mean_clipped)
+        return float(np.exp(log_means.mean()))    
+    
+    @staticmethod
+    def evaluate_mask_oneonempty(mask: np.ndarray, dates: pl.Series, y: np.ndarray) -> float:
+        """
+        Compute the (equal-weight-per-date) geometric mean of y over the columns selected by mask.
+        If mask misses a date, that date is counted with 1.0.
+
+        Parameters
+        ----------
+        mask  : np.ndarray of bool, shape (N,)
+        dates : array-like of length N
+        y     : np.ndarray of nonnegative/positive values, shape (N,)
+
+        Returns
+        -------
+        float
+            Geometric mean with equal weight per date (empty dates are evaluated to 1.0).
+        """
+        dateframe = dates.to_frame("date")
+        meta_ext = dateframe.with_columns(pl.Series("y_tar", y))
+        meta_ext_masked = meta_ext.filter(mask)
+
+        # Group means on filtered data
+        perday_eval_masked = (
+            meta_ext_masked
+            .group_by("date")
+            .agg(pl.col("y_tar").mean().alias("y_mean"))
+        )
+
+        # All dates you care about (e.g. from the original meta_tr)
+        all_dates = (
+            dateframe
+            .select("date")
+            .unique()
+            .sort("date")
+        )
+
+        # Left-join and force missing dates to 1.0
+        perday_eval_masked_full = (
+            all_dates
+            .join(perday_eval_masked, on="date", how="left")
+            .with_columns(pl.col("y_mean").fill_null(1.0))
+        )
+
+        gmean = np.exp(perday_eval_masked_full.select(pl.col("y_mean").log()).mean())
+        return float(gmean)

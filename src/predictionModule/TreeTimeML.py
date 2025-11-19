@@ -499,11 +499,11 @@ class TreeTimeML:
         logger.info(f"    Ratio training samples: {self.mask_train.sum() / len(self.mask_train)}")
         logger.info(f"    Ratio test samples: {self.mask_test.sum() / len(self.mask_test)}")
         
-        pre_tr_score = HelperMetrics.evaluate_mask_fast(self.mask_train, self.meta_pl_train['date'], res_tr_vec)
+        pre_tr_score = HelperMetrics.evaluate_mask_nullonempty(self.mask_train, self.meta_pl_train['date'], res_tr_vec)
         logger.info(f"    {stage} train score: {pre_tr_score:.4f}")
         
         if mode == "analyze":
-            pre_te_score = HelperMetrics.evaluate_mask_fast(self.mask_test, self.meta_pl_test['date'], res_te_vec)
+            pre_te_score = HelperMetrics.evaluate_mask_nullonempty(self.mask_test, self.meta_pl_test['date'], res_te_vec)
             logger.info(f"    {stage} test score: {pre_te_score:.4f}")
     
             sl_hits = (self.test_ytree_low[self.mask_test][:, -1] <= self.sl_te_vec[self.mask_test])
