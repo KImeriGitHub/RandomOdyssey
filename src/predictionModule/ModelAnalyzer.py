@@ -235,26 +235,22 @@ class ModelAnalyzer:
 
             # Conditional Means
             with pl.Config(ascii_tables=True, tbl_rows=-1, tbl_cols=-1):
-                cols = ["res_meanmean", "res_toplast", "res_meanlast", "score_toplast", "score_meanmean", "score_meanlast"]
-                logger.info(
-                    "Mean over results filtered by 0.5 quantile scores meanmean: "
-                    f"{results_df.filter(pl.col('score_meanmean') > np.quantile(results_df['score_meanmean'].to_numpy(), 0.5)).select([
-                        (pl.col(c).log().mean().exp()).alias(c)
-                        for c in cols
-                    ])}"
-                )
-                logger.info(
-                    f"Mean over results filtered by 0.5 quantile scores meanlast: "
-                    f"{results_df.filter(pl.col('score_meanlast') > np.quantile(results_df['score_meanlast'].to_numpy(), 0.5)).select([
-                        (pl.col(c).log().mean().exp()).alias(c)
-                        for c in cols
-                    ])}"
-                )
-                logger.info(
-                    f"Mean over results filtered by 0.5 quantile scores toplast: "
-                    f"{results_df.filter(pl.col('score_toplast') > np.quantile(results_df['score_toplast'].to_numpy(), 0.5)).select([
-                        (pl.col(c).log().mean().exp()).alias(c)
-                        for c in cols
-                    ])}"
-                )
+                cols = ["res_meanmean", "res_toplast", "res_meanlast",
+                        "score_toplast", "score_meanmean", "score_meanlast"]
+
+                for score_col in ["score_meanmean", "score_meanlast", "score_toplast"]:
+                    q50 = results_df.select(pl.col(score_col).quantile(0.5)).item()
+
+                    agg = (
+                        results_df
+                        .filter(pl.col(score_col) > q50)
+                        .select([pl.col(c).log().mean().exp().alias(c) for c in cols])
+                    )
+
+                    logger.info(
+                        "Mean over results filtered by 0.5 quantile %s (q50=%.4f):\n%s",
+                        score_col,
+                        q50,
+                        agg,
+                    )
         return results_df
