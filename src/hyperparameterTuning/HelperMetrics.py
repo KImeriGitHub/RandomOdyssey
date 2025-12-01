@@ -3,6 +3,9 @@ from matplotlib import dates
 import numpy as np
 import polars as pl
 
+import logging
+logger = logging.getLogger(__name__)
+
 class HelperMetrics:
     def __init__():
         pass
@@ -18,7 +21,7 @@ class HelperMetrics:
         return float(np.exp(np.mean(np.log(arr + shift))))
 
     @staticmethod
-    def collapse_sl_tp(
+    def collapse_sl_tp_dep(
         arr: np.ndarray, 
         arr_low: np.ndarray,
         arr_high: np.ndarray,
@@ -184,6 +187,135 @@ class HelperMetrics:
 
         out *= (1.0 - commission) * (1.0 - commission)
         return out
+    
+    @staticmethod
+    def collapse_sl_tp(
+        arr: np.ndarray, 
+        arr_low: np.ndarray,
+        arr_high: np.ndarray,
+        arr_open: np.ndarray,
+        sl: np.ndarray, 
+        tp: np.ndarray,
+        spread_cost: float = 0.000,
+        commission: float = 0.0000
+    ) -> np.ndarray:
+        """
+        Summary
+        -----
+        Collapse per-step OHLC, stop-loss, and take-profit information into a single
+        exit price per path, assuming long positions with SL priority over TP and
+        per-side transaction costs.
+
+        Notes
+        -----
+        - arr inputs are 2D arrays of shape (N, T) or will be cast to (N,1), where N is the number
+           of paths and T is the number of time steps. 
+        - For each path, the first time a stop-loss (SL) or take-profit (TP) is hit
+          determines the exit price; subsequent hits are ignored.
+        - SL has priority over TP if both are touched within the same bar.
+        - Non-gap fills (in-bar hits) are priced at the SL/TP level minus `spread_cost`.
+        - Gap exits (where the open is already beyond SL/TP) are filled at the bar
+          open and do **not** incur `spread_cost`, reflecting MOO/MOC executions.
+        - If no SL/TP is hit for a path, the exit price defaults to the last value
+          in `arr` along the time axis.
+        - A proportional `commission` is applied per side, so the final exit price
+          is multiplied by `(1 - commission) ** 2`.
+
+        Parameters
+        -----
+        arr : np.ndarray
+            Base price series of shape (N, T), typically close prices, used to
+            derive the default exit (last column) when no SL/TP is hit.
+        arr_low : np.ndarray
+            Low prices for each bar, shape (N, T).
+        arr_high : np.ndarray
+            High prices for each bar, shape (N, T).
+        arr_open : np.ndarray
+            Open prices for each bar, shape (N, T).
+        sl : np.ndarray
+            Stop-loss levels for each bar, shape (N, T) or (N,) or float.
+            Assumes long positions with SL below the entry/open.
+        tp : np.ndarray
+            Take-profit levels for each bar, shape (N, T) or (N,) or float.
+            Assumes long positions with TP above the entry/open.
+        spread_cost : float, optional
+            Per-exit spread cost applied to non-gap hits (SL/TP touched within
+            the bar range), expressed in price units. Defaults to 0.0.
+        commission : float, optional
+            Proportional commission rate per side (e.g. 0.0005 for 5 bps). Applied
+            multiplicatively on both entry and exit as `(1 - commission) ** 2`.
+            Defaults to 0.0.
+
+        Returns
+        -----
+        out : np.ndarray
+            1D array of shape (N,) containing the final exit price per path,
+            after applying SL/TP logic, spread costs (for non-gap hits), and
+            commissions.
+        """
+        # Ensure 2D
+        arr      = np.asarray(arr)
+        arr_low  = np.asarray(arr_low,  dtype=arr.dtype)
+        arr_high = np.asarray(arr_high, dtype=arr.dtype)
+        arr_open = np.asarray(arr_open, dtype=arr.dtype)
+        sl       = np.asarray(sl,       dtype=arr.dtype)
+        tp       = np.asarray(tp,       dtype=arr.dtype)
+        
+        if np.ndim(arr) == 1:
+            arr = arr[:, None]
+            arr_low  = arr_low[:, None]
+            arr_high = arr_high[:, None]
+            arr_open = arr_open[:, None]
+        
+        N, T = arr.shape
+        
+        if np.ndim(sl) == 0:
+            sl = np.full((N, T), sl, dtype=arr.dtype)
+        if np.ndim(tp) == 0:
+            tp = np.full((N, T), tp, dtype=arr.dtype)
+        
+        if np.ndim(sl) == 1:
+            sl = np.repeat(sl[:, None], T, axis=1)
+        if np.ndim(tp) == 1:
+            tp = np.repeat(tp[:, None], T, axis=1)
+            
+        assert arr_low.shape == (N, T)
+        assert arr_high.shape == (N, T)
+        assert arr_open.shape == (N, T)
+        assert sl.shape == (N, T)
+        assert tp.shape == (N, T)
+        
+        out = arr[:,-1].copy()
+        mask_hit = np.zeros((N,), dtype=bool)
+        for t in range(T):
+            m_sl_low  = (arr_open[:, t] > sl[:, t]) & (arr_low[:, t]  <= sl[:, t])    # SL by low (non-gap)
+            m_sl_gap  = (arr_open[:, t] <= sl[:, t])                                 # SL by open gap
+            m_tp_high = (arr_open[:, t] < tp[:, t]) & (arr_high[:, t] >= tp[:, t])    # TP by high (non-gap)
+            m_tp_gap  = (arr_open[:, t] >= tp[:, t])                                 # TP by open gap
+
+            new_hits = ~mask_hit  # rows not hit yet
+            
+            m_sl = (m_sl_low | m_sl_gap) 
+
+            sl_low_hits  = new_hits & m_sl_low
+            sl_gap_hits  = new_hits & m_sl_gap
+            tp_high_hits = new_hits & (m_tp_high & (~m_sl))  # SL has priority over TP
+            tp_gap_hits  = new_hits & (m_tp_gap  & (~m_sl))  # SL has priority over TP
+
+            if sl_low_hits.any():
+                out[sl_low_hits]  = sl[sl_low_hits, t] - spread_cost
+            if sl_gap_hits.any():
+                out[sl_gap_hits]  = arr_open[sl_gap_hits, t] # no costs due to MOO and MOC trades
+            if tp_high_hits.any():
+                out[tp_high_hits] = tp[tp_high_hits, t] - spread_cost
+            if tp_gap_hits.any():
+                out[tp_gap_hits]  = arr_open[tp_gap_hits, t]  # no costs due to MOO and MOC trades
+
+            mask_hit |= (sl_low_hits | sl_gap_hits | tp_high_hits | tp_gap_hits)
+
+        out *= (1.0 - commission) * (1.0 - commission)
+        return out
+
 
     @staticmethod
     def establish_datesMat(dates: pl.Series) -> np.ndarray:
@@ -230,6 +362,7 @@ class HelperMetrics:
         """
         mask = np.asarray(mask, dtype=bool)
         if not mask.any():
+            logger.error("UNSORTED DATES: Mask selects nothing; returning 1.0")
             return 1.0
 
         M = HelperMetrics.establish_datesMat(dates)[:, mask]     # (D, K)
@@ -293,7 +426,7 @@ class HelperMetrics:
         return float(np.exp(log_means.mean()))    
     
     @staticmethod
-    def evaluate_mask_oneonempty(mask: np.ndarray, dates: pl.Series, y: np.ndarray) -> float:
+    def evaluate_mask_oneonempty(mask: np.ndarray, dates: pl.Series, y: np.ndarray, gmean_onday: bool = False) -> float:
         """
         Compute the (equal-weight-per-date) geometric mean of y over the columns selected by mask.
         If mask misses a date, that date is counted with 1.0.
@@ -309,16 +442,23 @@ class HelperMetrics:
         float
             Geometric mean with equal weight per date (empty dates are evaluated to 1.0).
         """
+        if mask is None or not mask.any():
+            return 1.0
+        
+        if not dates.is_sorted():
+            return 0.0
         dateframe = dates.to_frame("date")
         meta_ext = dateframe.with_columns(pl.Series("y_tar", y))
         meta_ext_masked = meta_ext.filter(mask)
 
         # Group means on filtered data
-        perday_eval_masked = (
-            meta_ext_masked
-            .group_by("date")
-            .agg(pl.col("y_tar").mean().alias("y_mean"))
-        )
+        if gmean_onday:
+            perday_eval_masked = meta_ext_masked.group_by("date").agg(
+                pl.col("y_tar").log().mean().exp().alias("y_mean")
+            )
+        else:
+            perday_eval_masked = meta_ext_masked.group_by("date").agg(pl.col("y_tar").mean().alias("y_mean"))
+        
 
         # All dates you care about (e.g. from the original meta_tr)
         all_dates = (
