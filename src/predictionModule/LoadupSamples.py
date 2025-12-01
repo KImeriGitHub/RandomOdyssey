@@ -257,6 +257,8 @@ class LoadupSamples:
 
         assert metatree_pl.get_column("date").is_sorted() if self.treegroup is not None else True
         assert metatime_pl.get_column("date").is_sorted() if self.timegroup is not None else True
+        assert metatree_pl.select(["date", "ticker"]).is_unique().all(ignore_nulls=False) if self.treegroup is not None else True
+        assert metatime_pl.select(["date", "ticker"]).is_unique().all(ignore_nulls=False) if self.timegroup is not None else True
 
         if self.treegroup is not None and self.timegroup is not None:
             meta_pl, all_Xtree_pre, all_Xtime_pre = self.__combine_tree_and_time(
@@ -270,17 +272,8 @@ class LoadupSamples:
             meta_pl = metatree_pl
             all_Xtree_pre = alltree_X_pre
             all_Xtime_pre = None
-            
-        # Drop duplicates in meta_pl within column ticker and date  
-        # # TODO: fix feature generation to avoid this step
-        mask_dub_series = meta_pl.select(
-            pl.struct(["date", "ticker"]).is_first_distinct()
-        ).to_series()
-        mask_dub_np = mask_dub_series.to_numpy()
-
-        meta_pl = meta_pl.filter(mask_dub_series)
-        all_Xtree_pre = all_Xtree_pre[mask_dub_np] if all_Xtree_pre is not None else None
-        all_Xtime_pre = all_Xtime_pre[mask_dub_np] if all_Xtime_pre is not None else None
+        
+        assert meta_pl.get_column("date").is_sorted()
         assert meta_pl.select(['date', 'ticker']).is_unique().all(ignore_nulls=False)
 
         # Check if test dates are trading dates and modify if necessary
@@ -349,6 +342,8 @@ class LoadupSamples:
         
         def to_time(x, inc_factor):
             return np.clip(np.tanh(np.log(np.clip(x, 1e-6, None)) * inc_factor) / 2.0 + 0.5, 1e-6, 1 - 1e-6)
+        def to_tree(y, inc_factor):
+            return np.exp(np.arctanh((y - 0.5) * 2.0)/inc_factor)  
         if self.timegroup is not None:
             inc_factor = self.params["LoadupSamples_time_inc_factor"]
             self.train_ytime = to_time(rat_inbetween, inc_factor)
