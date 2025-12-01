@@ -2,6 +2,7 @@ from src.predictionModule.ModelAnalyzer import ModelAnalyzer
 from src.predictionModule.TreeTimeML import TreeTimeML
 from src.predictionModule.LoadupSamples import LoadupSamples
 
+import pandas_market_calendars as mcal
 import datetime
 import random
 
@@ -33,15 +34,16 @@ loadup_params = {
 ## ANALYZING ##
 ###############
 # Static config
-global_start_date = datetime.date(2014, 1, 1)     # earliest data
-final_eval_date   = datetime.date(2025, 10, 7)    # last date you want to consider cutoffs up to
-test_horizon_days = 7                             # days after train cutoff for test slice
-n_splits = 1000                                     # number of cutoffs to generate
-days_delta = 4                                    # days delta for cutoff generation
+loadup_start_date   = datetime.date(2014, 1, 1)      # earliest data to load data from
+start_date          = datetime.date(2018, 1, 1)            # first date to consider for training cutoffs
+final_eval_date     = datetime.date(2025, 11, 17)    # last date you want to consider cutoffs up to
+test_horizon_days = 7                              # days after train cutoff for test slice
+n_splits = 1500                                     # number of cutoffs to generate
+days_delta = 3                                     # days delta for cutoff generation
 
 logger.info("Stock group: %s", stock_group)
 logger.info("Time group: %s", timegroup)
-logger.info("Global start date: %s", global_start_date)
+logger.info("Global start date: %s", loadup_start_date)
 logger.info("Final evaluation date: %s", final_eval_date)
 logger.info("Number of splits: %s", n_splits)
 
@@ -49,7 +51,7 @@ if __name__ == "__main__":
     # Pre-load once
     test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(test_horizon_days)][::-1]
     ls = LoadupSamples(
-        train_start_date=global_start_date,
+        train_start_date=loadup_start_date,
         test_dates=test_dates,  # will be overridden in split loop; kept for init
         treegroup=stock_group,
         timegroup=timegroup,
@@ -57,10 +59,51 @@ if __name__ == "__main__":
     )
     ls.load_samples()
     
+    # ------------------------------------------------------------------
+    # Print out loaded params
+    # ------------------------------------------------------------------
+    tt = TreeTimeML(
+        train_start_date=ls.train_start_date,
+        test_dates=ls.test_dates,
+        treegroup=stock_group,
+        timegroup=timegroup,
+        params=loadup_params,
+        loadup=ls,
+    )
+    logger.info("Using TreeTimeML with parameters:")
+    for k,v in tt.treetime_params.items():
+        logger.info(f"  {k}: {v}")
+    for k,v in tt.loadup_params.items():
+        logger.info(f"  {k}: {v}")
+    for k,v in tt.precompute_params.items():
+        logger.info(f"  {k}: {v}")
+    for k,v in tt.base_params.items():
+        logger.info(f"  {k}: {v}")
 
-    # Generate many training cutoff dates (month-end roll). Change freq as desired.
-    cutoffs = [final_eval_date - datetime.timedelta(
-        days=test_horizon_days+i*days_delta + random.randint(0, days_delta//3)) for i in range(n_splits)][::-1]
+    # ------------------------------------------------------------------
+    # Generate many training cutoff dates by randomly sampling NYSE
+    # trading days between global_start_date and
+    # final_eval_date - test_horizon_days
+    # ------------------------------------------------------------------
+    nyse = mcal.get_calendar("NYSE")
+
+    # Upper bound for cutoffs (inclusive)
+    cutoff_end_date = final_eval_date - datetime.timedelta(days=test_horizon_days)
+
+    # Get NYSE trading schedule in that range
+    schedule = nyse.schedule(
+        start_date=start_date,
+        end_date=cutoff_end_date,
+    )
+
+    # Convert schedule index (sessions) to datetime.date
+    trading_days = [ts.date() for ts in schedule.index]
+
+    # Randomly sample unique trading days and sort them chronologically
+    cutoffs = sorted(random.sample(trading_days, n_splits))
+
+    logger.info("Number of NYSE trading days available for cutoffs: %s", len(trading_days))
+    logger.info("First cutoff: %s, last cutoff: %s", cutoffs[0], cutoffs[-1])
 
     starttime_all = datetime.datetime.now()
 
@@ -71,7 +114,7 @@ if __name__ == "__main__":
         try:
             lsc = ls.copy(deep=True)
             lsc.split_dataset(
-                start_date=global_start_date,
+                start_date=loadup_start_date,
                 last_train_date=end_train_date,
                 last_test_date=end_test_date,
             )

@@ -6,7 +6,8 @@ import datetime
 import polars as pl
 import argparse
 
-stock_group = "group_finanTo2011"
+timegroup = "group_regOHLCV_to2014"
+stock_group = "group_dez_lowspread"
 stock_group_short = '_'.join(stock_group.split('_')[1:])
 
 import logging
@@ -15,13 +16,21 @@ logging.basicConfig(
     filename=f'logs/output_prediction_TreeTime_{stock_group_short}_{formatted_date}.log',
     level=logging.DEBUG,
     format='%(asctime)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M'
+    datefmt='%Y-%m-%d %H:%M:%S',
 )
 logger = logging.getLogger(__name__)
 
-params = treetimeParams.params
+loadup_params = {
+    "daysAfterPrediction": None,
+    "idxAfterPrediction": 5,
+    'timesteps': 90,
+    
+    "LoadupSamples_time_inc_factor": 1,
+    "LoadupSamples_tree_scaling_standard": False,
+    "LoadupSamples_time_scaling_stretch": False,
+}
 
-logger.info(f" Params: {params}")
+logger.info(f" Params: {loadup_params}")
 
 ###############
 ## ANALYZING ##
@@ -45,9 +54,9 @@ if __name__ == "__main__":
     ls = LoadupSamples(
         train_start_date=global_start_date,
         test_dates=test_dates,
-        group=stock_group,
-        group_type='Tree',
-        params=params,
+        treegroup=stock_group,
+        timegroup=timegroup,
+        params=loadup_params,
     )
     ls.load_samples()
 
@@ -56,14 +65,15 @@ if __name__ == "__main__":
     tt = TreeTimeML(
         train_start_date=ls.train_start_date,
         test_dates=ls.test_dates,
-        group=stock_group,
-        params=params,
-        loadup=ls
+        treegroup=stock_group,
+        timegroup=timegroup,
+        params=loadup_params,
+        loadup=ls,
     )
                 
     pred_meanmean, res_dict = tt.predict()
 
-    df_pred: pl.DataFrame = res_dict['df_pred_res']
+    df_pred: pl.DataFrame = res_dict['res_df']
     df_pred.write_parquet(f'outputs/output_prediction_TreeTime_{stock_group_short}_{formatted_date}.parquet')
 
     total_elapsed = datetime.datetime.now() - starttime_all
