@@ -148,11 +148,11 @@ class ModelAnalyzer:
     def log_test_result_overall(test_df: pl.DataFrame, score_col: str, last_col: str | None = None):
         agg_exprs = [
             pl.col(score_col).max().alias("max_score"),  # this is also .first()
-            pl.col(score_col).log().mean().exp().alias("mean_score"),
+            pl.col(score_col).mean().alias("mean_score"),
         ]
         if last_col is not None:
             agg_exprs.extend([
-                pl.col(last_col).log().mean().exp().alias("mean_res"),
+                pl.col(last_col).mean().alias("mean_res"),
                 pl.col(last_col).first().alias("top_res"),
                 pl.col(last_col).count().alias("n_entries")
             ])
@@ -186,15 +186,15 @@ class ModelAnalyzer:
     @staticmethod
     def log_test_result_multiple(df_list: list[pl.DataFrame], score_col: str, last_col: str) -> pl.DataFrame:
         results = []
-        for df in df_list:
+        for df in [df for df in df_list if not df.is_empty()]:
             end_train_date = df.select('date').min().item()
             end_test_date = df.select('date').max().item()
             df_perdate = df.group_by("date").agg([
-                pl.col(last_col).log().mean().exp().alias("mean_res"),
+                pl.col(last_col).mean().alias("mean_res"),
                 pl.col(last_col).first().alias("top_res"),
                 pl.col(last_col).count().alias("n_entries"),
                 pl.col(score_col).max().alias("max_score"),
-                pl.col(score_col).log().mean().exp().alias("mean_score"),
+                pl.col(score_col).mean().alias("mean_score"),
             ]).sort("date")
             results.append(
                 {

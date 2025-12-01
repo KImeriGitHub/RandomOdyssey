@@ -68,6 +68,7 @@ class MachineModels:
         "LGB_min_sum_hessian_in_leaf": 0.3732876155751053,
         "LGB_max_bin": 150,
         "LGB_early_stopping_rounds": 150,
+        "LGB_bagging_fraction": 1.0,
     }
     
     def __init__(self, params: dict):
@@ -76,74 +77,15 @@ class MachineModels:
     ###########
     ##  LGB  ##
     ###########
-    def run_LGB_(self, 
-        X_train: np.ndarray, 
-        y_train: np.ndarray,
-        X_test: np.ndarray = None,
-        y_test: np.ndarray = None,
-        weights: np.ndarray = None,
-    ) -> tuple[lgb.Booster, dict]:
-        
-        num_boost_round = self.params['LGB_num_boost_round']
-        lgb_params  = {
-            'verbosity': -1,
-            'n_jobs': -1,
-            'is_unbalance': True,
-            'objective': 'regression',
-            #'alpha': 0.85,
-            'metric': 'l2_root',  # NOTE: the string 'rsme' is not recognized, v 4.5.0
-            'lambda_l1': self.params['LGB_lambda_l1'],
-            'lambda_l2': self.params['LGB_lambda_l2'],
-            'early_stopping_rounds': num_boost_round//10 ,
-            'feature_fraction': self.params['LGB_feature_fraction'],
-            'num_leaves': self.params['LGB_num_leaves'], 
-            'max_depth': self.params['LGB_max_depth'],
-            'learning_rate': self.params['LGB_learning_rate'],
-            'min_data_in_leaf': self.params['LGB_min_data_in_leaf'],
-            'min_gain_to_split': self.params['LGB_min_gain_to_split'],
-            'path_smooth': self.params['LGB_path_smooth'],
-            'min_sum_hessian_in_leaf': self.params['LGB_min_sum_hessian_in_leaf'],
-            'random_state': 41,
-        }   
-
-        if weights is None:
-            weights = np.ones_like(y_train, dtype=np.float32)
-        train_data = lgb.Dataset(X_train, label = y_train, weight=weights)
-        if y_test is None or np.any(np.isnan(y_test)):
-            test_data = None
-        else:
-            test_data = lgb.Dataset(X_test, label = y_test, reference=train_data)
-
-        def print_eval_after_100(env):
-            if env.iteration % 100 == 0 or env.iteration == num_boost_round:
-                results = [
-                    f"{data_name}'s {eval_name}: {result}"
-                    for data_name, eval_name, result, _ in env.evaluation_result_list
-                ]
-                logger.info(f"Iteration {env.iteration}: " + ", ".join(results))
-
-        #lgb_params['metric'] = lgb_params['metric'] if test_data is not None else None
-        lgb_params['early_stopping_rounds'] = lgb_params['early_stopping_rounds'] if test_data is not None else None
-        gbm: lgb.Booster = lgb.train(
-            lgb_params,
-            train_data,
-            valid_sets=[test_data] if test_data is not None else None,
-            num_boost_round=num_boost_round,
-            callbacks=[print_eval_after_100] #if test_data is not None else None
-        )
-
-        res_dict = {
-            'feature_importance': gbm.feature_importance(importance_type='gain'),
-        }
-        if test_data is not None:
-            res_dict.update({
-                'best_iteration': gbm.best_iteration,
-                'best_score': gbm.best_score['valid_0']['rmse']
-            })
-
-        return gbm, res_dict
     
-    def run_LGB(self, X_train, y_train, X_test=None, y_test=None, weights=None):
+    def run_LGB(
+        self, 
+        X_train, 
+        y_train, 
+        X_test=None, 
+        y_test=None, 
+        weights=None
+    ):
         num_boost_round = self.params['LGB_num_boost_round']
         lgb_params = {
             'objective': 'regression',
@@ -161,6 +103,8 @@ class MachineModels:
             'path_smooth': self.params['LGB_path_smooth'],
             'min_sum_hessian_in_leaf': self.params['LGB_min_sum_hessian_in_leaf'],
             'random_state': 41, 
+            'bagging_fraction ': self.params['LGB_bagging_fraction'],
+            'bagging_freq': 1 if self.params['LGB_bagging_fraction'] < 1.0 else 0,
         }
 
         if weights is None:
@@ -236,6 +180,8 @@ class MachineModels:
             'path_smooth': self.params['TreeTime_lgb_path_smooth'],
             'min_sum_hessian_in_leaf': self.params['TreeTime_lgb_min_sum_hessian_in_leaf'],
             "max_bin": self.params["TreeTime_lgb_max_bin"],
+            'bagging_fraction': self.params['LGB_bagging_fraction'],
+            'bagging_freq': 1 if self.params['LGB_bagging_fraction'] < 1.0 else 0,
             'random_state': 41,
         }   
         
