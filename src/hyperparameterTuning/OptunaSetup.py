@@ -27,6 +27,7 @@ class OptunaSetup:
         n_test_idxdays: int,
         n_training_idxdays: int,
         *,
+        eval_mode: str = "all",
         spread_cost: float = 0.001,
         commission: float = 0.0000,
         rng: Optional[random.Random] = None,
@@ -40,6 +41,7 @@ class OptunaSetup:
         if model_cls is None:
             model_cls = _MachineModels
         self._model_cls = model_cls
+        self.eval_mode = eval_mode  
         self.spread_cost = spread_cost
         self.commission = commission
 
@@ -196,23 +198,21 @@ class OptunaSetup:
         ####################
         roll_wndw = max(2, self.n_splits // 10)
         preprocess_masks = [None] * self.n_splits
-        preprocess_sl = [None] * self.n_splits
-        preprocess_tp = [None] * self.n_splits
         scores = [None] * self.n_splits
         scores_direct = [None] * self.n_splits
         for i, (s_tr, s_te) in enumerate(slices):
-            Xtr_tree = self.X_tree[s_tr].copy()
-            Xtr_time = self.X_time[s_tr].copy()
-            ytr_tree = self.y_tree[s_tr].copy()
-            ytr_tree_low  = self.y_tree_low[s_tr].copy()
-            ytr_tree_high = self.y_tree_high[s_tr].copy()
-            ytr_tree_open = self.y_tree_open[s_tr].copy()
-            Xte_tree = self.X_tree[s_te].copy()
-            Xte_time = self.X_time[s_te].copy()
-            yte_tree = self.y_tree[s_te].copy()
-            yte_tree_low  = self.y_tree_low[s_te].copy()
-            yte_tree_high = self.y_tree_high[s_te].copy()
-            yte_tree_open = self.y_tree_open[s_te].copy()
+            Xtr_tree = self.X_tree[s_tr]
+            Xtr_time = self.X_time[s_tr]
+            ytr_tree = self.y_tree[s_tr]
+            ytr_tree_low  = self.y_tree_low[s_tr]
+            ytr_tree_high = self.y_tree_high[s_tr]
+            ytr_tree_open = self.y_tree_open[s_tr]
+            Xte_tree = self.X_tree[s_te]
+            Xte_time = self.X_time[s_te]
+            yte_tree = self.y_tree[s_te]
+            yte_tree_low  = self.y_tree_low[s_te]
+            yte_tree_high = self.y_tree_high[s_te]
+            yte_tree_open = self.y_tree_open[s_te]
 
             meta_train_slice = self.meta_train[s_tr] if self.meta_train is not None else None
             meta_test_slice = self.meta_train[s_te] if self.meta_train is not None else None
@@ -221,10 +221,10 @@ class OptunaSetup:
                 full_mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
                 full_mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
                 m_tr, m_te = full_mask_train, full_mask_test
-                sl_tr = 0.88 * np.ones(Xtr_tree.shape[0], dtype=float)
-                sl_te = 0.88 * np.ones(Xte_tree.shape[0], dtype=float)
-                tp_tr = 2 * np.ones(Xtr_tree.shape[0], dtype=float)
-                tp_te = 2 * np.ones(Xte_tree.shape[0], dtype=float)
+                sl_tr = 0.86 * np.ones(ytr_tree.shape, dtype=float)
+                sl_te = 0.86 * np.ones(yte_tree.shape, dtype=float)
+                tp_tr = 2 * np.ones(ytr_tree.shape, dtype=float)
+                tp_te = 2 * np.ones(yte_tree.shape, dtype=float)
 
                 return m_tr, m_te, sl_tr, sl_te, tp_tr, tp_te
 
@@ -248,22 +248,29 @@ class OptunaSetup:
                 mask_tr_pre, mask_te_pre, sl_tr, sl_te, tp_tr, tp_te = default_res()
 
             preprocess_masks[i] = (mask_tr_pre, mask_te_pre)
-            preprocess_sl[i] = (sl_tr, sl_te)
-            preprocess_tp[i] = (tp_tr, tp_te)
+            
+            last_day_mask = (meta_test_slice["date"] == meta_test_slice["date"].max()).fill_null(False)
+            if self.eval_mode == "last_day":
+                mask_te_pre = mask_te_pre & last_day_mask.to_numpy()
 
             res_vec = HelperMetrics.collapse_sl_tp(
                 yte_tree, yte_tree_low, yte_tree_high, yte_tree_open, 
                 sl_te, tp_te, 
                 spread_cost=self.spread_cost, commission=self.commission
             )
-            sl_hits = (yte_tree_low[:, -1] <= sl_te)
-            tp_hits = (yte_tree_high[:, -1] >= tp_te)
-            tp_nosl_hits = tp_hits & ~sl_hits
-            logger.info(f"ratio sl hits test split {i}: {np.sum(sl_hits)/len(sl_te):.4f}, n_test_samples = {len(sl_te)}")
-            logger.info(f"ratio tp hits test split {i}: {np.sum(tp_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
-            logger.info(f"ratio tp no sl hits test split {i}: {np.sum(tp_nosl_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
-            scores[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], res_vec)
-            scores_direct[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
+            #sl_hits = (yte_tree_low[:, -1] <= sl_te)
+            #tp_hits = (yte_tree_high[:, -1] >= tp_te)
+            #tp_nosl_hits = tp_hits & ~sl_hits
+            #logger.info(f"ratio sl hits test split {i}: {np.sum(sl_hits)/len(sl_te):.4f}, n_test_samples = {len(sl_te)}")
+            #logger.info(f"ratio tp hits test split {i}: {np.sum(tp_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
+            #logger.info(f"ratio tp no sl hits test split {i}: {np.sum(tp_nosl_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
+            
+            if self.eval_mode == "last_day":
+                scores[i] = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_test_slice['date'], res_vec)
+                scores_direct[i] = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
+            else:
+                scores[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], res_vec)
+                scores_direct[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
 
         scores = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores]
         scores_direct = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores_direct]
@@ -276,6 +283,33 @@ class OptunaSetup:
         self._log_scores_stats(scores_direct, roll_wndw)
 
         ######################
+        ## Precompute indices
+        ######################
+        # for speed up during optimization, precompute indices for each  split
+        fold_data = []
+        for i, (s_tr, s_te) in enumerate(slices):
+            mask_train_pre, mask_test_pre = preprocess_masks[i]
+
+            # precompute integer indices once (much smaller than full arrays)
+            idx_train = np.flatnonzero(mask_train_pre)
+            idx_test  = np.flatnonzero(mask_test_pre)
+
+            # if you want meta already sliced, keep this (DFs usually much smaller)
+            meta_tr = self.meta_train[s_tr].filter(pl.Series(mask_train_pre))
+            meta_te = self.meta_train[s_te].filter(pl.Series(mask_test_pre))
+
+            fold_data.append(
+                dict(
+                    s_tr=s_tr,
+                    s_te=s_te,
+                    idx_tr=idx_train,
+                    idx_te=idx_test,
+                    meta_tr=meta_tr,
+                    meta_te=meta_te,
+                )
+            )
+
+        ######################
         ## Objective function
         ######################
         def objective(trial: optuna.Trial) -> float:
@@ -285,29 +319,35 @@ class OptunaSetup:
             scores = []
             scores_dir = []
             n_valid = 0
-            for i, (s_tr, s_te) in enumerate(slices):
-                mask_train_pre, mask_test_pre = preprocess_masks[i]
 
-                Xtr_tree      = self.X_tree[s_tr][mask_train_pre]
-                ytr_tree      = self.y_tree[s_tr][mask_train_pre]
-                ytr_tree_low  = self.y_tree_low[s_tr][mask_train_pre]
-                ytr_tree_high = self.y_tree_high[s_tr][mask_train_pre]
-                ytr_tree_open = self.y_tree_open[s_tr][mask_train_pre]
-                Xte_tree      = self.X_tree[s_te][mask_test_pre]
-                yte_tree      = self.y_tree[s_te][mask_test_pre]
-                yte_tree_low  = self.y_tree_low[s_te][mask_test_pre]
-                yte_tree_high = self.y_tree_high[s_te][mask_test_pre]
-                yte_tree_open = self.y_tree_open[s_te][mask_test_pre]
-                Xtr_time      = self.X_time[s_tr][mask_train_pre]
-                Xte_time      = self.X_time[s_te][mask_test_pre]
+            for i, fold in enumerate(fold_data):
+                s_tr   = fold["s_tr"]
+                s_te   = fold["s_te"]
+                idx_tr = fold["idx_tr"]
+                idx_te = fold["idx_te"]
+                meta_tr = fold["meta_tr"]
+                meta_te = fold["meta_te"]
 
-                meta_tr = self.meta_train[s_tr].filter(pl.Series(mask_train_pre))
-                meta_te = self.meta_train[s_te].filter(pl.Series(mask_test_pre))
+                # slicing and fancy indexing
+                Xtr_tree      = self.X_tree[s_tr][idx_tr]
+                ytr_tree      = self.y_tree[s_tr][idx_tr]
+                ytr_tree_low  = self.y_tree_low[s_tr][idx_tr]
+                ytr_tree_high = self.y_tree_high[s_tr][idx_tr]
+                ytr_tree_open = self.y_tree_open[s_tr][idx_tr]
+
+                Xte_tree      = self.X_tree[s_te][idx_te]
+                yte_tree      = self.y_tree[s_te][idx_te]
+                yte_tree_low  = self.y_tree_low[s_te][idx_te]
+                yte_tree_high = self.y_tree_high[s_te][idx_te]
+                yte_tree_open = self.y_tree_open[s_te][idx_te]
+
+                Xtr_time      = self.X_time[s_tr][idx_tr]
+                Xte_time      = self.X_time[s_te][idx_te]
 
                 sc = 1.0
                 sc_dir = 1.0
                 try:
-                    mask_te_pre, sl_te, tp_te = strategy.run(
+                    _, mask_te_pre, _, sl_te, _, tp_te, _, _ = strategy.run(
                         Xtr_tree,
                         Xtr_time,
                         ytr_tree,
@@ -324,6 +364,11 @@ class OptunaSetup:
                     )
                     T = yte_tree.shape[1] if np.ndim(yte_tree) == 2 else 1
                     idx_tar = opt_params.get("idx_tar", T)
+                    
+                    last_day_mask = (meta_te["date"] == meta_te["date"].max()).fill_null(False)
+                    if self.eval_mode == "last_day":
+                        mask_te_pre = mask_te_pre & last_day_mask.to_numpy()
+                    
                     res_vec = HelperMetrics.collapse_sl_tp(
                         yte_tree[:, :idx_tar], 
                         yte_tree_low[:, :idx_tar], 
@@ -333,9 +378,13 @@ class OptunaSetup:
                         spread_cost=self.spread_cost, 
                         commission=self.commission
                     )
-                    if not mask_te_pre.sum() == 0:
+                    if self.eval_mode == "last_day":
+                        sc = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_te['date'], res_vec)
+                        sc_dir = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_te['date'], yte_tree[:, idx_tar-1])
+                    else:
                         sc = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_te['date'], res_vec)
                         sc_dir = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_te['date'], yte_tree[:, idx_tar-1])
+                        
                     if sc is not None and np.isfinite(sc):
                         n_valid = n_valid + 1
                         sc = float(sc)
@@ -348,13 +397,13 @@ class OptunaSetup:
                     logger.info(f"  median SL = {float(np.median(sl_te))}, median TP = {float(np.median(tp_te))}, max SL = {float(np.max(sl_te))}, max TP = {float(np.max(tp_te))}, min SL = {float(np.min(sl_te))}, min TP = {float(np.min(tp_te))}")
                     logger.info(f"  ratio test samples = {mask_te_pre.sum()/len(mask_te_pre):.4f}, n_test_samples = {mask_te_pre.sum()}")
                     idx_tar = opt_params.get("idx_tar", yte_tree.shape[1])
-                    sl_hits = (yte_tree_low[:, idx_tar-1] <= sl_te)
-                    tp_hits = (yte_tree_high[:, idx_tar-1] >= tp_te)
-                    tp_nosl_hits = tp_hits & ~sl_hits
-                    logger.info(f"ratio sl hits test split:       {np.sum(sl_hits)/len(sl_te):.4f}, n_test_samples = {len(sl_te)}")
-                    logger.info(f"ratio tp hits test split:       {np.sum(tp_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
-                    logger.info(f"ratio tp no sl hits test split: {np.sum(tp_nosl_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
-
+                    
+                    #sl_hits = (yte_tree_low[:, idx_tar-1] <= sl_te)
+                    #tp_hits = (yte_tree_high[:, idx_tar-1] >= tp_te)
+                    #tp_nosl_hits = tp_hits & ~sl_hits
+                    #logger.info(f"ratio sl hits test split:       {np.sum(sl_hits)/len(sl_te):.4f}, n_test_samples = {len(sl_te)}")
+                    #logger.info(f"ratio tp hits test split:       {np.sum(tp_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
+                    #logger.info(f"ratio tp no sl hits test split: {np.sum(tp_nosl_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
 
                 except Exception as exc:
                     logger.exception("Score computation failed: %s", exc)
@@ -413,3 +462,17 @@ class OptunaSetup:
 
         if self.meta_train is None:
             raise ValueError("LoadupSamples must provide training metadata for Optuna splits.")
+
+        # Make arrays read-only
+        for name in [
+            "X_tree",
+            "y_tree",
+            "y_tree_low",
+            "y_tree_high",
+            "y_tree_open",
+            "X_time",
+            "y_time",
+        ]:
+            arr = getattr(self, name, None)
+            if arr is not None and hasattr(arr, "setflags"):
+                arr.setflags(write=False)
