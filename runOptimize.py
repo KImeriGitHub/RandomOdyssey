@@ -15,7 +15,11 @@ from src.hyperparameterTuning.StratClusteringLSTM import StratClusteringLSTM
 from src.hyperparameterTuning.StratClusterinAnomalies import StratClusteringAnomalies
 from src.hyperparameterTuning.StratTripleLSTM import StratTripleLSTM
 from src.hyperparameterTuning.StratSingleLSTM import StratSingleLSTM
+from src.hyperparameterTuning.StratOHLCVFiltering import StratOHLCVFiltering
 from src.hyperparameterTuning.StratCatSamplingSequentially import StratCatSamplingSequentially
+from src.hyperparameterTuning.StratSelectedMasks import StratSelectedMasks
+from src.hyperparameterTuning.StratDebug import StratDebug
+from src.hyperparameterTuning.StratLGBMSlices import StratLGBMSlices
 from src.predictionModule.LoadupSamples import LoadupSamples
 
 timegroup = "group_regOHLCV_to2014"
@@ -27,7 +31,7 @@ logging.basicConfig(
     filename=f"logs/output_optuna_{stock_group_short}_{formatted_date}.log",
     level=logging.DEBUG,
     format="%(asctime)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -39,16 +43,17 @@ loadup_params = {
     "LoadupSamples_time_inc_factor": 1,
 }
 
-strategy = StratLGBMOnFiltered()
+strategy = StratLGBMSlices()
 logger.info("Using strategy: %s", strategy.__class__.__name__)
 
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-optuna_duration = 60 * 60 * 3
+optuna_duration = 60 * 60 * 8
 global_start_date = datetime.date(2014, 1, 1)
 final_eval_date = datetime.date(2025, 11, 3)
-n_test_idxdays = 5
-n_splits = 100
-n_startup_trials = 5
+n_test_idxdays = 100
+n_splits = 20
+n_startup_trials = 15
+eval_mode = "all"
 n_training_idxdays_reserved = 255 * 4
 direction = "maximize"
 spread_cost = 0.0000
@@ -75,6 +80,7 @@ logger.info("Final evaluation date: %s", final_eval_date)
 logger.info("Test idx-days: %s", n_test_idxdays)
 logger.info("Number of splits: %s", n_splits)
 logger.info("Number of startup trials: %s", n_startup_trials)
+logger.info("Evaluation mode: %s", eval_mode)
 logger.info("Training days reserved: %s", n_training_idxdays_reserved)
 logger.info("Optimization direction: %s", direction)
 logger.info("Spread cost: %s", spread_cost)
@@ -97,6 +103,7 @@ if __name__ == "__main__":
         n_splits=n_splits,
         n_test_idxdays=n_test_idxdays,
         n_training_idxdays=n_training_idxdays_reserved,
+        eval_mode=eval_mode,
         spread_cost=spread_cost,
         commission=commission,
     )
