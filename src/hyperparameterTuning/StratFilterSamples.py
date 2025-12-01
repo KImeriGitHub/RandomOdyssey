@@ -182,12 +182,17 @@ class StratFilterSamples(BaseStrategy):
             spread_cost=0.0,
             commission=0.0,
         )
+        sl_tr = min(sl_min, sl_val) * np.ones(Xtr_tree.shape[0], dtype=float)
         sl_te = min(sl_min, sl_val) * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_tr = max(tp_max, tp_val) * np.ones(Xtr_tree.shape[0], dtype=float)
         tp_te = max(tp_max, tp_val) * np.ones(Xte_tree.shape[0], dtype=float)
+        
+        score_tr = np.random.rand(Xtr_tree.shape[0])
+        score_te = np.random.rand(Xte_tree.shape[0])
 
         logger.info("  Score (train) = %s", score_train)
 
-        return mask_test, sl_te, tp_te
+        return mask_train, mask_test, sl_tr, sl_te, tp_tr, tp_te, score_tr, score_te
 
     def precompute(
         self,

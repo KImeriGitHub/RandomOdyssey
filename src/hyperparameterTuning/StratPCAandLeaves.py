@@ -162,11 +162,17 @@ class StratPCAandLeaves(BaseStrategy):
             if mask_sel.sum() >= min_n_tar:
                 break
 
+        mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         sl_val, tp_val, _ = HelperFunctions.optimize_sl_tp(ytr_tree, ytr_tree_low, ytr_tree_high, ytr_tree_open)
+        sl_tr = sl_val * np.ones(Xtr_tree.shape[0], dtype=float)
         sl_te = sl_val * np.ones(Xte_tree.shape[0], dtype=float)
+        tp_tr = tp_val * np.ones(Xtr_tree.shape[0], dtype=float)
         tp_te = tp_val * np.ones(Xte_tree.shape[0], dtype=float)
+        
+        score_tr = np.random.rand(Xtr_tree.shape[0])
+        score_te = np.random.rand(Xte_tree.shape[0])
 
-        return mask_sel, sl_te, tp_te
+        return mask_train, mask_sel, sl_tr, sl_te, tp_tr, tp_te, score_tr, score_te
 
     def precompute(
         self,

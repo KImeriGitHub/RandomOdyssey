@@ -197,10 +197,15 @@ class StratSingleLSTM(BaseStrategy):
             spread_cost=0.0000,
             commission=0.0,
         )
+        sl_tr = sl_val * np.ones(Xtr_time.shape[0], dtype=float)
         sl_te = sl_val * np.ones(Xte_time.shape[0], dtype=float)
+        tp_tr = tp_val * np.ones(Xtr_time.shape[0], dtype=float)
         tp_te = tp_val * np.ones(Xte_time.shape[0], dtype=float)
+        
+        score_tr = np.random.rand(Xtr_time.shape[0])
+        score_te = np.random.rand(Xte_time.shape[0])
 
-        return mask_test, sl_te, tp_te
+        return mask_train, mask_test, sl_tr, sl_te, tp_tr, tp_te, score_tr, score_te
 
     def precompute(
         self,

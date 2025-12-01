@@ -224,10 +224,17 @@ class StratClusteringLSTM(BaseStrategy):
         thr = float(np.quantile(preds, quantile_val))
         selection_mask = preds >= thr
 
+        mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
         res_mask, sl_vec, tp_vec = default_res()
         res_mask[mask_te_best] = selection_mask
+        
+        sl_tr = sl_vec.copy()
+        tp_tr = tp_vec.copy()
+        
+        score_tr = np.random.rand(Xtr_tree.shape[0])
+        score_te = np.random.rand(Xte_tree.shape[0])
 
-        return res_mask, sl_vec, tp_vec
+        return mask_train, res_mask, sl_tr, sl_vec, tp_tr, tp_vec, score_tr, score_te
 
     def precompute(
         self,

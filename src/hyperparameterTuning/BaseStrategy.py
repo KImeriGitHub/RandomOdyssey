@@ -36,7 +36,7 @@ class BaseStrategy(ABC):
         meta_train: pl.DataFrame,
         meta_test: pl.DataFrame,
         opt_params: dict,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Evaluate the model with the given parameters and return a score."""
 
     @abstractmethod
