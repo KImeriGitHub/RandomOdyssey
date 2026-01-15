@@ -38,7 +38,7 @@ class DistributionTools():
         return metric_distrEquality
     
     @staticmethod
-    def establishMatchingWeight(sam_tr: np.array, sam_te: np.array, n_bin: int = 10, minbd: float = 0.1) -> np.array:
+    def establishMatchingWeight(sam_tr: np.array, sam_te: np.array, n_bin: int = 10, minbd: float = 0.1, wndw_ratio: float = 0.2) -> np.array:
         """
         PRE: sam_tr and sam_te are the training and test samples; imp is the importance vector.
         POST: Returns a nonnegative weight vector (length=num_sam_tr) obtained via NNLS so that for each
@@ -58,14 +58,18 @@ class DistributionTools():
             weights_sorted[1:, i] = np.abs(hi - lo)
             weights_sorted[0, i] = 0
             # Optional smoothing via convolution with a uniform window
-            window = np.ones(sam_tr.shape[0]//5) / (sam_tr.shape[0]/5)
+            wndw_int = max(2, int(sam_tr.shape[0]*wndw_ratio))
+            window = np.ones(wndw_int) / (wndw_int)
             weights_sorted[:, i] = np.convolve(weights_sorted[:, i], window, mode='same')
             # Scale to preserve total mass
             weights_sorted[:, i] *= (num_sam_tr / weights_sorted[:, i].sum())
 
             # If there's only one feature, return its weight vector directly
         if n_feat == 1:
-            return weights_sorted[:, 0]
+            res = weights_sorted[:, 0]
+            res = np.clip(res, a_min=minbd, a_max=None)
+            res = res * num_sam_tr / res.sum()
+            return res
 
         # Build the sparse constraint matrix A_sparse and target vector b.
         # For each feature, we impose that in the sorted order (using permutation p),

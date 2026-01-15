@@ -23,7 +23,7 @@ class RegimeChange:
         - Applying to_tree after to_time with the same inc_factor returns roughly the original x.
         - Savety clipping to avoid numerical issues with log(0) or arctanh(1).
         """
-        return np.clip(np.tanh(np.log(np.clip(x, 1e-6, None)) * inc_factor) / 2.0 + 0.5, 1e-6, 1 - 1e-6)
+        return np.clip(np.tanh(np.log(np.clip(x, 1e-8, None)) * inc_factor) / 2.0 + 0.5, 1e-8, 1 - 1e-8)
     
     @staticmethod
     def to_tree(y, inc_factor):
