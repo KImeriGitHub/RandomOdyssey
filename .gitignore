@@ -33,3 +33,4 @@ documents
 /optuna.db
 
 notebooks/notebook*
+/sandbox_optuna.db
