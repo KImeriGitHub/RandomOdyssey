@@ -36,9 +36,9 @@ loadup_params = {
 # Static config
 loadup_start_date   = datetime.date(2014, 1, 1)      # earliest data to load data from
 start_date          = datetime.date(2018, 1, 1)            # first date to consider for training cutoffs
-final_eval_date     = datetime.date(2025, 11, 17)    # last date you want to consider cutoffs up to
+final_eval_date     = datetime.date(2025, 11, 24)    # last date you want to consider cutoffs up to
 test_horizon_days = 7                              # days after train cutoff for test slice
-n_splits = 1500                                     # number of cutoffs to generate
+n_splits = 1000                                     # number of cutoffs to generate
 days_delta = 3                                     # days delta for cutoff generation
 
 logger.info("Stock group: %s", stock_group)

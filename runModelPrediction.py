@@ -37,7 +37,7 @@ logger.info(f" Params: {loadup_params}")
 ###############
 # Static config
 global_start_date = datetime.date(2014, 1, 1)     # earliest data
-eval_date   = datetime.datetime.now().date()          # last date you want to consider cutoffs up to
+eval_date   =  datetime.datetime.now().date()          # last date you want to consider cutoffs up to
 test_horizon_days = 7                             # days after train cutoff for test slice
 
 if __name__ == "__main__":

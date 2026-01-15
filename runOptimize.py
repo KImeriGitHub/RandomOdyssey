@@ -20,6 +20,17 @@ from src.hyperparameterTuning.StratCatSamplingSequentially import StratCatSampli
 from src.hyperparameterTuning.StratSelectedMasks import StratSelectedMasks
 from src.hyperparameterTuning.StratDebug import StratDebug
 from src.hyperparameterTuning.StratLGBMSlices import StratLGBMSlices
+from src.hyperparameterTuning.StratOptunaMomentum import StratOptunaMomentum
+from src.hyperparameterTuning.StratOptunaMomentumVolatility import StratOptunaMomentumVolatility
+from src.hyperparameterTuning.StratSelectedMasksRandomForest import StratSelectedMasksRandomForest
+from src.hyperparameterTuning.StratSelectedMasksDoubleLSTM import StratSelectedMasksDoubleLSTM
+from src.hyperparameterTuning.StratSLTPSelectedMasks import StratSLTPSelectedMasks
+from src.hyperparameterTuning.StratQuantileWindowCascade import StratQuantileWindowCascade
+from src.hyperparameterTuning.StratSLTPQuantileWindowCascade import StratSLTPQuantileWindowCascade
+from src.hyperparameterTuning.StratDoubleDrop import StratDoubleDrop
+from src.hyperparameterTuning.StratMACDExtravaganza import StratMACDExtravaganza
+from src.hyperparameterTuning.StratDuoMACDExDD import StratDuoMACDExDD
+
 from src.predictionModule.LoadupSamples import LoadupSamples
 
 timegroup = "group_regOHLCV_to2014"
@@ -29,7 +40,7 @@ stock_group_short = '_'.join(stock_group.split('_')[1:])
 formatted_date = datetime.datetime.now().strftime("%d%b%y_%H%M").lower()
 logging.basicConfig(
     filename=f"logs/output_optuna_{stock_group_short}_{formatted_date}.log",
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -43,21 +54,22 @@ loadup_params = {
     "LoadupSamples_time_inc_factor": 1,
 }
 
-strategy = StratLGBMSlices()
+strategy = StratDuoMACDExDD()
 logger.info("Using strategy: %s", strategy.__class__.__name__)
 
 optuna_study_name = f"Optuna_{stock_group_short}_{formatted_date}"
-optuna_duration = 60 * 60 * 8
+optuna_duration = 60 * 60 * 1
 global_start_date = datetime.date(2014, 1, 1)
-final_eval_date = datetime.date(2025, 11, 3)
-n_test_idxdays = 100
-n_splits = 20
-n_startup_trials = 15
+final_eval_date = datetime.date(2025, 12, 17)
+n_test_idxdays = 5
+n_splits = 250
+n_startup_trials = 10
 eval_mode = "all"
-n_training_idxdays_reserved = 255 * 4
+n_training_idxdays_reserved = 255 * 6
 direction = "maximize"
 spread_cost = 0.0000
 commission = 0.0000
+min_targets_perday = 3
 
 logger.info("Loadup params:")
 for k, v in loadup_params.items():
@@ -85,9 +97,10 @@ logger.info("Training days reserved: %s", n_training_idxdays_reserved)
 logger.info("Optimization direction: %s", direction)
 logger.info("Spread cost: %s", spread_cost)
 logger.info("Commission: %s", commission)
+logger.info("Minimum targets per day: %s", min_targets_perday)
 
 if __name__ == "__main__":
-    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(int(n_test_idxdays*7/5))][::-1]
+    test_dates = [final_eval_date - datetime.timedelta(days=i) for i in range(7)][::-1]
 
     ls = LoadupSamples(
         train_start_date=global_start_date,
@@ -106,6 +119,7 @@ if __name__ == "__main__":
         eval_mode=eval_mode,
         spread_cost=spread_cost,
         commission=commission,
+        min_targets_perday=min_targets_perday,
     )
 
     objective = optuna_client.make_objective(
@@ -128,4 +142,3 @@ if __name__ == "__main__":
     df.to_parquet(output_path)
     logger.info("Saved Optuna results to %s", output_path)
     logger.info("Optuna study finished with %s completed trials.", len(df))
-
