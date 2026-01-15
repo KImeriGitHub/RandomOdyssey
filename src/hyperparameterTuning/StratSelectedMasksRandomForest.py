@@ -5,11 +5,12 @@ import polars as pl
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.hyperparameterTuning.HelperFunctions import HelperFunctions
 from src.hyperparameterTuning.HelperSLTP import HelperSLTP
+from sklearn.ensemble import RandomForestRegressor
 
 import logging
 logger = logging.getLogger(__name__)
 
-class StratSelectedMasks(BaseStrategy):
+class StratSelectedMasksRandomForest(BaseStrategy):
     # Note Xtr_time needs the features
     #        "FeatureLSTM_AdjClose" at index 0,
     #        "FeatureLSTM_AdjOpen" at index 1,
@@ -37,45 +38,45 @@ class StratSelectedMasks(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["min_n_tar_daily"] = 30
         
-        #opt_params["macd_diff_qup"]                    = trial.suggest_float("macd_diff_qup", 0.86, 0.93)
-        #opt_params["macd_diff_qdown"]                  = trial.suggest_float("macd_diff_qdown", 0.985, 0.999)
-        #opt_params["macd_lookback_days"]               = 2000 # trial.suggest_int("macd_lookback_days", 1500, 2500)
-        #opt_params["macd_fast_period"]                 = trial.suggest_int("macd_fast_period", 8, 19)
-        #opt_params["macd_slow_period"]                 = trial.suggest_int("macd_slow_period", 25, 67)
-        #opt_params["macd_signal_period"]               = trial.suggest_int("macd_signal_period", 4, 12)
-        #opt_params["macd_fast_alpha"]                  = trial.suggest_float("macd_fast_alpha", 0.05, 0.25)
-        #opt_params["macd_slow_alpha"]                  = trial.suggest_float("macd_slow_alpha", 0.05, 0.25)
-        #opt_params["macd_signal_alpha"]                = trial.suggest_float("macd_signal_alpha", 0.05, 0.25)
+        opt_params["rf_gate_n_estimators"]        = trial.suggest_int("rf_gate_n_estimators", 101, 1001, step=100)
+        opt_params["rf_gate_max_depth"]           = trial.suggest_int("rf_gate_max_depth", 3, 7)       
+        opt_params["rf_gate_min_samples_split"]   = trial.suggest_int("rf_gate_min_samples_split", 10, 80, step=10)
+        opt_params["rf_gate_min_samples_leaf"]    = trial.suggest_int("rf_gate_min_samples_leaf", 150, 550, step=10)
+        opt_params["rf_gate_max_features"]        = 1.0 #trial.suggest_categorical("rf_gate_max_features", ["sqrt", "log2", 0.3, 0.5, 0.8, 1.0])
+        opt_params["rf_gate_bootstrap"]           = True #trial.suggest_categorical("rf_gate_bootstrap", [True, False])
+        opt_params["rf_gate_oob_score"]           = True #trial.suggest_categorical("rf_gate_oob_score", [True, False])
+        opt_params["rf_gate_n_jobs"]              = -1
+
+        # --- RF gate: selection knobs ---
+        opt_params["rf_gate_pred_q_low"]          = trial.suggest_float("rf_gate_pred_q_low", 0.88, 0.97)
+        opt_params["rf_gate_pred_q_high"]         = 0.998 #trial.suggest_float("rf_gate_pred_q_high", 0.98, 0.999)
+
+        # keep quantiles ordered (Optuna doesn't enforce)
+        if opt_params["rf_gate_pred_q_low"] >= opt_params["rf_gate_pred_q_high"]:
+            opt_params["rf_gate_pred_q_low"] = min(opt_params["rf_gate_pred_q_low"], opt_params["rf_gate_pred_q_high"] - 0.01)
         
-        opt_params["atr_period"]                       = trial.suggest_int("atr_period", 2, 22)
-        opt_params["atr_alpha"]                        = trial.suggest_float("atr_alpha", 0.03, 0.30)
-        opt_params["atr_qup"]                          = trial.suggest_float("atr_qup", 0.8, 0.96)
-        opt_params["atr_qdown"]                        = trial.suggest_float("atr_qdown", 0.980, 0.999)
+        opt_params["atr_period"]                       = trial.suggest_int("atr_period", 2, 6)
+        opt_params["atr_alpha"]                        = trial.suggest_float("atr_alpha", 0.13, 0.25)
         
-        opt_params["slope_period"]                     = trial.suggest_int("slope_period", 2, 25)
-        opt_params["slope_qup"]                        = trial.suggest_float("slope_qup", 0.6, 0.9)
-        opt_params["slope_qdown"]                      = 1.0 #trial.suggest_float("slope_qdown", 0.9, 0.999)
+        opt_params["slope_period"]                     = trial.suggest_int("slope_period", 4, 7)
         
-        #opt_params["rmse_period"]                      = trial.suggest_int("rmse_period", 10, 40)
-        #opt_params["rmse_delay"]                       = trial.suggest_int("rmse_delay", 2, 9)
-        #opt_params["rmse_ma_wndw"]                     = trial.suggest_int("rmse_ma_wndw", 6, 35)
-        #opt_params["rmse_alpha"]                       = trial.suggest_float("rmse_alpha", 0.05, 0.30)
-        #opt_params["rmse_qup"]                         = trial.suggest_float("rmse_qup", 0.55, 0.85)
-        #opt_params["rmse_qdown"]                       = trial.suggest_float("rmse_qdown", 0.97, 0.999)
+        opt_params["rmse_period"]                      = trial.suggest_int("rmse_period", 11, 21)
+        opt_params["rmse_delay"]                       = trial.suggest_int("rmse_delay", 3, 7)
+        opt_params["rmse_ma_wndw"]                     = trial.suggest_int("rmse_ma_wndw", 11, 19)
+        opt_params["rmse_alpha"]                       = trial.suggest_float("rmse_alpha", 0.10, 0.22)
         
-        opt_params["sl0"] = 0.823295 #trial.suggest_float("sl0", 0.80, 0.94)
-        opt_params["sl1"] = 0.833562 #trial.suggest_float("sl1", 0.80, 0.99)
-        opt_params["sl2"] = 0.783671 #trial.suggest_float("sl2", 0.72, 1.05)
-        opt_params["sl3"] = 0.878303 #trial.suggest_float("sl3", 0.70, 1.1)
-        opt_params["sl4"] = 0.982187 #trial.suggest_float("sl4", 0.65, 1.2)
+        opt_params["sl0"] = 0.80 #trial.suggest_float("sl0", 0.80, 0.94)
+        opt_params["sl1"] = 0.80 #trial.suggest_float("sl1", 0.80, 0.99)
+        opt_params["sl2"] = 0.75 #trial.suggest_float("sl2", 0.72, 1.05)
+        opt_params["sl3"] = 0.80 #trial.suggest_float("sl3", 0.70, 1.1)
+        opt_params["sl4"] = 0.902187 #trial.suggest_float("sl4", 0.65, 1.2)
         
-        opt_params["tp0"] = 1.307256 #trial.suggest_float("tp0", 1.1, 1.6)
+        opt_params["tp0"] = 1.407256 #trial.suggest_float("tp0", 1.1, 1.6)
         opt_params["tp1"] = 1.442779 #trial.suggest_float("tp1", 1.05, 1.8)
-        opt_params["tp2"] = 1.377516 #trial.suggest_float("tp2", 1.00, 1.8)
-        opt_params["tp3"] = 1.211979 #trial.suggest_float("tp3", 0.95, 1.9)
-        opt_params["tp4"] = 1.378628 #trial.suggest_float("tp4", 0.9, 1.95)
+        opt_params["tp2"] = 1.477516 #trial.suggest_float("tp2", 1.00, 1.8)
+        opt_params["tp3"] = 1.411979 #trial.suggest_float("tp3", 0.95, 1.9)
+        opt_params["tp4"] = 1.478628 #trial.suggest_float("tp4", 0.9, 1.95)
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -98,18 +99,8 @@ class StratSelectedMasks(BaseStrategy):
         opt_params: dict,
     ) -> tuple[np.ndarray, ...]: 
 
-        # --- MACD masks ---
-        #mask_train_macd, mask_test_macd = self._compute_macd_masks(
-        #    Xtr_tree,
-        #    Xte_tree,
-        #    Xtr_time,
-        #    Xte_time,
-        #    meta_train,
-        #    opt_params,
-        #)
-
         # --- ATR masks ---
-        mask_train_atr, mask_test_atr = self._compute_atr_masks(
+        feat_train_atr, feat_test_atr = self._compute_atr_feat(
             Xtr_time,
             Xte_time,
             meta_train,
@@ -117,25 +108,34 @@ class StratSelectedMasks(BaseStrategy):
         )
         
         # --- Slope masks ---
-        mask_train_slope, mask_test_slope = self._compute_slope_mask(
+        feat_train_slope, feat_test_slope = self._compute_slope_feat(
             Xtr_time,
             Xte_time,
             meta_train,
             opt_params,
         )
         
-        ## --- RSME masks ---
-        #mask_train_rsme, mask_test_rsme = self._compute_rmse_mask(
-        #    Xtr_time,
-        #    Xte_time,
-        #    meta_train,
-        #    opt_params,
-        #)
+        # --- RSME masks ---
+        feat_train_rsme, feat_test_rsme = self._compute_rmse_feat(
+            Xtr_time,
+            Xte_time,
+            meta_train,
+            opt_params,
+        )
 
         # --- Combine ---
-        mask_train = mask_train_atr & mask_train_slope #& mask_train_rsme
-        mask_test = mask_test_atr & mask_test_slope #& mask_test_rsme
-        
+        y_gate_tr = ytr_tree[:, -1]
+        mask_train, mask_test = self._rf_gate_sample_masks(
+            feat_train_atr=feat_train_atr,
+            feat_train_slope=feat_train_slope,
+            feat_train_rmse=feat_train_rsme,
+            feat_test_atr=feat_test_atr,
+            feat_test_slope=feat_test_slope,
+            feat_test_rmse=feat_test_rsme,
+            y_gate_tr=y_gate_tr,
+            opt_params=opt_params,
+        )
+                
         sl_vec = [opt_params["sl0"], opt_params["sl1"], opt_params["sl2"], opt_params["sl3"], opt_params["sl4"]]
         tp_vec = [opt_params["tp0"], opt_params["tp1"], opt_params["tp2"], opt_params["tp3"], opt_params["tp4"]]
         sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat = HelperSLTP.replicate(
@@ -202,6 +202,61 @@ class StratSelectedMasks(BaseStrategy):
     #------------------------------------------------------------------
     # Helper methods
     #------------------------------------------------------------------
+    def _rf_gate_sample_masks(
+        self,
+        feat_train_atr: np.ndarray,
+        feat_train_slope: np.ndarray,
+        feat_train_rmse: np.ndarray,
+        feat_test_atr: np.ndarray,
+        feat_test_slope: np.ndarray,
+        feat_test_rmse: np.ndarray,
+        y_gate_tr: np.ndarray,          # ytr_tree[:, -1]
+        opt_params: dict,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Train a RF regressor on 3 gating features (ATR, slope, RMSE) -> y_gate_tr,
+        then select samples by thresholds on:
+          - predicted value range (quantiles)
+          - optional uncertainty proxy (tree prediction std)
+          - optional train residual (abs error) cap
+
+        Returns:
+          mask_train, mask_test
+        """
+        Ztr = np.column_stack([feat_train_atr, feat_train_slope, feat_train_rmse])
+        Zte = np.column_stack([feat_test_atr,  feat_test_slope,  feat_test_rmse])
+
+        rf_gate = RandomForestRegressor(
+            n_estimators=opt_params.get("rf_gate_n_estimators", 400),
+            max_depth=opt_params.get("rf_gate_max_depth", None),
+            min_samples_split=opt_params.get("rf_gate_min_samples_split", 2),
+            min_samples_leaf=opt_params.get("rf_gate_min_samples_leaf", 1),
+            max_features=opt_params.get("rf_gate_max_features", "sqrt"),
+            bootstrap=opt_params.get("rf_gate_bootstrap", True),
+            oob_score=opt_params.get("rf_gate_oob_score", False) if opt_params.get("rf_gate_bootstrap", True) else False,
+            n_jobs=opt_params.get("rf_gate_n_jobs", -1),
+            max_samples=0.2 if opt_params.get("rf_gate_bootstrap", True) else None,
+        )
+        rf_gate.fit(Ztr, y_gate_tr)
+
+        pred_tr = rf_gate.predict(Ztr)
+        pred_te = rf_gate.predict(Zte)
+
+        # --- knobs: prediction window ---
+        pred_q_low  = opt_params.get("rf_gate_pred_q_low", 0.30)
+        pred_q_high = opt_params.get("rf_gate_pred_q_high", 0.90)
+        pred_lo, pred_hi = np.quantile(pred_tr, [pred_q_low, pred_q_high])
+
+        mask_train = (
+            (pred_tr >= pred_lo) & (pred_tr <= pred_hi)
+        )
+
+        mask_test = (
+            (pred_te >= pred_lo) & (pred_te <= pred_hi)
+        )
+
+        return mask_train, mask_test
+    
     def _ema_2d(
         self,
         values: np.ndarray,
@@ -354,7 +409,7 @@ class StratSelectedMasks(BaseStrategy):
 
         return mask_tr, mask_te
     
-    def _compute_atr_masks(
+    def _compute_atr_feat(
         self,
         Xtr_time: np.ndarray,      # (n_samples, n_steps, n_features)
         Xte_time: np.ndarray,      # (n_samples, n_steps, n_features)
@@ -373,9 +428,6 @@ class StratSelectedMasks(BaseStrategy):
         # --- ATR parameters ---
         atr_period = opt_params["atr_period"] 
         atr_alpha = opt_params.get("atr_alpha", 2.0 / (atr_period + 1.0))
-
-        atr_thr_qup = opt_params["atr_qup"]  # e.g. 0.7 for top 30% ATR
-        atr_thr_qdown = opt_params["atr_qdown"]  # e.g. 0.0 for no lower bound
 
         # --- Extract close / high / low ---
         close_tr = Xtr_time[:, :, 0].astype(np.float64, copy=False)
@@ -397,16 +449,9 @@ class StratSelectedMasks(BaseStrategy):
         atr_tr_last = atr_tr_full[:, -1]
         atr_te_last = atr_te_full[:, -1]
 
-        atr_thr_qup = np.quantile(atr_tr_last, atr_thr_qup)
-        atr_thr_qdown = np.quantile(atr_tr_last, atr_thr_qdown)
-
-        # High-ATR regime
-        mask_tr = (atr_tr_last >= atr_thr_qup) & (atr_tr_last <= atr_thr_qdown)
-        mask_te = (atr_te_last >= atr_thr_qup) & (atr_te_last <= atr_thr_qdown)
-
-        return mask_tr, mask_te
+        return atr_tr_last, atr_te_last
     
-    def _compute_slope_mask(
+    def _compute_slope_feat(
         self,
         Xtr_time: np.ndarray,      # (n_samples, n_steps, n_features)
         Xte_time: np.ndarray,      # (n_samples, n_steps, n_features)
@@ -419,8 +464,6 @@ class StratSelectedMasks(BaseStrategy):
         
         # --- Slope parameters ---
         slope_period = opt_params["slope_period"]
-        slope_qup = opt_params["slope_qup"]
-        slope_qdown = opt_params["slope_qdown"]
         
         # --- Extract close prices ---
         close_tr = Xtr_time[:, :, 0].astype(np.float64, copy=False)
@@ -430,14 +473,9 @@ class StratSelectedMasks(BaseStrategy):
         slope_tr = np.mean(np.diff(close_tr[:, -(slope_period+2):], axis=1), axis=1)  # shape (nS,)
         slope_te = np.mean(np.diff(close_te[:, -(slope_period+2):], axis=1), axis=1)  # shape (nS,)
         
-        slope_tr_thr_up, slope_tr_thr_down = np.quantile(slope_tr, [slope_qup, slope_qdown])
+        return slope_tr, slope_te
         
-        mask_tr_slope = (slope_tr >= slope_tr_thr_up) & (slope_tr <= slope_tr_thr_down)
-        mask_te_slope = (slope_te >= slope_tr_thr_up) & (slope_te <= slope_tr_thr_down)
-        
-        return mask_tr_slope, mask_te_slope
-        
-    def _compute_rmse_mask(
+    def _compute_rmse_feat(
         self,
         Xtr_time: np.ndarray,      # (n_samples, n_steps, n_features)
         Xte_time: np.ndarray,      # (n_samples, n_steps, n_features)
@@ -452,8 +490,6 @@ class StratSelectedMasks(BaseStrategy):
         rmse_period = opt_params["rmse_period"]
         rmse_ma_wndw = opt_params["rmse_ma_wndw"]
         rmse_delay = opt_params["rmse_delay"]
-        rmse_qup = opt_params["rmse_qup"]
-        rmse_qdown = opt_params["rmse_qdown"]
         rmse_alpha = opt_params["rmse_alpha"]
         
         # --- Extract close prices ---
@@ -476,10 +512,5 @@ class StratSelectedMasks(BaseStrategy):
             axis=1
         ))
         
-        rmse_tr_thr_up, rmse_tr_thr_down = np.quantile(rmse_tr, [rmse_qup, rmse_qdown])
-        
-        mask_tr_rsme = (rmse_tr >= rmse_tr_thr_up) & (rmse_tr <= rmse_tr_thr_down)
-        mask_te_rsme = (rmse_te >= rmse_tr_thr_up) & (rmse_te <= rmse_tr_thr_down)
-        
-        return mask_tr_rsme, mask_te_rsme
+        return rmse_tr, rmse_te
         

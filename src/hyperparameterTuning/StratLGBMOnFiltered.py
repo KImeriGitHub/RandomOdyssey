@@ -3,8 +3,10 @@ import optuna
 import polars as pl
 import datetime
 import lightgbm as lgb
+import re
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import r_regression
 
 from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.predictionModule.FilterSamples import FilterSamples
@@ -12,6 +14,9 @@ from src.predictionModule.MachineModels import MachineModels
 from src.hyperparameterTuning.HelperFunctions import HelperFunctions
 from src.hyperparameterTuning.HelperMetrics import HelperMetrics
 from src.hyperparameterTuning.HelperSLTP import HelperSLTP
+
+from src.hyperparameterTuning.StratSelectedMasks import StratSelectedMasks
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -23,31 +28,17 @@ class StratLGBMOnFiltered(BaseStrategy):
         "LoadupSamples_time_scaling_stretch": False,
     }
     precompute_params = {
-        "FilterSamples_cat_over10": False,
-        "FilterSamples_cat_under5000": False,
-        "FilterSamples_cat_posOneYearReturn": False,
-        "FilterSamples_cat_posFiveYearReturn": False,
-        "FilterSamples_cat_highestShareholderEquity_q0.2": False,
-        "FilterSamples_cat_volatility_qdown0.02": False,
-        "FilterSamples_cat_volatility_qup0.975": False,
-        "FilterSamples_cat_predictability_qup0.9": False,
-        "FilterSamples_cat_predictability_qdown0.1": False,
-        
-        "macd_diff_qup"                    : 0.929618,
-        "macd_diff_qdown"                  : 0.998680,
-        "macd_lookback_days"               : 2000, # trial.suggest_int("macd_lookback_days", 1500, 2500)
-        "macd_fast_period"                 : 12,
-        "macd_slow_period"                 : 56,
-        "macd_signal_period"               : 8,
-        "macd_fast_alpha"                  : 0.146235,
-        "macd_slow_alpha"                  : 0.088318,
-        "macd_signal_alpha"                : 0.121511,
+        "sl0" : 0.823295, 
+        "sl1" : 0.833562, 
+        "sl2" : 0.783671, 
+        "sl3" : 0.878303, 
+        "sl4" : 0.982187, 
     
-        "atr_period"                       : 13,
-        "atr_alpha"                        : 0.176763,
-        "atr_lookback_days"                : 2000, # trial.suggest_int("atr_lookback_days", 1900, 2500)
-        "atr_qup"                          : 0.922995,
-        "atr_qdown"                        : 0.991166,
+        "tp0" : 1.307256, 
+        "tp1" : 1.442779, 
+        "tp2" : 1.377516, 
+        "tp3" : 1.211979, 
+        "tp4" : 1.378628, 
     }
 
     base_params = {
@@ -73,29 +64,40 @@ class StratLGBMOnFiltered(BaseStrategy):
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
         opt_params = {}
-        opt_params["inc_FeatureTA"] = True #trial.suggest_categorical("inc_FeatureTA", [True, False])
-        opt_params["inc_GroupDynamics"] = True #trial.suggest_categorical("inc_GroupDynamics", [True, False])
-        opt_params["inc_Categorical"] = True #trial.suggest_categorical("inc_Categorical", [True, False])
-        opt_params["inc_Financials"] = True #trial.suggest_categorical("inc_Financials", [True, False])
-        opt_params["inc_Mathematical"] = False #trial.suggest_categorical("inc_Mathematical", [True, False])
-        opt_params["inc_Seasonal"] = True #trial.suggest_categorical("inc_Seasonal", [True, False])
-        opt_params["exc_lag"] = True #trial.suggest_categorical("exc_lag", [True, False])
         
-        opt_params["LGB_num_boost_round"]           = 100 #trial.suggest_int("LGB_num_boost_round", 25, 300, step=25)
+        opt_params["catsample_max_lag"] = trial.suggest_int("catsample_max_lag", 0, 50, step=5) # Note: try 100 at some point
+        opt_params["max_features_colinsampling"] = trial.suggest_int("max_features_colinsampling", 25, 55, step=5)
+        opt_params["threshold_colin_sampling"] = trial.suggest_float("threshold_colin_sampling", 0.05, 0.15, log=True)
+        opt_params["inc_seasonal_in_colin"] = False #trial.suggest_categorical("inc_seasonal_in_colin", [True, False])
+        
+        opt_params["atr_period"]                       = trial.suggest_int("atr_period", 4, 7)
+        opt_params["atr_alpha"]                        = trial.suggest_float("atr_alpha", 0.15, 0.20)
+        opt_params["atr_qup"]                          = trial.suggest_float("atr_qup", 0.78, 0.85)
+        opt_params["atr_qdown"]                        = 0.985 #trial.suggest_float("atr_qdown", 0.980, 0.999)
+        
+        opt_params["slope_period"]                     = trial.suggest_int("slope_period", 6, 10)
+        opt_params["slope_qup"]                        = trial.suggest_float("slope_qup", 0.55, 0.65)
+        opt_params["slope_qdown"]                      = 0.999 #trial.suggest_float("slope_qdown", 0.9, 0.999)
+        
+        opt_params["rmse_period"]                      = trial.suggest_int("rmse_period", 28, 35)
+        opt_params["rmse_delay"]                       = trial.suggest_int("rmse_delay", 3, 5)
+        opt_params["rmse_ma_wndw"]                     = trial.suggest_int("rmse_ma_wndw", 15, 20)
+        opt_params["rmse_alpha"]                       = trial.suggest_float("rmse_alpha", 0.12, 0.17)
+        opt_params["rmse_qup"]                         = trial.suggest_float("rmse_qup", 0.66, 0.74)
+        opt_params["rmse_qdown"]                       = 0.985 #trial.suggest_float("rmse_qdown", 0.97, 0.999)
+        
+        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 25, 100, step=25)
         opt_params["LGB_lambda_l1"]                 = 0.0001#trial.suggest_float("LGB_lambda_l1", 0.00001, 0.05, log=True)
         opt_params["LGB_lambda_l2"]                 = 0.0001#trial.suggest_float("LGB_lambda_l2", 0.0001, 0.02, log=True)
-        if opt_params.get("exc_lag"):
-            opt_params["LGB_feature_fraction"]      = 0.96 #trial.suggest_float("LGB_feature_fraction", 0.94, 0.99, log=True)
-        else:
-            opt_params["LGB_feature_fraction"]      = 0.01 #trial.suggest_float("LGB_feature_fraction", 0.01, 0.1, log=True)
-        opt_params["LGB_num_leaves"]                = 1050 #trial.suggest_int("LGB_num_leaves", 300, 1200, step=25)
+        opt_params["LGB_feature_fraction"]          = 0.96 #trial.suggest_float("LGB_feature_fraction", 0.94, 0.99, log=True)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 300, 1200, step=25)
         opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 4, 30, step=1)
-        opt_params["LGB_learning_rate"]             = 0.000557353855828407 #trial.suggest_float("LGB_learning_rate", 0.00001, 0.01, log=True)
-        opt_params["LGB_min_data_in_leaf"]          = 250 #trial.suggest_int("LGB_min_data_in_leaf", 100, 700, step=25)
-        opt_params["LGB_min_gain_to_split"]         = 0.0051907347619269345 #trial.suggest_float("LGB_min_gain_to_split", 0.0001, 0.9, log=True)
+        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 0.00001, 0.01, log=True)
+        opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 10, 700, step=25)
+        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 0.0001, 0.9, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 0.01, 0.9, log=True)
         opt_params["LGB_min_sum_hessian_in_leaf"]   = 0.2 #trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.001, 0.25, log=True)
-        opt_params["LGB_max_bin"]                   = 250 # trial.suggest_int("LGB_max_bin", 100, 800, step=25)
+        opt_params["LGB_max_bin"]                   = 230 # trial.suggest_int("LGB_max_bin", 100, 800, step=25)
         opt_params["LGB_early_stopping_rounds"]     = opt_params["LGB_num_boost_round"]//10
         
         opt_params["do_transform"] = True #trial.suggest_categorical("do_transform", [True, False])
@@ -104,17 +106,17 @@ class StratLGBMOnFiltered(BaseStrategy):
         #opt_params["ytree_kind"] = trial.suggest_categorical("ytree_kind", ["last", "abslast"]) #mean and max not very good
         opt_params["ytr_opt_alpha"] = 0.013285866056770094 #trial.suggest_float("ytr_opt_alpha", 0.01, 0.2, log=True)
         
-        #opt_params["sl0"] = trial.suggest_float("sl0", 0.85, 0.89)
-        #opt_params["sl1"] = trial.suggest_float("sl1", 0.80, 0.92)
-        #opt_params["sl2"] = trial.suggest_float("sl2", 0.72, 0.8)
-        #opt_params["sl3"] = trial.suggest_float("sl3", 0.76, 0.89)
-        #opt_params["sl4"] = trial.suggest_float("sl4", 0.88, 1.09)
-        #
-        #opt_params["tp0"] = trial.suggest_float("tp0", 1.25, 1.6)
-        #opt_params["tp1"] = trial.suggest_float("tp1", 1.24, 1.7)
-        #opt_params["tp2"] = trial.suggest_float("tp2", 1.35, 1.4)
-        #opt_params["tp3"] = trial.suggest_float("tp3", 1.17, 1.7)
-        #opt_params["tp4"] = trial.suggest_float("tp4", 1.5, 2.3)
+        opt_params["sl0"] = 0.823295
+        opt_params["sl1"] = 0.833562
+        opt_params["sl2"] = 0.783671
+        opt_params["sl3"] = 0.878303
+        opt_params["sl4"] = 0.982187
+        
+        opt_params["tp0"] = 1.307256
+        opt_params["tp1"] = 1.442779
+        opt_params["tp2"] = 1.377516
+        opt_params["tp3"] = 1.211979
+        opt_params["tp4"] = 1.378628
         
         params = dict(self.base_params)
         params.update(opt_params)
@@ -149,29 +151,15 @@ class StratLGBMOnFiltered(BaseStrategy):
             )
         
         logger.info(f"  All test dates {meta_test.get_column('date').unique().to_list()}")
-        logger.info(f"  Selecting last day only: {meta_test["date"].max()}")
         
+        # --- SETUP ---
         mm: MachineModels = MachineModels(opt_params)
         do_transform =      opt_params["do_transform"]
         val_split =         opt_params["val_split"]
-        
-        tn = np.asarray(treenames, dtype=str)
-        mask_treenames = np.zeros(len(treenames), dtype=bool)
-        if opt_params.get("inc_FeatureTA"):
-            mask_treenames |= np.char.find(tn, "FeatureTA_") >= 0
-        if opt_params.get("inc_GroupDynamics"):
-            mask_treenames |= np.char.find(tn, "FeatureGroup_") >= 0
-        if opt_params.get("inc_Categorical"):
-            mask_treenames |= np.char.find(tn, "Category_") >= 0
-        if opt_params.get("inc_Financials"):
-            mask_treenames |= np.char.find(tn, "FinData_") >= 0
-        if opt_params.get("inc_Mathematical"):
-            mask_treenames |= np.char.find(tn, "MathFeature_") >= 0
-        if opt_params.get("inc_Seasonal"):
-            mask_treenames |= np.char.find(tn, "Seasonal_") >= 0
-        if opt_params.get("exc_lag"):
-            mask_treenames &= np.char.find(tn, "_lag") < 0
-            
+        catsample_max_lag = opt_params.get("catsample_max_lag", 1)
+        m_features = opt_params.get("max_features_colinsampling", 20)
+        thr_colin = opt_params.get("threshold_colin_sampling", 0.2)
+        inc_seasonal_in_colin = opt_params.get("inc_seasonal_in_colin", False)
         
         def to_time(x, inc_factor):
             return np.clip(np.tanh(np.log(np.clip(x, 1e-6, None)) * inc_factor) / 2.0 + 0.5, 1e-6, 1 - 1e-6)
@@ -184,23 +172,64 @@ class StratLGBMOnFiltered(BaseStrategy):
         ytr_opt = self._ema_2d(close_comb, alpha=ytr_opt_alpha)
         ytr_tree_opt = to_tree(ytr_opt[:, -1], 1.0)
 
-        #if opt_params["ytree_kind"] == "last":
-        #    ytr_tree_opt = ytr_tree[:, -1]
-        #elif opt_params["ytree_kind"] == "mean":
-        #    ytr_tree_opt = np.mean(ytr_tree, axis=1)
-        #elif opt_params["ytree_kind"] == "abslast":
-        #    ytr_tree_opt = np.abs(ytr_tree[:, -1])
-        #elif opt_params["ytree_kind"] == "max":
-        #    ytr_tree_opt = np.max(ytr_tree, axis=1)
-            
-        logger.info(f"  Before filtering: tr {Xtr_tree.shape}, te {Xte_tree.shape}")
+        # --- Selected Masks ---
+        mask_train, mask_test, _, _, _, _, _, _ = StratSelectedMasks().run(
+            Xtr_tree,
+            Xtr_time,
+            ytr_tree,
+            ytr_tree_low,
+            ytr_tree_high,
+            ytr_tree_open,
+            Xte_tree,
+            Xte_time,
+            treenames,
+            timenames,
+            meta_train,
+            meta_test,
+            opt_params=opt_params,
+        )
+        
+        logger.info(f"  Before masking: tr {Xtr_tree.shape}, te {Xte_tree.shape}")
+        logger.info(f"    ytr_tree: n={ytr_tree.size}, mean={ytr_tree.mean():.6f}, std={ytr_tree.std():.6f}")
+        Xtr_masked = Xtr_tree[mask_train]
+        Xte_masked = Xte_tree[mask_test]
+        yopt_masked = ytr_tree_opt[mask_train]
+        logger.info(f"  After masking: tr {Xtr_masked.shape}, te {Xte_masked.shape}")
+        logger.info(f"    yopt_masked: n={yopt_masked.size}, mean={yopt_masked.mean():.6f}, std={yopt_masked.std():.6f}")
+        
+        # --- FEATURE FILTERING ---
+        tn = np.asarray(treenames, str)
+        mask_tn = np.ones(tn.shape[0], dtype=bool)
+        # Categorical subsampling of treenames
+        mask_tn_goodlag, mask_tn_noncolin = self.catsample_treenames(
+            treenames,
+            max_lag=catsample_max_lag,
+        )
+        mask_tn &= mask_tn_goodlag | mask_tn_noncolin
+        
+        # Colinear sampling based on target correlation
+        if inc_seasonal_in_colin:
+            mask_tn_colin_input = mask_tn_goodlag
+        else:
+            mask_tn_colin_input = mask_tn_goodlag & ~mask_tn_noncolin
+        mask_treenames_colinsampling = self.colinearity_treenames_mask(
+            Xtr_masked[:, mask_tn_colin_input],
+            yopt_masked,
+            treenames=tn[mask_tn_colin_input],
+            m_features=m_features,
+            thr_crosscorr=thr_colin,
+            row_ratio=1.0,
+        )
+        mask_tn[mask_tn_colin_input] = mask_treenames_colinsampling
 
-        Xd_tr = Xtr_tree[:, mask_treenames]
-        Xd_te = Xte_tree[:, mask_treenames]
+        Xd_tr = Xtr_masked[:, mask_tn]
+        Xd_te = Xte_masked[:, mask_tn]
+        yd_tr = yopt_masked
         
         logger.info(f"  After design: tr {Xd_tr.shape}, te {Xd_te.shape}")
-        logger.info(f"   ytr_tree: n={ytr_tree_opt.size}, mean={ytr_tree_opt.mean():.6f}, std={ytr_tree_opt.std():.6f}")
+        logger.info(f"    ytr_tree: n={yd_tr.size}, mean={yd_tr.mean():.6f}, std={yd_tr.std():.6f}")
 
+        # --- MODEL TRAINING ---
         if do_transform:
             scaler = StandardScaler().fit(Xd_tr)
             Xd_tr = scaler.transform(Xd_tr)
@@ -211,9 +240,9 @@ class StratLGBMOnFiltered(BaseStrategy):
             logger.disabled = True
             model_lgb, info = mm.run_LGB(
                 X_train=Xd_tr[:sam_split],
-                y_train=ytr_tree_opt[:sam_split],
+                y_train=yd_tr[:sam_split],
                 X_test=Xd_tr[sam_split:],
-                y_test=ytr_tree_opt[sam_split:],
+                y_test=yd_tr[sam_split:],
             )
         except Exception as e:
             logger.disabled = False
@@ -229,11 +258,14 @@ class StratLGBMOnFiltered(BaseStrategy):
         logger.info(f"  Test RMSE LGBM: {info['best_score']:.4f}")
         
         m = 5
+        yfull_tr_score = np.zeros(Xtr_tree.shape[0], dtype=float)
+        yfull_te_score = np.zeros(Xte_tree.shape[0], dtype=float)
+        yfull_tr_score[mask_train] = y_train_score
+        yfull_te_score[mask_test] = y_test_score
         meta_tr_pl_filtered = (
             meta_train.with_columns(
-                pl.Series("prediction_ratio", y_train_score)
+                pl.Series("prediction_ratio", yfull_tr_score)
             )
-            .sort(["date", "prediction_ratio"], descending=[False, True])
             .with_columns(
                 pl.col("prediction_ratio")
                 .rank(method="random", descending=True)
@@ -243,9 +275,8 @@ class StratLGBMOnFiltered(BaseStrategy):
         )
         meta_te_pl_filtered = (
             meta_test.with_columns(
-                pl.Series("prediction_ratio", y_test_score)
+                pl.Series("prediction_ratio", yfull_te_score)
             )
-            .sort(["date", "prediction_ratio"], descending=[False, True])
             .with_columns(
                 pl.col("prediction_ratio")
                 .rank(method="random", descending=True)
@@ -256,9 +287,11 @@ class StratLGBMOnFiltered(BaseStrategy):
         
         mask_tr = meta_tr_pl_filtered["prediction_rank"].to_numpy() <= m
         mask_te = meta_te_pl_filtered["prediction_rank"].to_numpy() <= m
+        
+        mask_tr = mask_tr & mask_train
+        mask_te = mask_te & mask_test
                 
         logger.info(f"  Run -> train kept: {mask_tr.mean()} | test kept: {mask_te.mean()}")
-        logger.info(f"  Run -> top scores test: {y_test_score[mask_te]} ")
         
         # --- SL/TP precomputation ---
         sl_vec = [opt_params["sl0"], opt_params["sl1"], opt_params["sl2"], opt_params["sl3"], opt_params["sl4"]]
@@ -272,7 +305,7 @@ class StratLGBMOnFiltered(BaseStrategy):
 
         logger.info(f"  Precompute -> sl {sl_tr_mat[0,:]} | tp: {tp_tr_mat[0,:]}")
 
-        return mask_tr, mask_te, sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat, y_train_score, y_test_score
+        return mask_tr, mask_te, sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat, yfull_tr_score, yfull_te_score
 
     def precompute(
         self,
@@ -292,36 +325,18 @@ class StratLGBMOnFiltered(BaseStrategy):
         if treenames is None or meta_train is None or meta_test is None:
             raise ValueError("treenames, meta_train and meta_test are required.")
 
-        params = self.precompute_params
-
-        # --- MACD masks ---
-        mask_train_macd, mask_test_macd = self._compute_macd_masks(
-            Xtr_tree,
-            Xte_tree,
-            Xtr_time,
-            Xte_time,
-            meta_train,
-            params,
-        )
-
-        # --- ATR masks ---
-        mask_train_atr, mask_test_atr = self._compute_atr_masks(
-            Xtr_time,
-            Xte_time,
-            meta_train,
-            params,
-        )
-
         # --- Extend MACD masks with ATR-only samples (union) ---
-        mask_train = mask_train_macd | mask_train_atr
-        mask_test = mask_test_macd | mask_test_atr
+        mask_train = np.ones(Xtr_tree.shape[0], dtype=bool)
+        mask_test = np.ones(Xte_tree.shape[0], dtype=bool)
+        
+        params = self.precompute_params
         
         # --- SL/TP precomputation ---
-        sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat = HelperSLTP.calc_conditional(
-            ytr_tree,
-            ytr_tree_low,
-            ytr_tree_high,
-            ytr_tree_open,
+        sl_vec = [params["sl0"], params["sl1"], params["sl2"], params["sl3"], params["sl4"]]
+        tp_vec = [params["tp0"], params["tp1"], params["tp2"], params["tp3"], params["tp4"]]
+        sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat = HelperSLTP.replicate(
+            sl_vec,
+            tp_vec,
             Xtr_tree,
             Xte_tree,
         )
@@ -352,171 +367,90 @@ class StratLGBMOnFiltered(BaseStrategy):
         for t in range(1, values.shape[1]):
             out[:, t] = alpha * values[:, t] + (1.0 - alpha) * out[:, t - 1]
         return out
-
-    def _true_range_2d(
+    
+    def catsample_treenames(
         self,
-        close: np.ndarray,  # (n_samples, n_steps)
-        high: np.ndarray,   # (n_samples, n_steps)
-        low: np.ndarray,    # (n_samples, n_steps)
+        treenames: np.ndarray,
+        max_lag: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        tn = np.asarray(treenames, str)
+        
+        # max lag sampling
+        mask_tn_lag = np.array(
+            [(m:=re.search(r'_lag_m(\d+)', s)) is None or int(m.group(1)) <= max_lag
+                for s in tn]
+        )
+        
+        # not usable for colin
+        mask_tn_non_colin = np.zeros(tn.shape[0], dtype=bool)
+        mask_tn_lag |= np.char.find(tn, "Seasonal_year") >= 0
+        mask_tn_lag |= np.char.find(tn, "Category_other") >= 0
+        return mask_tn_lag, mask_tn_non_colin
+    
+    def _subsample_rows(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        row_ratio: float,
+        random_state: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Optionally subsample rows of (X, y)."""
+        if not (0 < row_ratio <= 1.0):
+            raise ValueError("row_ratio must be in (0, 1].")
+
+        if row_ratio == 1.0:
+            return X, y
+
+        n = X.shape[0]
+        k = max(2, int(n * row_ratio))
+        rng = np.random.default_rng(random_state)
+        idx = rng.choice(n, k, replace=False)
+        return X[idx], y[idx]
+    
+    def colinearity_treenames_mask(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        treenames: np.ndarray,
+        m_features: int,
+        thr_crosscorr: float = 0.2,
+        row_ratio: float = 1.0,
+        random_state: int | None = None,
     ) -> np.ndarray:
         """
-        Vectorized True Range for each sample and time step.
-        TR_t = max(
-            high_t - low_t,
-            |high_t - close_{t-1}|,
-            |low_t  - close_{t-1}|
-        ), with TR_0 = high_0 - low_0
+        Select up to m_features that are:
+        - highly correlated with y
+        - not too correlated (>|thr_crosscorr|) with already selected features.
         """
-        close = close.astype(np.float64, copy=False)
-        high = high.astype(np.float64, copy=False)
-        low = low.astype(np.float64, copy=False)
+        n, p = X.shape
+        if y.shape[0] != n:
+            raise ValueError("X and y must have the same number of rows")
 
-        tr = np.empty_like(close, dtype=np.float64)
-        # t = 0
-        tr[:, 0] = high[:, 0] - low[:, 0]
+        # Optional row subsampling
+        Xc, yc = self._subsample_rows(X, y, row_ratio, random_state)
 
-        for t in range(1, close.shape[1]):
-            prev_close = close[:, t - 1]
-            tr1 = high[:, t] - low[:, t]
-            tr2 = np.abs(high[:, t] - prev_close)
-            tr3 = np.abs(low[:, t] - prev_close)
-            tr[:, t] = np.maximum(tr1, np.maximum(tr2, tr3))
+        # Feature–feature correlation
+        with np.errstate(divide='ignore', invalid='ignore'):
+            corr = np.corrcoef(Xc, rowvar=False)
+        corr = np.nan_to_num(corr, nan=0.0)
+        corr[np.abs(corr) > 0.5] = 0.0
 
-        return tr
+        # Feature–target correlations via sklearn
+        with np.errstate(divide='ignore', invalid='ignore'):
+            corr_y = r_regression(Xc, yc)        # shape (p,)
+        corr_y = np.nan_to_num(corr_y, nan=0.0)
+        corr_y[np.abs(corr_y) > 0.5] = 0.0
 
-    def _compute_macd_masks(
-        self,
-        Xtr_tree: np.ndarray,          # kept for interface compatibility, not used
-        Xte_tree: np.ndarray,          # kept for interface compatibility, not used
-        Xtr_time: np.ndarray,          # (n_samples, 90, 5)
-        Xte_time: np.ndarray,          # (n_samples, 90, 5)
-        meta_tr: pl.DataFrame,
-        opt_params: dict,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Recomputes MACD and signal from time-series tensors and builds masks.
-        Only X*_time[..., 0] (first feature) is used as the price series.
-        """
+        # Order by descending |corr(feature, y)|
+        order = np.argsort(-np.abs(corr_y))
+        keep = np.zeros(p, dtype=bool)
 
-        # --- MACD parameters from opt_params ---
-        fast_period = opt_params["macd_fast_period"]
-        slow_period = opt_params["macd_slow_period"]
-        signal_period = opt_params["macd_signal_period"]
-        max_period = max(fast_period, slow_period, signal_period)+1  # +1 for day-start adjustments in the computations
+        # Greedy selection
+        for j in order:
+            if keep.sum() >= m_features:
+                break
+            if not keep.any() or np.all(np.abs(corr[j, keep]) <= thr_crosscorr):
+                keep[j] = True
+                logger.debug(f"Selected feature {treenames[j]} with |corr|={np.abs(corr_y[j])}")
 
-        # Per-line decay rates (if not provided, use standard EMA from periods)
-        alpha_fast = opt_params.get("macd_fast_alpha", 2.0 / (fast_period + 1.0))
-        alpha_slow = opt_params.get("macd_slow_alpha", 2.0 / (slow_period + 1.0))
-        alpha_signal = opt_params.get("macd_signal_alpha", 2.0 / (signal_period + 1.0))
-
-        # --- Extract price series (first feature) ---
-        # shape: (n_samples, n_steps)
-        close_tr = Xtr_time[:,-max_period:, 0].astype(np.float64, copy=False)
-        close_te = Xte_time[:,-max_period:, 0].astype(np.float64, copy=False)
-
-        # --- EMA fast/slow and MACD for train/test ---
-        ema_fast_tr = self._ema_2d(close_tr, alpha_fast)
-        ema_slow_tr = self._ema_2d(close_tr, alpha_slow)
-        macd_tr_full = ema_fast_tr - ema_slow_tr
-
-        ema_fast_te = self._ema_2d(close_te, alpha_fast)
-        ema_slow_te = self._ema_2d(close_te, alpha_slow)
-        macd_te_full = ema_fast_te - ema_slow_te
-
-        # --- Signal line (EMA of MACD) ---
-        sig_tr_full = self._ema_2d(macd_tr_full, alpha_signal)
-        sig_te_full = self._ema_2d(macd_te_full, alpha_signal)
-
-        # Use only the last time step as the feature value for each sample
-        macd_tr_last = macd_tr_full[:, -1]
-        sig_tr_last = sig_tr_full[:, -1]
-        macd_te_last = macd_te_full[:, -1]
-        sig_te_last = sig_te_full[:, -1]
-
-        # --- Lookback in terms of samples (same logic as before) ---
-        lookback_days = opt_params["macd_lookback_days"]
-        n_days = meta_tr.get_column("date").n_unique()
-        days_ratio = np.clip(lookback_days / n_days, 0.0, 1.0)
-
-        n_samples_lookback = int(np.ceil(days_ratio * Xtr_time.shape[0]))
-        n_samples_lookback = int(np.clip(n_samples_lookback, 1, Xtr_time.shape[0]))
-
-        # Quantiles are computed from the last n_samples_lookback train samples
-        diff_tr_lookback = macd_tr_last[-n_samples_lookback:] - sig_tr_last[-n_samples_lookback:]
-
-        qdown = opt_params["macd_diff_qdown"]
-        qup = opt_params["macd_diff_qup"]
-        qup_val = np.quantile(diff_tr_lookback, qup)
-        qdown_val = np.quantile(diff_tr_lookback, qdown)
-
-        # --- Apply thresholds to all samples ---
-        diff_tr_all = macd_tr_last - sig_tr_last
-        diff_te_all = macd_te_last - sig_te_last
-
-        # NOTE: It is that qdown > qup , hence [qup_val, qdown_val] interval
-        mask_tr = (diff_tr_all <= qdown_val) & (diff_tr_all >= qup_val)
-        mask_te = (diff_te_all <= qdown_val) & (diff_te_all >= qup_val)
-
-        return mask_tr, mask_te
-    
-    def _compute_atr_masks(
-        self,
-        Xtr_time: np.ndarray,      # (n_samples, n_steps, n_features)
-        Xte_time: np.ndarray,      # (n_samples, n_steps, n_features)
-        meta_tr: pl.DataFrame,
-        opt_params: dict,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Builds train/test masks based on Average True Range (ATR).
-        Uses features:
-            0: AdjClose
-            2: AdjHigh
-            3: AdjLow
-        Threshold is a quantile of ATR over a lookback on train.
-        """
-
-        # --- ATR parameters ---
-        atr_period = opt_params["atr_period"]
-        atr_alpha = opt_params.get("atr_alpha", 2.0 / (atr_period + 1.0))
-
-        # Re-use MACD lookback unless an ATR-specific one is provided
-        lookback_days = opt_params.get("atr_lookback_days")
-        atr_qup = opt_params["atr_qup"]  # e.g. 0.7 for top 30% ATR
-        atr_qdown = opt_params["atr_qdown"]  # e.g. 0.0 for no lower bound
-
-        # --- Extract close / high / low ---
-        close_tr = Xtr_time[:, -(atr_period+1):, 0].astype(np.float64, copy=False)
-        high_tr = Xtr_time[:, -(atr_period+1):, 2].astype(np.float64, copy=False)
-        low_tr  = Xtr_time[:, -(atr_period+1):, 3].astype(np.float64, copy=False)
-
-        close_te = Xte_time[:, -(atr_period+1):, 0].astype(np.float64, copy=False)
-        high_te = Xte_time[:, -(atr_period+1):, 2].astype(np.float64, copy=False)
-        low_te  = Xte_time[:, -(atr_period+1):, 3].astype(np.float64, copy=False)
-
-        # --- True Range and ATR (EMA of TR) ---
-        tr_tr = self._true_range_2d(close_tr, high_tr, low_tr)
-        tr_te = self._true_range_2d(close_te, high_te, low_te)
-
-        atr_tr_full = self._ema_2d(tr_tr, atr_alpha)
-        atr_te_full = self._ema_2d(tr_te, atr_alpha)
-
-        # Use last time step per sample
-        atr_tr_last = atr_tr_full[:, -1]
-        atr_te_last = atr_te_full[:, -1]
-
-        # --- Lookback in terms of samples (same logic as MACD) ---
-        n_days = meta_tr.get_column("date").n_unique()
-        days_ratio = np.clip(lookback_days / n_days, 0.0, 1.0)
-
-        n_samples_lookback = int(np.ceil(days_ratio * Xtr_time.shape[0]))
-        n_samples_lookback = int(np.clip(n_samples_lookback, 1, Xtr_time.shape[0]))
-
-        atr_tr_lookback = atr_tr_last[-n_samples_lookback:]
-        atr_qup = np.quantile(atr_tr_lookback, atr_qup)
-        atr_qdown = np.quantile(atr_tr_lookback, atr_qdown)
-
-        # High-ATR regime
-        mask_tr = (atr_tr_last >= atr_qup) & (atr_tr_last <= atr_qdown)
-        mask_te = (atr_te_last >= atr_qup) & (atr_te_last <= atr_qdown)
-
-        return mask_tr, mask_te
+        return keep

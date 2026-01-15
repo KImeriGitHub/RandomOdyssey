@@ -446,7 +446,8 @@ class HelperMetrics:
             return 1.0
         
         if not dates.is_sorted():
-            return 0.0
+            return float(-np.inf)
+        
         dateframe = dates.to_frame("date")
         meta_ext = dateframe.with_columns(pl.Series("y_tar", y))
         meta_ext_masked = meta_ext.filter(mask)
@@ -476,4 +477,93 @@ class HelperMetrics:
         )
 
         gmean = np.exp(perday_eval_masked_full.select(pl.col("y_mean").log()).mean())
+        return float(gmean)
+    
+    @staticmethod
+    def evaluate_mask_mintarday(
+        mask: np.ndarray,
+        dates: pl.Series,
+        y: np.ndarray,
+        min_targets_perday: int,
+        gmean_onday: bool = False,
+    ) -> float:
+        """
+        Compute the (equal-weight-per-date) geometric mean of per-day aggregates over the columns selected by mask.
+
+        Per day:
+        - if #selected >= min_targets_perday: use the mean of the selected values
+        - else: pad with 1.0 values up to min_targets_perday, then take the mean
+            (so mean = (sum(y) + (min_targets_perday - k)*1.0) / min_targets_perday)
+
+        Missing days (no selected rows) evaluate to 1.0 automatically via padding.
+
+        Parameters
+        ----------
+        mask : np.ndarray of bool, shape (N,)
+        dates : pl.Series of length N (must be sorted)
+        y : np.ndarray of positive values, shape (N,)
+        min_targets_perday : int (>= 1)
+        gmean_onday : if True, use geometric mean within each day (with the same 1.0 padding rule)
+
+        Returns
+        -------
+        float
+            Equal-weight-per-date geometric mean of per-day aggregates.
+        """
+        if min_targets_perday < 1:
+            return HelperMetrics.evaluate_mask_oneonempty(
+                mask, dates, y, gmean_onday = gmean_onday
+            )
+
+        if mask is None or not mask.any():
+            return 1.0
+
+        if not dates.is_sorted():
+            return float(-np.inf)
+
+        dateframe = dates.to_frame("date")
+        meta_ext = dateframe.with_columns(pl.Series("y_tar", y))
+        meta_ext_masked = meta_ext.filter(mask)
+
+        # All dates in the original series (equal weight per date)
+        all_dates = (
+            dateframe
+            .select("date")
+            .unique()
+            .sort("date")
+        )
+
+        kmin = pl.lit(min_targets_perday)
+
+        if gmean_onday:
+            # per-day geometric mean, with 1.0-padding to min_targets_perday
+            perday = meta_ext_masked.group_by("date").agg([
+                pl.col("y_tar").log().sum().alias("sum_log"),
+                pl.len().alias("k"),
+            ]).with_columns(
+                pl.when(pl.col("k") < kmin).then(kmin).otherwise(pl.col("k")).alias("denom"),
+            ).with_columns(
+                (pl.col("sum_log") / pl.col("denom")).exp().alias("y_mean")
+            ).select(["date", "y_mean"])
+        else:
+            # per-day arithmetic mean, with 1.0-padding to min_targets_perday
+            perday = meta_ext_masked.group_by("date").agg([
+                pl.col("y_tar").sum().alias("sum_y"),
+                pl.len().alias("k"),
+            ]).with_columns(
+                pl.when(pl.col("k") < kmin).then(kmin).otherwise(pl.col("k")).alias("denom"),
+                pl.when(pl.col("k") < kmin).then(kmin - pl.col("k")).otherwise(pl.lit(0)).alias("pad"),
+            ).with_columns(
+                ((pl.col("sum_y") + pl.col("pad")) / pl.col("denom")).alias("y_mean")
+            ).select(["date", "y_mean"])
+
+        # Join onto all dates; missing => 1.0 (equivalent to k=0 padded to min -> mean 1.0)
+        perday_full = (
+            all_dates
+            .join(perday, on="date", how="left")
+            .with_columns(pl.col("y_mean").fill_null(1.0))
+        )
+
+        # equal-weight-per-date geometric mean across days
+        gmean = perday_full.select(pl.col("y_mean").log().mean().exp()).item()
         return float(gmean)

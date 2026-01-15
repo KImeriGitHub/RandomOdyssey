@@ -6,10 +6,13 @@ from src.hyperparameterTuning.BaseStrategy import BaseStrategy
 from src.hyperparameterTuning.HelperFunctions import HelperFunctions
 from src.hyperparameterTuning.HelperSLTP import HelperSLTP
 
+from src.mathTools.RegimeChange import RegimeChange
+from src.predictionModule.MachineModels import MachineModels
+
 import logging
 logger = logging.getLogger(__name__)
 
-class StratSelectedMasks(BaseStrategy):
+class StratSelectedMasksDoubleLSTM(BaseStrategy):
     # Note Xtr_time needs the features
     #        "FeatureLSTM_AdjClose" at index 0,
     #        "FeatureLSTM_AdjOpen" at index 1,
@@ -30,52 +33,35 @@ class StratSelectedMasks(BaseStrategy):
     }
 
     def __init__(self) -> None:
-        pass
+        self._device = "cuda"
 
     # ------------------------------------------------------------------
     # Optuna hooks
     # ------------------------------------------------------------------
     def sample_params(self, trial: optuna.Trial) -> dict:
-        opt_params = {}
-        opt_params["min_n_tar_daily"] = 30
-        
-        #opt_params["macd_diff_qup"]                    = trial.suggest_float("macd_diff_qup", 0.86, 0.93)
-        #opt_params["macd_diff_qdown"]                  = trial.suggest_float("macd_diff_qdown", 0.985, 0.999)
-        #opt_params["macd_lookback_days"]               = 2000 # trial.suggest_int("macd_lookback_days", 1500, 2500)
-        #opt_params["macd_fast_period"]                 = trial.suggest_int("macd_fast_period", 8, 19)
-        #opt_params["macd_slow_period"]                 = trial.suggest_int("macd_slow_period", 25, 67)
-        #opt_params["macd_signal_period"]               = trial.suggest_int("macd_signal_period", 4, 12)
-        #opt_params["macd_fast_alpha"]                  = trial.suggest_float("macd_fast_alpha", 0.05, 0.25)
-        #opt_params["macd_slow_alpha"]                  = trial.suggest_float("macd_slow_alpha", 0.05, 0.25)
-        #opt_params["macd_signal_alpha"]                = trial.suggest_float("macd_signal_alpha", 0.05, 0.25)
-        
+        opt_params = {
+            "val_split":                trial.suggest_float("val_split", 0.01, 0.1, log=True),
+            "t_win":                    trial.suggest_int("t_win", 5, 70, step=5),
+            "LSTM_units":               16,
+            "LSTM_num_layers":          1,
+            "LSTM_learning_rate":       trial.suggest_float("LSTM_learning_rate", 2e-4, 1e-3, log=True),
+            "LSTM_dropout":             0.05,
+            "LSTM_inter_dropout":       0.05,
+            "LSTM_recurrent_dropout":   0.05,
+            "LSTM_epochs":              4,
+            "LSTM_l1":                  0.001,
+            "LSTM_l2":                  0.001,
+            "LSTM_conv1d_kernel_size":  5,
+            "min_n_tar":                25,
+        }
         opt_params["atr_period"]                       = trial.suggest_int("atr_period", 2, 22)
         opt_params["atr_alpha"]                        = trial.suggest_float("atr_alpha", 0.03, 0.30)
-        opt_params["atr_qup"]                          = trial.suggest_float("atr_qup", 0.8, 0.96)
-        opt_params["atr_qdown"]                        = trial.suggest_float("atr_qdown", 0.980, 0.999)
+        opt_params["atr_qup"]                          = trial.suggest_float("atr_qup", 0.65, 0.9)
+        opt_params["atr_qdown"]                        = 0.99 #trial.suggest_float("atr_qdown", 0.980, 0.999)
         
         opt_params["slope_period"]                     = trial.suggest_int("slope_period", 2, 25)
-        opt_params["slope_qup"]                        = trial.suggest_float("slope_qup", 0.6, 0.9)
+        opt_params["slope_qup"]                        = trial.suggest_float("slope_qup", 0.5, 0.8)
         opt_params["slope_qdown"]                      = 1.0 #trial.suggest_float("slope_qdown", 0.9, 0.999)
-        
-        #opt_params["rmse_period"]                      = trial.suggest_int("rmse_period", 10, 40)
-        #opt_params["rmse_delay"]                       = trial.suggest_int("rmse_delay", 2, 9)
-        #opt_params["rmse_ma_wndw"]                     = trial.suggest_int("rmse_ma_wndw", 6, 35)
-        #opt_params["rmse_alpha"]                       = trial.suggest_float("rmse_alpha", 0.05, 0.30)
-        #opt_params["rmse_qup"]                         = trial.suggest_float("rmse_qup", 0.55, 0.85)
-        #opt_params["rmse_qdown"]                       = trial.suggest_float("rmse_qdown", 0.97, 0.999)
-        
-        opt_params["sl0"] = 0.823295 #trial.suggest_float("sl0", 0.80, 0.94)
-        opt_params["sl1"] = 0.833562 #trial.suggest_float("sl1", 0.80, 0.99)
-        opt_params["sl2"] = 0.783671 #trial.suggest_float("sl2", 0.72, 1.05)
-        opt_params["sl3"] = 0.878303 #trial.suggest_float("sl3", 0.70, 1.1)
-        opt_params["sl4"] = 0.982187 #trial.suggest_float("sl4", 0.65, 1.2)
-        
-        opt_params["tp0"] = 1.307256 #trial.suggest_float("tp0", 1.1, 1.6)
-        opt_params["tp1"] = 1.442779 #trial.suggest_float("tp1", 1.05, 1.8)
-        opt_params["tp2"] = 1.377516 #trial.suggest_float("tp2", 1.00, 1.8)
-        opt_params["tp3"] = 1.211979 #trial.suggest_float("tp3", 0.95, 1.9)
-        opt_params["tp4"] = 1.378628 #trial.suggest_float("tp4", 0.9, 1.95)
 
         params = dict(self.base_params)
         params.update(opt_params)
@@ -97,17 +83,10 @@ class StratSelectedMasks(BaseStrategy):
         meta_test,
         opt_params: dict,
     ) -> tuple[np.ndarray, ...]: 
-
-        # --- MACD masks ---
-        #mask_train_macd, mask_test_macd = self._compute_macd_masks(
-        #    Xtr_tree,
-        #    Xte_tree,
-        #    Xtr_time,
-        #    Xte_time,
-        #    meta_train,
-        #    opt_params,
-        #)
-
+        t_win = int(opt_params.get("t_win", 5))
+        time_factor = 1.0
+        val_split = float(opt_params.get("val_split", 0.1))
+        
         # --- ATR masks ---
         mask_train_atr, mask_test_atr = self._compute_atr_masks(
             Xtr_time,
@@ -123,30 +102,94 @@ class StratSelectedMasks(BaseStrategy):
             meta_train,
             opt_params,
         )
-        
-        ## --- RSME masks ---
-        #mask_train_rsme, mask_test_rsme = self._compute_rmse_mask(
-        #    Xtr_time,
-        #    Xte_time,
-        #    meta_train,
-        #    opt_params,
-        #)
 
         # --- Combine ---
-        mask_train = mask_train_atr & mask_train_slope #& mask_train_rsme
-        mask_test = mask_test_atr & mask_test_slope #& mask_test_rsme
+        mask_train = mask_train_atr & mask_train_slope
+        mask_test = mask_test_atr & mask_test_slope
         
-        sl_vec = [opt_params["sl0"], opt_params["sl1"], opt_params["sl2"], opt_params["sl3"], opt_params["sl4"]]
-        tp_vec = [opt_params["tp0"], opt_params["tp1"], opt_params["tp2"], opt_params["tp3"], opt_params["tp4"]]
-        sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat = HelperSLTP.replicate(
-            sl_vec,
-            tp_vec,
-            Xtr_tree,
-            Xte_tree,
+        # --- SL/TP matrices ---
+        sl_vec, tp_vec = HelperSLTP.perfect_sl_tp(
+            ytr_tree,
+            ytr_tree_low,
+            ytr_tree_high,
+            ytr_tree_open,
+            tp_buffer_pct=0.1,
+            sl_buffer_pct=0.1,
         )
+        sl_tar_time = RegimeChange.to_time(sl_vec, time_factor)
+        tp_tar_time = RegimeChange.to_time(tp_vec, time_factor)
+        
+        N, T, F = Xtr_time.shape
+        Xdtr_time = Xtr_time[:, -t_win:, :]
+        Xdte_time = Xte_time[:, -t_win:, :]
+        
+        def default_res():
+            m_tr = np.zeros(Xtr_time.shape[0], dtype=bool)
+            m_te = np.zeros(Xte_time.shape[0], dtype=bool)
+            sl_mat_tr = 0.80 * np.ones((Xtr_time.shape[0], ytr_tree.shape[1]), dtype=float)
+            tp_mat_tr = 2.00 * np.ones((Xtr_time.shape[0], ytr_tree.shape[1]), dtype=float)
+            sl_mat_te = 0.80 * np.ones((Xte_time.shape[0], ytr_tree.shape[1]), dtype=float)
+            tp_mat_te = 1.50 * np.ones((Xte_time.shape[0], ytr_tree.shape[1]), dtype=float)
+            score_tr = np.ones(Xtr_tree.shape[0], dtype=np.float32)
+            score_te = np.ones(Xte_tree.shape[0], dtype=np.float32)
+            return m_tr, m_te, sl_mat_tr, sl_mat_te, tp_mat_tr, tp_mat_te, score_tr, score_te
 
-        logger.info(f"  Precompute -> sl {sl_tr_mat[0,:]} | tp: {tp_tr_mat[0,:]}")
+        mm = MachineModels(params=opt_params)
+        try:
+            val_split_n = max(1, int(N * (1-val_split)))
+            model_sl, info_sl = mm.run_LSTM_torch(
+                X_train=Xdtr_time[:val_split_n],
+                y_train=sl_tar_time[:val_split_n],
+                X_test=Xdtr_time[val_split_n:],
+                y_test=sl_tar_time[val_split_n:],
+                device=self._device,
+                logger_disabled=True,
+            )
+            model_tp, info_tp = mm.run_LSTM_torch(
+                X_train=Xdtr_time[:val_split_n],
+                y_train=tp_tar_time[:val_split_n],
+                X_test=Xdtr_time[val_split_n:],
+                y_test=tp_tar_time[val_split_n:],
+                device=self._device,
+                logger_disabled=True,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("[LSTM] training failed: %s", exc)
+            return default_res()
 
+        val_rmse_sl = float(info_sl.get("val_rmse", float("inf")))
+        val_rmse_tp = float(info_tp.get("val_rmse", float("inf")))
+        
+        logger.debug("  LSTM val RMSE -> sl: %.6f | tp: %.6f", val_rmse_sl, val_rmse_tp)
+
+        # sl predictions
+        pred_tr_sl = mm.predict_LSTM_torch(model_sl, Xdtr_time, device=self._device)
+        pred_te_sl = mm.predict_LSTM_torch(model_sl, Xdte_time, device=self._device)
+        if pred_tr_sl.size == 0 or pred_te_sl.size == 0 or not np.all(np.isfinite(pred_te_sl)):
+            logger.warning("[LSTM] sl predictions are empty or non-finite.")
+            return default_res()
+        pred_tr_sl_tree = RegimeChange.to_tree(pred_tr_sl, time_factor)
+        pred_te_sl_tree = RegimeChange.to_tree(pred_te_sl, time_factor)
+        
+        logger.info("  sl preds stats: min %.4f | max %.4f | mean %.4f | std %.4f", np.min(pred_te_sl_tree), np.max(pred_te_sl_tree), np.mean(pred_te_sl_tree), np.std(pred_te_sl_tree))
+
+        # tp predictions
+        pred_tr_tp = mm.predict_LSTM_torch(model_tp, Xdtr_time, device=self._device)
+        pred_te_tp = mm.predict_LSTM_torch(model_tp, Xdte_time, device=self._device)
+        if pred_tr_tp.size == 0 or pred_te_tp.size == 0 or not np.all(np.isfinite(pred_tr_tp)):
+            logger.warning("[LSTM] tp predictions are empty or non-finite.")
+            return default_res()
+        pred_tr_tp_tree = RegimeChange.to_tree(pred_tr_tp, time_factor)
+        pred_te_tp_tree = RegimeChange.to_tree(pred_te_tp, time_factor)
+        
+        logger.info("  sl preds stats: min %.4f | max %.4f | mean %.4f | std %.4f", np.min(pred_te_tp_tree), np.max(pred_te_tp_tree), np.mean(pred_te_tp_tree), np.std(pred_te_tp_tree))
+        
+        #replicate
+        sl_tr_mat = np.repeat(pred_tr_sl_tree[:, np.newaxis], ytr_tree.shape[1], axis=1)
+        sl_te_mat = np.repeat(pred_te_sl_tree[:, np.newaxis], ytr_tree.shape[1], axis=1)
+        tp_tr_mat = np.repeat(pred_tr_tp_tree[:, np.newaxis], ytr_tree.shape[1], axis=1)
+        tp_te_mat = np.repeat(pred_te_tp_tree[:, np.newaxis], ytr_tree.shape[1], axis=1)
+        
         score_tr = np.ones(Xtr_tree.shape[0], dtype=np.float32)
         score_te = np.ones(Xte_tree.shape[0], dtype=np.float32)
         return mask_train, mask_test, sl_tr_mat, sl_te_mat, tp_tr_mat, tp_te_mat, score_tr, score_te

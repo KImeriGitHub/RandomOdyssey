@@ -30,6 +30,7 @@ class OptunaSetup:
         eval_mode: str = "all",
         spread_cost: float = 0.001,
         commission: float = 0.0000,
+        min_targets_perday: int = 1,
         rng: Optional[random.Random] = None,
         model_cls: Optional[type] = None,
     ) -> None:
@@ -44,6 +45,7 @@ class OptunaSetup:
         self.eval_mode = eval_mode  
         self.spread_cost = spread_cost
         self.commission = commission
+        self.min_targets_perday = min_targets_perday
 
     # ------------------------------------------------------------------
     # Split helpers
@@ -269,8 +271,8 @@ class OptunaSetup:
                 scores[i] = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_test_slice['date'], res_vec)
                 scores_direct[i] = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
             else:
-                scores[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], res_vec)
-                scores_direct[i] = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1])
+                scores[i] = HelperMetrics.evaluate_mask_mintarday(mask_te_pre, meta_test_slice['date'], res_vec, min_targets_perday=self.min_targets_perday)
+                scores_direct[i] = HelperMetrics.evaluate_mask_mintarday(mask_te_pre, meta_test_slice['date'], yte_tree[:, -1], min_targets_perday=self.min_targets_perday)
 
         scores = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores]
         scores_direct = [float(s) if s is not None and np.isfinite(s) else 1.0 for s in scores_direct]
@@ -294,18 +296,12 @@ class OptunaSetup:
             idx_train = np.flatnonzero(mask_train_pre)
             idx_test  = np.flatnonzero(mask_test_pre)
 
-            # if you want meta already sliced, keep this (DFs usually much smaller)
-            meta_tr = self.meta_train[s_tr].filter(pl.Series(mask_train_pre))
-            meta_te = self.meta_train[s_te].filter(pl.Series(mask_test_pre))
-
             fold_data.append(
                 dict(
                     s_tr=s_tr,
                     s_te=s_te,
                     idx_tr=idx_train,
                     idx_te=idx_test,
-                    meta_tr=meta_tr,
-                    meta_te=meta_te,
                 )
             )
 
@@ -325,8 +321,6 @@ class OptunaSetup:
                 s_te   = fold["s_te"]
                 idx_tr = fold["idx_tr"]
                 idx_te = fold["idx_te"]
-                meta_tr = fold["meta_tr"]
-                meta_te = fold["meta_te"]
 
                 # slicing and fancy indexing
                 Xtr_tree      = self.X_tree[s_tr][idx_tr]
@@ -343,11 +337,16 @@ class OptunaSetup:
 
                 Xtr_time      = self.X_time[s_tr][idx_tr]
                 Xte_time      = self.X_time[s_te][idx_te]
+                
+                meta_train_sliced = self.meta_train[s_tr]
+                meta_test_sliced  = self.meta_train[s_te]
+                meta_tr       = meta_train_sliced[idx_tr]
+                meta_te       = meta_test_sliced[idx_te]
 
                 sc = 1.0
                 sc_dir = 1.0
                 try:
-                    _, mask_te_pre, _, sl_te, _, tp_te, _, _ = strategy.run(
+                    _, mask_te_run, _, sl_te, _, tp_te, _, _ = strategy.run(
                         Xtr_tree,
                         Xtr_time,
                         ytr_tree,
@@ -362,28 +361,32 @@ class OptunaSetup:
                         meta_test=meta_te,
                         opt_params=opt_params,
                     )
-                    T = yte_tree.shape[1] if np.ndim(yte_tree) == 2 else 1
-                    idx_tar = opt_params.get("idx_tar", T)
-                    
-                    last_day_mask = (meta_te["date"] == meta_te["date"].max()).fill_null(False)
-                    if self.eval_mode == "last_day":
-                        mask_te_pre = mask_te_pre & last_day_mask.to_numpy()
                     
                     res_vec = HelperMetrics.collapse_sl_tp(
-                        yte_tree[:, :idx_tar], 
-                        yte_tree_low[:, :idx_tar], 
-                        yte_tree_high[:, :idx_tar], 
-                        yte_tree_open[:, :idx_tar], 
+                        yte_tree, 
+                        yte_tree_low, 
+                        yte_tree_high, 
+                        yte_tree_open, 
                         sl_te, tp_te, 
                         spread_cost=self.spread_cost, 
                         commission=self.commission
                     )
+                    
+                    mask_full_te_run = np.zeros(len(meta_test_sliced), dtype=bool)
+                    mask_full_te_run[idx_te] = mask_te_run
+                    
+                    res_vec_full = np.zeros(len(meta_test_sliced), dtype=float)
+                    res_vec_full[idx_te] = res_vec
+                    
                     if self.eval_mode == "last_day":
-                        sc = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_te['date'], res_vec)
-                        sc_dir = HelperMetrics.evaluate_mask_nullonempty(mask_te_pre, meta_te['date'], yte_tree[:, idx_tar-1])
+                        last_day_mask = (meta_test_sliced["date"] == meta_test_sliced["date"].max()).fill_null(False).to_numpy()
+                        mask_full_te_run = mask_full_te_run & last_day_mask
+                        
+                        sc = HelperMetrics.evaluate_mask_nullonempty(mask_full_te_run, meta_test_sliced['date'], res_vec_full)
+                        sc_dir = HelperMetrics.evaluate_mask_nullonempty(mask_full_te_run, meta_test_sliced['date'], self.y_tree[s_te][:, -1])
                     else:
-                        sc = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_te['date'], res_vec)
-                        sc_dir = HelperMetrics.evaluate_mask_oneonempty(mask_te_pre, meta_te['date'], yte_tree[:, idx_tar-1])
+                        sc = HelperMetrics.evaluate_mask_mintarday(mask_full_te_run, meta_test_sliced['date'], res_vec_full, min_targets_perday=self.min_targets_perday)
+                        sc_dir = HelperMetrics.evaluate_mask_mintarday(mask_full_te_run, meta_test_sliced['date'], self.y_tree[s_te][:, -1], min_targets_perday=self.min_targets_perday)
                         
                     if sc is not None and np.isfinite(sc):
                         n_valid = n_valid + 1
@@ -395,15 +398,7 @@ class OptunaSetup:
 
                     logger.info(f"Split {i}: Score = {sc}, Score (no SL/TP) = {sc_dir}")
                     logger.info(f"  median SL = {float(np.median(sl_te))}, median TP = {float(np.median(tp_te))}, max SL = {float(np.max(sl_te))}, max TP = {float(np.max(tp_te))}, min SL = {float(np.min(sl_te))}, min TP = {float(np.min(tp_te))}")
-                    logger.info(f"  ratio test samples = {mask_te_pre.sum()/len(mask_te_pre):.4f}, n_test_samples = {mask_te_pre.sum()}")
-                    idx_tar = opt_params.get("idx_tar", yte_tree.shape[1])
-                    
-                    #sl_hits = (yte_tree_low[:, idx_tar-1] <= sl_te)
-                    #tp_hits = (yte_tree_high[:, idx_tar-1] >= tp_te)
-                    #tp_nosl_hits = tp_hits & ~sl_hits
-                    #logger.info(f"ratio sl hits test split:       {np.sum(sl_hits)/len(sl_te):.4f}, n_test_samples = {len(sl_te)}")
-                    #logger.info(f"ratio tp hits test split:       {np.sum(tp_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
-                    #logger.info(f"ratio tp no sl hits test split: {np.sum(tp_nosl_hits)/len(tp_te):.4f}, n_test_samples = {len(tp_te)}")
+                    logger.info(f"  ratio test samples = {mask_te_run.sum()/len(mask_te_run):.4f}, n_test_samples = {mask_te_run.sum()}")
 
                 except Exception as exc:
                     logger.exception("Score computation failed: %s", exc)
@@ -432,14 +427,17 @@ class OptunaSetup:
                 logger.info("Num of splits: %s", len(slices))
                 raise optuna.TrialPruned()
             
-            if opt_params.get("idx_tar") is not None:
-                idx_tar = opt_params["idx_tar"]
-                logger.info(f"idx_tar used in this trial: {idx_tar}")
-            else:
-                idx_tar = 1
-            
             scores_log = np.log(np.array(scores))
-            return float(np.exp(np.mean(scores_log))) ** (1.0/idx_tar)
+            
+            #n = max(len(scores_log) // 4, 5)
+            #p = np.linspace(0, 1, n)                   # linspace 0 to 1
+            #q = np.quantile(scores_log, p)             # q_i at p
+            #w = 1 - p**0                               # w_i
+            #w = w / w.sum()                            # normalization
+            #
+            #score_fin = float(np.exp(np.sum(w * q)))
+            
+            return np.exp(np.mean(scores_log))
 
         return objective
 

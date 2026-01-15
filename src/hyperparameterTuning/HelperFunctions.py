@@ -4,174 +4,14 @@ import polars as pl
 import lightgbm as lgb
 
 from src.hyperparameterTuning.HelperMetrics import HelperMetrics
+from sklearn.feature_selection import r_regression
+
+import logging
+logger = logging.getLogger(__name__)
 
 class HelperFunctions:
     def __init__():
         pass
-
-    @staticmethod
-    def optimize_sl_tp(
-        arr: np.ndarray, 
-        arr_low: np.ndarray,
-        arr_high: np.ndarray,
-        arr_open: np.ndarray,
-        *,
-        n_grid: int = 15,            # number of quantile points
-        sl_max: float = 0.995,       # SL upper cap
-        tp_min: float = 1.005,       # TP lower cap
-        spread_cost: float = 0.001,
-        commission: float = 0.0000,
-    ) -> tuple[float, float, dict]:
-        """
-        Returns (best_sl, best_tp, info) maximizing mean(out) where:
-            out = collapse_sl_tp(..., sl, tp, ...)
-
-        SL candidates: [-inf, quantiles(arr[:,-1]) clipped to <= sl_max, sl_max]
-        TP candidates: [tp_min, quantiles(arr[:,-1]) clipped to >= tp_min, +inf)
-
-        Notes:
-        - -inf for SL and +inf for TP are treated as "no stop" (passed as None).
-        - Pairs violating common-sense constraints are skipped:
-            if finite(sl) and sl >= 1.0  -> skip
-            if finite(tp) and tp <= 1.0  -> skip
-            if both finite and sl >= tp  -> skip
-        """
-        # --- candidate grids from quantiles of the last column ---
-        last = np.concatenate((arr_low[:, -1], arr_high[:, -1]))
-        squish_power = 1.3
-        squish_pwr_inv = 1.0 / squish_power
-        qs_sl = np.linspace(0.001**squish_pwr_inv, 0.495**squish_pwr_inv, n_grid)**squish_power
-        qs_tp = 1.0 - qs_sl[::-1]
-
-        qvals_sl = np.quantile(last, qs_sl)
-        # SL: (-inf .. sl_max]
-        stretch_factor = 0.99
-        sl_cands = np.unique(
-            np.concatenate((
-                qvals_sl[qvals_sl <= sl_max]*stretch_factor,
-                np.array([sl_max])
-            ))
-        )
-
-        # TP: [tp_min .. +inf)
-        qvals_tp = np.quantile(last, qs_tp)
-        stretch_factor = 1.01
-        tp_cands = np.unique(
-            np.concatenate((
-                np.array([tp_min]),
-                qvals_tp[qvals_tp >= tp_min]*stretch_factor,
-            ))
-        )
-
-        def _collapse(sl_val, tp_val):
-            # interpret infinities as "no stop"
-            sl_arg = np.min(last) if not np.isfinite(sl_val) else float(sl_val)
-            tp_arg = np.max(last) if not np.isfinite(tp_val) else float(tp_val)
-            return HelperMetrics.collapse_sl_tp(
-                arr, arr_low, arr_high, arr_open,
-                sl=sl_arg, tp=tp_arg, spread_cost=spread_cost, commission=commission
-            )
-
-        best = (-np.inf, None, None, None)  # (mean, sl, tp, std)
-
-        for sl_val in sl_cands:
-            for tp_val in tp_cands:
-                out = _collapse(sl_val, tp_val)
-                m = float(np.exp(np.mean(np.log(out))))
-                if m > best[0]:
-                    best = (m, float(sl_val), float(tp_val), float(np.std(out)))
-
-        if best[1] is None:
-            # fallback: no valid pair found -> use "no SL/TP"
-            out = _collapse(-np.inf, np.inf)
-            return -np.inf, np.inf, {"mean": float(np.mean(out)), "std": float(np.std(out)), "stage": "fallback"}
-
-        mean_star, sl_star, tp_star, std_star = best
-        return sl_star, tp_star, {
-            "mean": mean_star,
-            "std": std_star,
-            "params": {
-                "n_grid": n_grid, "sl_max": sl_max, "tp_min": tp_min,
-                "spread_cost": spread_cost, "commission": commission
-            }
-        }
-    
-    @staticmethod
-    def perfect_sl_tp(
-        arr: np.ndarray,
-        tp_min: float = 1.005,
-        tp_buffer_pct: float = 0.1,
-        sl_max: float = 0.995,
-        sl_buffer_pct: float = 0.1,
-        sl_min: float = 0.92,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Vectorized 'perfect' stop-loss and take-profit levels for row-wise time series.
-
-        Parameters
-        ----------
-        arr : np.ndarray, shape (N, T)
-            Row-wise time series of (normalized) prices.
-        tp_min : float
-            Minimum TP level to consider.
-        tp_buffer_pct : float
-            Buffer applied to TP: buffer = (tp - 1) * pct.
-        sl_max : float
-            Upper cap for SL (prevents SL > ~1).
-        sl_buffer_pct : float
-            Buffer applied to SL: buffer = (1 - price) * pct.
-        sl_min : float
-            Lower cap for SL (prevents unrealistically deep stops).
-
-        Returns
-        -------
-        sl : np.ndarray, shape (N,)
-            Stop-loss levels.
-        tp : np.ndarray, shape (N,)
-            Take-profit levels.
-        """
-
-        # --- Helpers
-        def btp(val, pct):  # Buffer for take-profit
-            return (val - 1.0) * pct
-
-        def bsl(val, pct):  # Buffer for stop-loss
-            return (1.0 - val) * pct
-
-        # --- Take-profit
-        arr_max = np.max(arr, axis=1)
-        tp = np.maximum(arr_max, tp_min)
-
-        tp_min_buffer_adj = tp_min + btp(tp_min, tp_buffer_pct)
-        crossed = arr_max >= tp_min_buffer_adj
-
-        # If we crossed the threshold, pull TP down by its buffer
-        tp = np.where(crossed, tp - btp(tp, tp_buffer_pct), tp)
-
-        # --- Stop-loss
-        arr_argmax = np.argmax(arr, axis=1)
-        cummin = np.minimum.accumulate(arr, axis=1)  # (N, T)
-        mins_to_argmax = cummin[np.arange(arr.shape[0]), arr_argmax]  # (N,)
-        last = arr[:, -1]
-
-        # If TP-threshold crossed: set SL below the min up to argmax
-        sl_cross = mins_to_argmax - bsl(mins_to_argmax, sl_buffer_pct)
-
-        # If not crossed: set SL below the last price  (FIX: use minus, not plus)
-        sl_else = last - bsl(last, sl_buffer_pct)
-
-        sl = np.where(crossed, sl_cross, sl_else)
-
-        # --- Safety clamps
-        sl = np.minimum(sl, sl_max)           # never above sl_max
-        if sl_min is not None:
-            sl = np.maximum(sl, sl_min)       # never below floor
-
-        # Optional: ensure SL < TP (small epsilon)
-        eps = 1e-9
-        sl = np.minimum(sl, tp - eps)
-
-        return sl, tp
 
     @staticmethod
     def top_leaf_labels_per_tree(
@@ -233,3 +73,190 @@ class HelperFunctions:
                 out_score[:k, t] = arr[:k, 1].astype(float)
 
         return out_label, out_score
+    
+    @staticmethod
+    def exponential_moving_average(
+        values: np.ndarray,
+        window: int,
+        alpha: float,
+    ) -> np.ndarray:
+        """
+        values: (n_samples, n_timesteps)
+        alpha: scalar EMA decay (0 < alpha <= 1)
+        """
+        values = np.asarray(values, dtype=np.float64)
+        n, T = values.shape
+        out = np.empty((n, T), dtype=np.float64)
+        decay = 1.0 - alpha
+        for t in range(T):
+            start = max(0, t - window + 1)
+            x = values[:, start:t + 1]  # (n, L)
+            L = x.shape[1]
+            w = decay ** np.arange(L - 1, -1, -1, dtype=np.float64)  # newest gets weight 1
+            w /= w.sum()
+            out[:, t] = x @ w        
+        return out
+
+
+    @staticmethod
+    def moving_average(
+        values: np.ndarray,
+        window: int,
+    ) -> np.ndarray:
+        """
+        True finite-window rolling SMA (like the truncated EMA pattern).
+        Uses only the last `window` points.
+        Warmup uses shorter windows.
+        values: (n_samples, n_timesteps)
+        """
+        values = np.asarray(values, dtype=np.float64)
+        n, T = values.shape
+        out = np.empty((n, T), dtype=np.float64)
+        for t in range(T):
+            start = max(0, t - window + 1)
+            out[:, t] = values[:, start:t + 1].mean(axis=1)
+        return out
+    
+    
+    @staticmethod
+    def colinearity_treenames_mask(
+        X: np.ndarray,
+        y: np.ndarray,
+        treenames: np.ndarray,
+        m_features: int,
+        thr_crosscorr: float = 0.2,
+    ) -> np.ndarray:
+        """
+        Select up to m_features that are:
+        - highly correlated with y
+        - not too correlated (>|thr_crosscorr|) with already selected features.
+        """
+        n, p = X.shape
+        if y.shape[0] != n:
+            raise ValueError("X and y must have the same number of rows")
+        # Feature–feature correlation
+        with np.errstate(divide='ignore', invalid='ignore'):
+            corr = np.corrcoef(X, rowvar=False)
+        corr = np.nan_to_num(corr, nan=0.0)
+        corr[np.abs(corr) > 0.5] = 0.0
+        # Feature–target correlations via sklearn
+        with np.errstate(divide='ignore', invalid='ignore'):
+            corr_y = r_regression(X, y)        # shape (p,)
+        corr_y = np.nan_to_num(corr_y, nan=0.0)
+        corr_y[np.abs(corr_y) > 0.5] = 0.0
+        # Order by descending |corr(feature, y)|
+        order = np.argsort(-np.abs(corr_y))
+        keep = np.zeros(p, dtype=bool)
+        # Greedy selection
+        for j in order:
+            if keep.sum() >= m_features:
+                break
+            if not keep.any() or np.all(np.abs(corr[j, keep]) <= thr_crosscorr):
+                keep[j] = True
+                logger.debug(f"Selected feature {treenames[j]} with |corr|={np.abs(corr_y[j])}")
+        return keep
+    
+    
+    @staticmethod
+    def maximize_through_quantile_windows(
+        matrix: np.ndarray,
+        y: np.ndarray,
+        q_len: float,
+        dates_digitized: np.ndarray,          # (n_samples,)
+        weight_mean: float = 0.8,             # higher => win_means more important
+        feat_name: str = "Feature",
+    ):
+        assert 0.0 < q_len <= 1.0, "q_len must be in (0,1]"
+        assert 0.0 <= weight_mean <= 1.0, "weight_mean must be in [0,1]"
+        
+        n_samples, n_wndws = matrix.shape
+        qwndw_ilen = np.clip(int((q_len + 1e-8) * (n_samples-1) + 1), 1, n_samples, dtype=int)
+        qwndw = qwndw_ilen - 1
+        
+        if qwndw_ilen == 1:
+            logger.error(f"  _maximize_through_quantile_windows: q_len too small, using q_len={1.0/(n_samples-1):.6f} instead.")
+            raise ValueError("q_len too small for the number of samples.")
+        
+        # --- Sort each column once (vectorized) ---
+        order = np.argsort(matrix, axis=0)  # (n_samples, n_wndws)
+        y_sorted = np.take_along_axis(y[:, None], order, axis=0)  # (n_samples, n_wndws)
+        d_sorted = np.take_along_axis(dates_digitized[:, None], order, axis=0)  # (n_samples, n_wndws)
+        
+        # --- Rolling mean of log(y) via cumulative sums (vectorized) ---
+        logy = np.log(y_sorted) 
+        cs = np.cumsum(logy, axis=0)
+        cs = np.vstack([np.zeros((1, n_wndws)), cs]) 
+        win_sums = cs[qwndw:] - cs[:-qwndw]           # (n_samples - qwndw, n_wndws)
+        win_means = win_sums / qwndw
+        
+        # --- Rolling "date spread" score (std or variance) via cumulative sums ---
+        d = d_sorted.astype(np.float64, copy=False)
+        csd  = np.cumsum(d, axis=0)
+        csd2 = np.cumsum(d * d, axis=0)
+        csd  = np.vstack([np.zeros((1, n_wndws)), csd])
+        csd2 = np.vstack([np.zeros((1, n_wndws)), csd2])
+        
+        d_sum  = csd[qwndw:]  - csd[:-qwndw]
+        d2_sum = csd2[qwndw:] - csd2[:-qwndw]
+        d_mean = d_sum / qwndw
+        d_var  = d2_sum / qwndw - d_mean * d_mean
+        d_var  = np.maximum(d_var, 0.0)
+        date_score = np.sqrt(d_var)
+        
+        # --- Make scores comparable (per column) then combine ---
+        def _zscore(a):
+            mu = np.nanmean(a, axis=0, keepdims=True)
+            sd = np.nanstd(a, axis=0, keepdims=True)
+            return (a - mu) / (sd + 1e-12)
+
+        wm_z = _zscore(win_means)
+        ds_z = _zscore(date_score)
+
+        w = float(weight_mean)
+        score_weighted = w * wm_z + (1.0 - w) * ds_z
+
+        arg = np.nanargmax(score_weighted, axis=0)            # (n_wndws,)
+        idx_end = arg + qwndw
+        
+        # --- qlow/qhigh (vectorized) ---
+        qlow  = np.clip((arg     - 0.5) / (n_samples-1), 0.0, 1.0)
+        qhigh = np.clip((idx_end + 0.5) / (n_samples-1), 0.0, 1.0)
+        
+        # --- Quantile values using already-sorted features ---
+        feat_sorted = np.take_along_axis(matrix, order, axis=0)  # (n_samples, n_wndws)
+        
+        def quantile_from_sorted(sorted_x, q):
+            # sorted_x: (n, k), q: (k,)
+            n = sorted_x.shape[0]
+            k = sorted_x.shape[1]
+            pos = q * (n - 1)
+            lo = np.floor(pos).astype(int)
+            hi = np.ceil(pos).astype(int)
+            w = pos - lo # between 0 and 1. used for linear interp. shape (k,)
+            cols = np.arange(k)
+            x_lo = sorted_x[lo, cols]
+            x_hi = sorted_x[hi, cols]
+            return x_lo * (1.0 - w) + x_hi * w
+
+        qlow_val  = quantile_from_sorted(feat_sorted, qlow)
+        qhigh_val = quantile_from_sorted(feat_sorted, qhigh)
+        
+        # --- Mean y inside band (vectorized) ---
+        mask_matrix: np.ndarray = (matrix >= qlow_val) & (matrix <= qhigh_val)  # (n_samples, n_wndws)
+        denom = mask_matrix.sum(axis=0)
+        num = (mask_matrix * np.log(y)[:, None]).sum(axis=0)
+        ymean_vals = np.exp(np.divide(num, denom, out=np.full_like(num, np.nan, dtype=float), where=(denom > 0)))
+        
+        # --- Logging feat---
+        best_idx = int(np.nanargmax(ymean_vals))
+        for i in range(len(ymean_vals)):
+            logger.debug(
+                f"  {feat_name} col {i} -> qlow: {qlow[i]:.4f} ({qlow_val[i]:.6f}) | "
+                f"qhigh: {qhigh[i]:.4f} ({qhigh_val[i]:.6f}) | mean y: {ymean_vals[i]:.6f}"
+            )
+        logger.debug(
+            f"  {feat_name} best idx {best_idx} -> qlow: {qlow[best_idx]:.4f} ({qlow_val[best_idx]:.6f}) | "
+            f"qhigh: {qhigh[best_idx]:.4f} ({qhigh_val[best_idx]:.6f}) | mean y: {ymean_vals[best_idx]:.6f}"
+        )
+        
+        return ymean_vals, qlow_val, qhigh_val, qlow, qhigh

@@ -2,6 +2,7 @@ import numpy as np
 import optuna
 import polars as pl
 import re
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import r_regression
 
@@ -22,7 +23,7 @@ class StratLGBMSlices(BaseStrategy):
     }
 
     precompute_params = {
-        "subsample_ratio": 1.0,
+        "subsample_ratio": 0.1,
     }
 
     base_params = {
@@ -38,23 +39,23 @@ class StratLGBMSlices(BaseStrategy):
         opt_params = {}
         opt_params["do_transform"] = True #trial.suggest_categorical("do_transform", [True, False])
         
-        opt_params["catsample_max_lag"] = trial.suggest_int("catsample_max_lag", 0, 20, step=5) # Note: try 100 at some point
-        opt_params["max_features_colinsampling"] = trial.suggest_int("max_features_colinsampling", 25, 200, step=5)
-        opt_params["threshold_colin_sampling"] = trial.suggest_float("threshold_colin_sampling", 0.01, 0.09, log=True)
+        opt_params["catsample_max_lag"] = trial.suggest_int("catsample_max_lag", 0, 100, step=5) # Note: try 100 at some point
+        opt_params["max_features_colinsampling"] = trial.suggest_int("max_features_colinsampling", 25, 55, step=5)
+        opt_params["threshold_colin_sampling"] = trial.suggest_float("threshold_colin_sampling", 0.05, 0.15, log=True)
         opt_params["inc_seasonal_in_colin"] = False #trial.suggest_categorical("inc_seasonal_in_colin", [True, False])
-        opt_params["n_slices"] = trial.suggest_int("n_slices", 1, 2)
-        opt_params["slice_quantile"] = trial.suggest_float("slice_quantile", 0.94, 0.965)
-        opt_params["val_split"] = 0.05 #trial.suggest_float("val_split", 0.01, 0.2)
+        opt_params["n_slices"] = 1 #trial.suggest_int("n_slices", 1, 3)
+        opt_params["slice_quantile"] = 0.95 #trial.suggest_float("slice_quantile", 0.94, 0.995)
+        opt_params["val_split"] = trial.suggest_float("val_split", 0.3, 0.8)
         
-        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 100, 200, step=10)
+        opt_params["LGB_num_boost_round"]           = trial.suggest_int("LGB_num_boost_round", 1, 5)
         opt_params["LGB_lambda_l1"]                 = 0.005 #trial.suggest_float("LGB_lambda_l1", 0.00001, 0.1, log=True)
         opt_params["LGB_lambda_l2"]                 = 0.00004 #trial.suggest_float("LGB_lambda_l2", 0.00001, 0.1, log=True)
         opt_params["LGB_feature_fraction"]          = 1.0 #trial.suggest_float("LGB_feature_fraction", 0.8, 1.0)
-        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 300, 1200, step=25)
-        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 28, 50, step=1)
-        opt_params["LGB_learning_rate"]             = trial.suggest_float("LGB_learning_rate", 0.01, 0.1, log=True)
+        opt_params["LGB_num_leaves"]                = trial.suggest_int("LGB_num_leaves", 100, 200, step=25)
+        opt_params["LGB_max_depth"]                 = trial.suggest_int("LGB_max_depth", 20, 50, step=1)
+        opt_params["LGB_learning_rate"]             = 0.01 #trial.suggest_float("LGB_learning_rate", 0.01, 0.1, log=True)
         opt_params["LGB_min_data_in_leaf"]          = trial.suggest_int("LGB_min_data_in_leaf", 20, 150, log=True)
-        opt_params["LGB_min_gain_to_split"]         = trial.suggest_float("LGB_min_gain_to_split", 0.000001, 0.0005, log=True)
+        opt_params["LGB_min_gain_to_split"]         = 0.000001 #trial.suggest_float("LGB_min_gain_to_split", 0.000001, 0.0005, log=True)
         opt_params["LGB_path_smooth"]               = 0.6 #trial.suggest_float("LGB_path_smooth", 0.01, 0.9, log=True)
         opt_params["LGB_min_sum_hessian_in_leaf"]   = 0.2 #trial.suggest_float("LGB_min_sum_hessian_in_leaf", 0.001, 0.25, log=True)
         opt_params["LGB_max_bin"]                   = 250 #trial.suggest_int("LGB_max_bin", 100, 800, step=25)
@@ -89,9 +90,7 @@ class StratLGBMSlices(BaseStrategy):
         n_slices = opt_params.get("n_slices", 5)
         qup = opt_params.get("slice_quantile", 0.3)
         val_split = opt_params.get("val_split", 0.05)
-        
-        mm: MachineModels = MachineModels(opt_params)
-        
+                
         if do_transform:
             scaler = StandardScaler().fit(Xtr_tree)
             Xtr_tree = scaler.transform(Xtr_tree)
@@ -141,7 +140,7 @@ class StratLGBMSlices(BaseStrategy):
                 logger.info("  Not enough samples left, breaking.")
                 break
 
-            m_tr_it, m_te_it, sc_tr_it, sc_te_it = self._lgbm_mask(Xtr_it, ytr_it, Xte_it, qup, val_split, mm)
+            m_tr_it, m_te_it, sc_tr_it, sc_te_it = self._gb_mask(Xtr_it, ytr_it, Xte_it, qup, val_split)
             mask_train[neg_mask_tr] |= m_tr_it
             mask_test[neg_mask_te] |= m_te_it
             score_tr[neg_mask_tr] = sc_tr_it * (0.9**i)
@@ -218,6 +217,7 @@ class StratLGBMSlices(BaseStrategy):
     # ------------------------------------------------------------------
     # Helper functions
     # ------------------------------------------------------------------
+    @DeprecationWarning
     def _lgbm_mask(
         self, 
         X: np.ndarray, 
@@ -243,6 +243,23 @@ class StratLGBMSlices(BaseStrategy):
         mask_top_tr = yhat_tr >= qhat_tr
         mask_top_te = yhat_te >= qhat_tr
         
+        return mask_top_tr, mask_top_te, yhat_tr, yhat_te
+    
+    def _gb_mask(
+        self,
+        X: np.ndarray, 
+        y: np.ndarray, 
+        Xte: np.ndarray, 
+        q: float, 
+        val_split: float = 0.05,
+    ) -> tuple[np.ndarray, ...]:
+        model = GradientBoostingRegressor(max_features=100, validation_fraction=val_split)
+        model.fit(X, y)
+        yhat_tr = model.predict(X)
+        yhat_te = model.predict(Xte)
+        qhat_tr = np.quantile(yhat_tr, q)
+        mask_top_tr = yhat_tr >= qhat_tr
+        mask_top_te = yhat_te >= qhat_tr
         return mask_top_tr, mask_top_te, yhat_tr, yhat_te
     
     def catsample_treenames(
