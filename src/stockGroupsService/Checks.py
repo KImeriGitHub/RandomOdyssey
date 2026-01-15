@@ -28,9 +28,13 @@ class Checks:
         if len(asset.financials_quarterly) < quarterly_entries:
             return False
   
-        # Check if the asset has no empty entries in the annual financials
+        # Check if the asset has empty entries in the annual financials
         mask_ann = asset.financials_annually['fiscalDateEnding'].apply(lambda ts: pd.to_datetime(ts)) >= start
-        if asset.financials_annually[mask_ann].isnull().any().any():
+        df_ann = asset.financials_annually.loc[mask_ann]
+        cols = [c for c in df_ann.columns if c != "fiscalDateEnding"]
+        all_but_last_all_null = len(df_ann) > 1 and df_ann.iloc[:-1][cols].isna().all(axis=1).all()
+        last_has_one_non_null = df_ann.iloc[-1][cols].notna().sum() >= 1
+        if all_but_last_all_null or not last_has_one_non_null:
             return False
   
         # Check if the asset has no empty entries in the quarterly financials except for the last row if date within 30 days
@@ -119,9 +123,9 @@ class Checks:
         if df.empty:
             return False
         
-        # Check whether there are 250 entries every year
+        # Check whether there are 245 entries every year
         years_adj = (end - start).days / 365.0
-        required = int(250 * years_adj)
+        required = int(245 * years_adj)
         if len(df) < required:
             return False
 
