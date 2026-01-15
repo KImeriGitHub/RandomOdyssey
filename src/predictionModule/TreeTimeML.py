@@ -197,7 +197,7 @@ class TreeTimeML:
                 np.ones(Xte_tree.shape[0], dtype=float),
             )
         
-        if meta_test.is_empty() or meta_test['date'].is_empty() or (last_day_mask.to_numpy()).sum() <= 2:
+        if meta_test.is_empty() or meta_test['date'].is_empty() or (last_day_mask.to_numpy()).sum() <= 0:
             return default_return()
                 
         mm: MachineModels = MachineModels(opt_params)

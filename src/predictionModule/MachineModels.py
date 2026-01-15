@@ -71,8 +71,8 @@ class MachineModels:
         "LGB_bagging_fraction": 1.0,
     }
     
-    def __init__(self, params: dict):
-        self.params = {**self.default_params, **params}
+    def __init__(self, params: dict, use_default_params: bool = True):
+        self.params = {**(self.default_params if use_default_params else {}), **params}
         
     ###########
     ##  LGB  ##
@@ -103,7 +103,7 @@ class MachineModels:
             'path_smooth': self.params['LGB_path_smooth'],
             'min_sum_hessian_in_leaf': self.params['LGB_min_sum_hessian_in_leaf'],
             'random_state': 41, 
-            'bagging_fraction ': self.params['LGB_bagging_fraction'],
+            'bagging_fraction': self.params['LGB_bagging_fraction'],
             'bagging_freq': 1 if self.params['LGB_bagging_fraction'] < 1.0 else 0,
         }
 

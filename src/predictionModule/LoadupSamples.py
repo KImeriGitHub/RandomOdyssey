@@ -715,7 +715,7 @@ class LoadupSamples:
         self.train_Xtree = scaler.transform(self.train_Xtree)
         self.test_Xtree  = scaler.transform(self.test_Xtree)
         
-    def __scale_time_stretch(self, X: np.array) -> np.array:
+    def __scale_time_stretch(self, X: np.ndarray) -> np.ndarray:
         """
         Normalize each sample in time so that the midpoint 0.5 remains fixed, 
         stretching values around to hit either 0 or 1.
@@ -730,4 +730,4 @@ class LoadupSamples:
         den = np.where(den < 1e-4, 1.0, den)              # avoid div-by-zero
 
         # linear stretch 
-        return np.clip((X - center) / den + center, 0.0, 1.0)
+        return np.clip((X - center) / den[:, None, :] / 2 + center, 0.0, 1.0)

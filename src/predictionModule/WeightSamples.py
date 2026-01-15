@@ -6,7 +6,6 @@ logger = logging.getLogger(__name__)
 
 class WeightSamples:
     default_params= {
-        "WeightSamples_minWeight": 0.4,
         "WeightSamples_truncation": 2,
         "WeightSamples_sparsesamples_ratio": 0.1,
         "WeightSamples_Pricediff": True,
@@ -20,21 +19,18 @@ class WeightSamples:
     }
     
     def __init__(self,
-            Xtree_train: np.ndarray,
-            ytree_train: np.ndarray,
+            feat_train: np.ndarray,
+            y_train: np.ndarray,
             treenames: list[str],
-            Xtree_test: np.ndarray,
+            feat_test: np.ndarray,
             params: dict | None = None
         ):
-        self.Xtree_train = Xtree_train
-        self.ytree_train = ytree_train
-        self.Xtree_test = Xtree_test
+        self.feat_train = feat_train
+        self.y_train = y_train
+        self.feat_test = feat_test
         self.treenames = treenames
         
         self.params = {**self.default_params, **(params or {})}
-        
-        self.ksDist = self.__establish_ksDistance()
-        self.top_idces = self.__establish_matching_featureindices(self.ksDist)
 
         self.__simple_tests()
 
@@ -42,25 +38,25 @@ class WeightSamples:
         """
         Perform simple tests on the training datasets.
         """
-        if self.Xtree_train.shape[1] != len(self.treenames):
+        if self.feat_train.shape[1] != len(self.treenames):
             logger.error("Number of features in training data does not match the number of tree names.")
 
-    def __establish_ksDistance(self) -> np.ndarray:
-        nSamples = self.Xtree_train.shape[0]
+    def establish_ksDistance(self) -> np.ndarray:
+        nSamples = self.feat_train.shape[0]
         min_n_samples = int(1e4)
         sparse_ratio = self.params['WeightSamples_sparsesamples_ratio']
         mask_sparsing = np.random.rand(nSamples) <= max(sparse_ratio, min_n_samples/nSamples)
 
         ksDist = DistributionTools.ksDistance(
-            self.Xtree_train[mask_sparsing].astype(np.float64),
-            self.Xtree_test.copy().astype(np.float64),
+            self.feat_train[mask_sparsing].astype(np.float64),
+            self.feat_test.copy().astype(np.float64),
             weights=None,
             overwrite=True
         )
         
         logger.info(f"  Train-Test Distri Equality: Mean: {np.mean(ksDist)}, Quantile 0.9: {np.quantile(ksDist, 0.9)}")
 
-    def __establish_matching_featureindices(self, ksDist) -> np.ndarray:
+    def establish_matching_featureindices(self, ksDist) -> np.ndarray:
         
         nFeat = len(self.treenames)
         mask_colToMatch = np.zeros(nFeat, dtype=bool)
@@ -98,17 +94,18 @@ class WeightSamples:
             
         return top_idces
 
-    def establish_weights(self) -> np.ndarray:
+    def establish_weights(self, n_bin: int = 15, min_bd: float = 0.1, wndw_ratio: float = 0.2) -> np.ndarray:
         """
         Establish weights for the training samples based on their importance.
         """
         tree_weights = DistributionTools.establishMatchingWeight(
-            self.Xtree_train[:, self.top_idces].astype(np.float64),
-            self.Xtree_test[:, self.top_idces].astype(np.float64),
-            n_bin = 15,
-            minbd = self.params['WeightSamples_minWeight']
+            self.feat_train.astype(np.float64),
+            self.feat_test.astype(np.float64),
+            n_bin = n_bin,
+            minbd = min_bd,
+            wndw_ratio = wndw_ratio
         )
-        tree_weights *= (self.Xtree_train.shape[0] / np.sum(tree_weights))
+        tree_weights *= (self.feat_train.shape[0] / np.sum(tree_weights))
 
         logger.debug(f"  Zeros Weight Ratio: {np.sum(tree_weights < 1e-6) / len(tree_weights)}")
         logger.debug(f"  Negative Weight Ratio: {np.sum(tree_weights < -1e-5) / len(tree_weights)}")
